@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fonts } from '@/theme/tokens';
@@ -12,12 +12,14 @@ import { colors, fonts } from '@/theme/tokens';
  */
 export function Header({
   title,
+  logo = false,
   unreadCount,
   onBellPress,
   left,
   right,
 }: {
   title: string;
+  logo?: boolean;
   unreadCount?: number;
   onBellPress?: () => void;
   left?: ReactNode;
@@ -38,14 +40,23 @@ export function Header({
       }}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         {left}
-        <Text
-          style={{
-            fontFamily: fonts.display,
-            fontSize: 30,
-            color: colors.heading,
-          }}>
-          {title}
-        </Text>
+        {logo ? (
+          <Image
+            source={require('../../assets/images/offerloop-logo.png')}
+            style={{ width: 118, height: 29 }}
+            resizeMode="contain"
+            accessibilityLabel={title}
+          />
+        ) : (
+          <Text
+            style={{
+              fontFamily: fonts.display,
+              fontSize: 30,
+              color: colors.heading,
+            }}>
+            {title}
+          </Text>
+        )}
       </View>
       {right}
       <Pressable
