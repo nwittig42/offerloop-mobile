@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -8,42 +9,61 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import Avatar from '@/components/Avatar';
 import Header from '@/components/Header';
-import Chip, { type ChipTone } from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
 import { colors, fonts } from '@/theme/tokens';
-import type { OutreachItem, OutreachStatus } from '@/types';
+import type { OutreachItem } from '@/types';
 
 /**
- * Inbox: the retention surface. Every right swipe lands here instantly as a
- * "Drafting" placeholder with shimmer bars, then fills in when the (mock)
- * async job finishes. Filters: All, Drafts, Sent, Replied.
+ * Inbox: the reply pipeline, styled like Messages. A flat, conversation list
+ * with gradient avatars, preview lines, short times, and a blue unread dot
+ * on anything waiting on you. "Needs attention" (replies + ready drafts) is
+ * the first filter and carries a red count like the bell. The cold-open
+ * draft and the reply thread live in the conversation detail.
  */
 
-const FILTERS = ['All', 'Drafts', 'Sent', 'Replied'] as const;
+// Whose turn is it (Needs you / Waiting), plus a Replied view that isolates
+// the exciting "they wrote back" conversations (where push notifications
+// land), and All.
+const FILTERS = ['Needs you', 'Replied', 'Waiting', 'All'] as const;
 type Filter = (typeof FILTERS)[number];
 
-const STATUS_CHIP: Record<OutreachStatus, { label: string; tone: ChipTone }> = {
-  drafting: { label: 'Drafting', tone: 'waiting' },
-  ready: { label: 'Ready to review', tone: 'accent' },
-  sent: { label: 'Sent', tone: 'neutral' },
-  replied: { label: 'Replied', tone: 'positive' },
-  failed: { label: 'No contact found', tone: 'negative' },
-};
+/** Your turn: a ready draft to send, or a reply you have not opened yet. */
+export function needsAttention(item: OutreachItem) {
+  if (item.status === 'replied') return !item.attended;
+  return item.status === 'ready';
+}
+
+/** Their turn: sent and awaiting a reply, or a reply you have answered. */
+function isWaiting(item: OutreachItem) {
+  return item.status === 'sent' || (item.status === 'replied' && !!item.attended);
+}
 
 function matchesFilter(item: OutreachItem, filter: Filter) {
   if (filter === 'All') return true;
-  if (filter === 'Drafts') return item.status === 'drafting' || item.status === 'ready';
-  if (filter === 'Sent') return item.status === 'sent';
-  return item.status === 'replied';
+  if (filter === 'Needs you') return needsAttention(item);
+  if (filter === 'Replied') return item.status === 'replied';
+  return isWaiting(item);
 }
 
-function initials(name: string) {
-  return name
-    .split(' ')
-    .map((part) => part.charAt(0))
-    .slice(0, 2)
-    .join('');
+/** The message-preview line, colored when it's actionable. */
+function previewFor(item: OutreachItem): { text: string; color: string } {
+  switch (item.status) {
+    case 'ready':
+      return { text: 'Draft ready to review', color: colors.accent };
+    case 'failed':
+      return { text: 'No contact found', color: colors.negative };
+    case 'sent':
+      return { text: `You: ${item.subject ?? 'Outreach sent'}`, color: colors.inkSecondary };
+    case 'replied': {
+      const last = item.thread?.[item.thread.length - 1];
+      const text = last && last.from === 'them' ? last.text : item.snippet ?? 'Replied';
+      return { text, color: item.attended ? colors.inkSecondary : colors.ink };
+    }
+    default:
+      return { text: item.snippet ?? '', color: colors.inkSecondary };
+  }
 }
 
 function ShimmerBar({ width }: { width: number }) {
@@ -54,86 +74,76 @@ function ShimmerBar({ width }: { width: number }) {
   const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
   return (
     <Animated.View
-      style={[
-        { width, height: 11, borderRadius: 4, backgroundColor: colors.hairline },
-        style,
-      ]}
+      style={[{ width, height: 12, borderRadius: 4, backgroundColor: colors.hairline }, style]}
     />
   );
 }
 
 function InboxRow({ item, onPress }: { item: OutreachItem; onPress: () => void }) {
-  const chip = STATUS_CHIP[item.status];
   const isDrafting = item.status === 'drafting';
+  const unread = needsAttention(item);
+  const preview = previewFor(item);
 
   return (
     <Pressable
       onPress={onPress}
       style={{
         flexDirection: 'row',
+        alignItems: 'center',
         gap: 12,
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.hairlineLight,
+        paddingHorizontal: 16,
+        paddingVertical: 9,
         backgroundColor: colors.paper,
       }}>
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          backgroundColor: colors.paper2,
-          borderWidth: 1,
-          borderColor: colors.hairline,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.navy }}>
-          {item.contact ? initials(item.contact.name) : item.company.charAt(0)}
-        </Text>
+      <View style={{ width: 8, alignItems: 'center' }}>
+        {unread ? (
+          <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.marketing }} />
+        ) : null}
       </View>
 
+      <Avatar name={item.contact?.name ?? item.company} size={48} />
+
       <View style={{ flex: 1, gap: 3 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {isDrafting ? (
-            <ShimmerBar width={130} />
+            <ShimmerBar width={140} />
           ) : (
-            <Text
-              numberOfLines={1}
-              style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink, flex: 1 }}>
-              {item.contact?.name ?? item.company}
+            <Text numberOfLines={1} style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
+                {item.contact?.name ?? item.company}
+              </Text>
+              {item.contact ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+                  {'  '}
+                  {item.company}
+                </Text>
+              ) : null}
             </Text>
           )}
-          <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-            {item.timeLabel}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+              {item.timeLabel}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
+          </View>
         </View>
 
         {isDrafting ? (
-          <ShimmerBar width={190} />
+          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
+            Finding a contact at {item.company}...
+          </Text>
         ) : (
           <Text
-            numberOfLines={1}
-            style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-            {item.contact ? `${item.contact.title} at ${item.contact.company}` : item.jobTitle}
+            numberOfLines={2}
+            style={{
+              fontFamily: unread ? fonts.sansMedium : fonts.sans,
+              fontSize: 13,
+              color: preview.color,
+              lineHeight: 18,
+            }}>
+            {preview.text}
           </Text>
         )}
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          {isDrafting ? (
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, flex: 1 }}>
-              Finding a contact at {item.company}...
-            </Text>
-          ) : (
-            <Text
-              numberOfLines={1}
-              style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, flex: 1 }}>
-              {item.subject ?? item.snippet ?? ''}
-            </Text>
-          )}
-          <Chip label={chip.label} tone={chip.tone} dot={isDrafting || item.status === 'ready'} />
-        </View>
       </View>
     </Pressable>
   );
@@ -145,41 +155,68 @@ export default function InboxScreen() {
   const [filter, setFilter] = useState<Filter>('All');
 
   const items = outreach.filter((item) => matchesFilter(item, filter));
+  const attentionCount = outreach.filter(needsAttention).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <Header
         title="Inbox"
+        mark
         unreadCount={unreadCount}
         onBellPress={() => router.push('/notifications')}
       />
 
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 }}>
-        {FILTERS.map((f) => {
-          const selected = f === filter;
-          return (
-            <Pressable
-              key={f}
-              onPress={() => setFilter(f)}
-              style={{
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: selected ? colors.ink : colors.hairline,
-                backgroundColor: selected ? colors.ink : colors.paper,
-                paddingHorizontal: 12,
-                paddingVertical: 5,
-              }}>
-              <Text
+      <View style={{ paddingBottom: 10 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}>
+          {FILTERS.map((f) => {
+            const selected = f === filter;
+            const badge = f === 'Needs you' ? attentionCount : 0;
+            return (
+              <Pressable
+                key={f}
+                onPress={() => setFilter(f)}
                 style={{
-                  fontFamily: fonts.sansMedium,
-                  fontSize: 12.5,
-                  color: selected ? colors.paper : colors.inkSecondary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 7,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: selected ? colors.navy : colors.hairline,
+                  backgroundColor: selected ? colors.navy : colors.paper,
+                  paddingHorizontal: 16,
+                  paddingVertical: 9,
                 }}>
-                {f}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  style={{
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 14,
+                    color: selected ? colors.paper : colors.inkSecondary,
+                  }}>
+                  {f}
+                </Text>
+                {badge > 0 ? (
+                  <View
+                    style={{
+                      minWidth: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      backgroundColor: colors.negative,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingHorizontal: 4,
+                    }}>
+                    <Text style={{ color: colors.paper, fontSize: 9.5, fontFamily: fonts.sansSemibold }}>
+                      {badge}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -197,8 +234,15 @@ export default function InboxScreen() {
             inbox.
           </Text>
         ) : (
-          items.map((item) => (
-            <InboxRow key={item.id} item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
+          items.map((item, i) => (
+            <View key={item.id}>
+              <InboxRow item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
+              {i < items.length - 1 ? (
+                <View
+                  style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
+                />
+              ) : null}
+            </View>
           ))
         )}
       </ScrollView>

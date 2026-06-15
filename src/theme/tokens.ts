@@ -21,6 +21,8 @@ export const colors = {
   negative: '#DC2626',
   waiting: '#CA8A04',
   marketing: '#3B82F6',
+  coffee: '#8B5A2B',
+  bolt: '#FACC15',
 } as const;
 
 // Soft, near-black, low-opacity shadows from the web system.

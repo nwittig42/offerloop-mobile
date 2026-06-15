@@ -46,12 +46,49 @@ else.
 
 ## Product shape (v1)
 
-Tabs: Feed (swipe-to-draft hero), Inbox (drafts, sent, replies), Network
-(tracker-lite), Profile (credits, Loops, settings). Notification hub is the header
-bell, not a tab. Right swipe = one-shot Loop cycle: find one contact at the company
-and draft a tailored outreach email, async with optimistic UI. Draft by default,
-never auto-send. Locked numbers: 10 credits per right-swipe (matches web Find),
-daily draft caps tiered (Free 3, Pro 10, Elite 15, confirm before Phase 3 wiring).
+Tabs (5): Feed (swipe-to-draft hero; credits pill left, logo centered, Scout Yeti
+button right), Inbox (drafts, sent, replies), Loops (the autopilot, promoted to a
+tab per Rylan 2026-06-12), Network (recent / by-company views), Profile
+(Sorce-style: credits banner, then a horizontal tab strip: Resume / Personal /
+Credits / Settings). All screen titles render centered in the header. The Feed
+action row floats over the card (undo, pass, attachments doc, draft); /attachments
+shows what travels with outreach. Notification hub is the header bell, not a tab.
+Scout is a summonable modal sheet (/scout), job-aware from the Feed, mock until
+Phase 3. Scout's face is the Yeti head (assets/images/scout-yeti-head.png, from the
+web repo); NEVER use sparkle icons for Scout, Rylan finds them AI-generated-looking.
+
+Feed card (Sorce-modeled): centered header (logo tile, big bold title as the focal
+point, company + location), then enlarged glanceable detail chips (Compensation,
+Role) a student scans before swiping. Tap expands in place; description scrolls,
+swipe stays live. The action row floats over the card in a liquid-glass bar
+(GlassBar, expo-glass-effect, graceful fallback below iOS 26): undo, pass, attach,
+draft. Chips render only when the field exists.
+
+Profile and Loops and Network all use the same horizontal tab strip pattern. Profile
+tabs: Resume (shows the PARSED resume, the "here is what we gathered" view), Personal,
+Files (resume + transcripts + add file), Settings. Loops tabs: Loops, Activity (the
+8am-regimen log). Network tabs: Contacts (rows have a coffee button = meeting prep,
+and a plus button = find another contact at that company), Meeting prep (the coffee
+library). Inbox rows also have a plus = find another contact. Meeting prep
+(/meeting-prep/new + /meeting-prep/[id]) = paste LinkedIn, get a brief + talking
+points; lives in Network with a coffee identity, mock until Phase 3.
+
+Header: clean icon mark (assets/offerloop-mark.png) top-left on Inbox/Loops/Network/
+Profile; Feed keeps the full wordmark centered. The Scout Yeti button lives in Header,
+so it is on every page. Feed action bar is a liquid-glass GlassBar low over the card:
+[undo, playful X (PlayfulPass), draft, attach]. CompanyLogo renders real logos when a
+logoUrl exists, else an initial tile; never fake a logo for a fixture company (no-fake-
+data rule), the component is ready for real Phase 3 data. The plus button on Inbox and
+Network rows opens FindAnotherDialog (a centered confirm popup, not an instant draft).
+Inbox replied threads support an in-app follow-up composer. Profile Personal tab holds
+multi-select target roles with suggestions, LinkedIn, and an About box; the resume
+parse is collapsible with Scout chilling in the empty space. /credits is a mock paywall preview (real tier prices, top-up
+pack prices deliberately unset, nothing purchasable). Right swipe = one-shot Loop
+cycle: find one contact at the company and draft a tailored outreach email, async
+with optimistic UI. "Find another contact" on outreach detail widens reach at the
+same company. Draft by default, never auto-send. Locked numbers: 10 credits per
+right-swipe (matches web Find), daily draft caps tiered (Free 3, Pro 10, Elite 15,
+confirm before Phase 3 wiring).
 
 ## Commands
 

@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle } from 'react';
-import { Dimensions, Pressable, Text, View } from 'react-native';
+import { Dimensions, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 
 import JobCard from '@/components/feed/JobCard';
@@ -17,9 +18,12 @@ import { colors, fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
 /**
- * The swipe stack. Left = pass (red PASS stamp), right = draft outreach
- * (slate-blue DRAFT stamp). Physical, springy, undoable. Action buttons
- * drive the same animations through the imperative handle.
+ * The swipe stack, Sorce-sized: the card fills the deck area. Left = pass
+ * (red PASS stamp), right = draft outreach (slate-blue DRAFT stamp).
+ * Tapping expands the card in place; the description scrolls while the
+ * horizontal swipe stays live (the pan claims sideways drags, the scroll
+ * keeps vertical ones). Action buttons drive the same animations through
+ * the imperative handle.
  */
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -32,8 +36,11 @@ export type SwipeDeckHandle = {
 
 type Props = {
   jobs: Job[];
+  expanded: boolean;
+  onToggleExpand: (expanded: boolean) => void;
   onSwiped: (direction: 'left' | 'right', job: Job) => void;
-  onPressCard: (job: Job) => void;
+  /** Mirrors the live horizontal drag so the action buttons can react. */
+  drag?: SharedValue<number>;
 };
 
 function Stamp({ kind }: { kind: 'pass' | 'draft' }) {
@@ -43,9 +50,9 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' }) {
     <View
       style={{
         position: 'absolute',
-        top: 18,
-        left: isPass ? undefined : 16,
-        right: isPass ? 16 : undefined,
+        top: 22,
+        left: isPass ? undefined : 20,
+        right: isPass ? 20 : undefined,
         transform: [{ rotate: isPass ? '12deg' : '-12deg' }],
         borderWidth: 3,
         borderColor: color,
@@ -68,7 +75,7 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' }) {
 }
 
 export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
-  ({ jobs, onSwiped, onPressCard }, ref) => {
+  ({ jobs, expanded, onToggleExpand, onSwiped, drag }, ref) => {
     const tx = useSharedValue(0);
     const ty = useSharedValue(0);
 
@@ -79,12 +86,14 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
       const job = jobs[0];
       tx.value = 0;
       ty.value = 0;
+      onToggleExpand(false);
       if (job) onSwiped(direction, job);
     };
 
     const flyOut = (direction: 'left' | 'right') => {
       'worklet';
       const target = (direction === 'right' ? 1 : -1) * SCREEN_W * 1.4;
+      if (drag) drag.value = withTiming(0, { duration: 180 });
       ty.value = withTiming(ty.value + 40, { duration: 240 });
       tx.value = withTiming(target, { duration: 240 }, (finished) => {
         if (finished) runOnJS(finish)(direction);
@@ -97,10 +106,15 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
       },
     }));
 
+    // activeOffsetX / failOffsetY make the pan claim sideways drags only,
+    // so the expanded description can scroll vertically mid-read.
     const pan = Gesture.Pan()
+      .activeOffsetX([-14, 14])
+      .failOffsetY([-16, 16])
       .onUpdate((e) => {
         tx.value = e.translationX;
         ty.value = e.translationY * 0.4;
+        if (drag) drag.value = e.translationX;
       })
       .onEnd((e) => {
         if (tx.value > COMMIT_THRESHOLD || e.velocityX > FLING_VELOCITY) {
@@ -110,8 +124,18 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
         } else {
           tx.value = withSpring(0, { damping: 16, stiffness: 180 });
           ty.value = withSpring(0, { damping: 16, stiffness: 180 });
+          if (drag) drag.value = withSpring(0, { damping: 16, stiffness: 180 });
         }
       });
+
+    // A tap anywhere on a collapsed card expands it. Composed with the pan so
+    // a deliberate tap reliably expands while drags still swipe.
+    const tap = Gesture.Tap()
+      .maxDistance(10)
+      .onEnd(() => {
+        if (!expanded) runOnJS(onToggleExpand)(true);
+      });
+    const gesture = Gesture.Simultaneous(pan, tap);
 
     const topStyle = useAnimatedStyle(() => ({
       transform: [
@@ -148,31 +172,35 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
     if (!top) return null;
 
     return (
-      <View style={{ flex: 1, justifyContent: 'center' }}>
-        {next ? (
+      <View style={{ flex: 1 }}>
+        {next && !expanded ? (
           <Animated.View
             key={next.id}
-            style={[{ position: 'absolute', left: 0, right: 0 }, nextStyle]}>
-            <Card elevated="md" padded>
+            style={[{ position: 'absolute', top: 10, left: 0, right: 0, bottom: 10 }, nextStyle]}>
+            <Card elevated="md" padded style={{ flex: 1 }}>
               <JobCard job={next} />
             </Card>
           </Animated.View>
         ) : null}
 
-        <GestureDetector gesture={pan}>
-          <Animated.View key={top.id} style={topStyle}>
-            <Pressable onPress={() => onPressCard(top)}>
-              <Card elevated="lg" padded>
+        <GestureDetector gesture={gesture}>
+          <Animated.View key={top.id} style={[{ flex: 1, paddingVertical: 10 }, topStyle]}>
+            {expanded ? (
+              <Card elevated="lg" padded style={{ flex: 1 }}>
+                <JobCard job={top} expanded onCollapse={() => onToggleExpand(false)} />
+              </Card>
+            ) : (
+              <Card elevated="lg" padded style={{ flex: 1 }}>
                 <JobCard job={top} />
               </Card>
-            </Pressable>
+            )}
             <Animated.View
-              style={[{ position: 'absolute', top: 0, left: 0, right: 0 }, draftStampStyle]}
+              style={[{ position: 'absolute', top: 10, left: 0, right: 0 }, draftStampStyle]}
               pointerEvents="none">
               <Stamp kind="draft" />
             </Animated.View>
             <Animated.View
-              style={[{ position: 'absolute', top: 0, left: 0, right: 0 }, passStampStyle]}
+              style={[{ position: 'absolute', top: 10, left: 0, right: 0 }, passStampStyle]}
               pointerEvents="none">
               <Stamp kind="pass" />
             </Animated.View>

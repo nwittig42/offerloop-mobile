@@ -1,150 +1,382 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
+import Avatar from '@/components/Avatar';
+import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
+import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
 import { colors, fonts } from '@/theme/tokens';
-import type { TrackerBucket } from '@/types';
+import type { TrackerRow } from '@/types';
 
 /**
- * Network: the mobile-lite tracker. Big serif numbers up top (counted from
- * actual store data, never hardcoded), then the same buckets as the web
- * pipeline. Read-mostly by design: deep pipeline work stays on the web.
+ * Network: who you have reached out to, plus your coffee library. Two tabs
+ * (Contacts, Meeting prep) like Profile and Loops. Each contact row carries
+ * two quick actions: a coffee button (prep a meeting with them) and a plus
+ * button (find another contact at the same company, the widen-your-reach
+ * move surfaced right on the row). Deep pipeline work stays on the web.
  */
 
-const BUCKETS: { key: TrackerBucket; label: string }[] = [
-  { key: 'attention', label: 'Needs attention' },
-  { key: 'active', label: 'Active' },
-  { key: 'done', label: 'Done' },
-];
+const TABS = ['Contacts', 'Meeting prep'] as const;
+type TabKey = (typeof TABS)[number];
 
 function BigNumber({ value, label }: { value: number; label: string }) {
   return (
     <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <Text style={{ fontFamily: fonts.display, fontSize: 44, color: colors.heading }}>
+      <Text style={{ fontFamily: fonts.display, fontSize: 44, color: colors.paper }}>
         {value}
       </Text>
-      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.inkSecondary }}>
+      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: '#E2E0FB' }}>
         {label}
       </Text>
     </View>
   );
 }
 
+/**
+ * A contact row in the iMessage style: gradient avatar, bold name with a
+ * timestamp, a gray preview line, an unread dot when they're waiting on you,
+ * and swipe-left actions (prep a meeting, reach another contact).
+ */
+function ContactRow({
+  row,
+  onOpen,
+  onCoffee,
+}: {
+  row: TrackerRow;
+  onOpen: () => void;
+  onCoffee: () => void;
+}) {
+  return (
+    <ReanimatedSwipeable
+      friction={1.6}
+      rightThreshold={40}
+      renderRightActions={() => (
+        <Pressable
+          onPress={onCoffee}
+          style={{
+            width: 88,
+            backgroundColor: colors.coffee,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 3,
+          }}>
+          <Ionicons name="cafe" size={20} color={colors.paper} />
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.paper }}>Prep</Text>
+        </Pressable>
+      )}>
+      <Pressable
+        onPress={onOpen}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingLeft: 16,
+          paddingRight: 16,
+          paddingVertical: 9,
+          backgroundColor: colors.paper,
+        }}>
+        <View style={{ width: 8, alignItems: 'center' }}>
+          {row.unread ? (
+            <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.marketing }} />
+          ) : null}
+        </View>
+        <Avatar name={row.contactName} size={48} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
+              {row.contactName}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+                {row.timeShort}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
+            </View>
+          </View>
+          <Text
+            numberOfLines={2}
+            style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 18 }}>
+            {row.preview}
+          </Text>
+        </View>
+      </Pressable>
+    </ReanimatedSwipeable>
+  );
+}
+
 export default function NetworkScreen() {
   const router = useRouter();
-  const { outreach, trackerRows, unreadCount } = useApp();
-  const [bucket, setBucket] = useState<TrackerBucket>('attention');
+  const { outreach, trackerRows, meetingPreps, unreadCount, passedCount } = useApp();
+  const [tab, setTab] = useState<TabKey>('Contacts');
+  const [companiesOpen, setCompaniesOpen] = useState(false);
 
   const sentCount = outreach.filter((o) => o.status === 'sent' || o.status === 'replied').length;
   const repliedCount = outreach.filter((o) => o.status === 'replied').length;
-  const rows = trackerRows.filter((r) => r.bucket === bucket);
+
+  // Companies you've reached out to, most recent first (outreach is newest
+  // first), each with how many people and replies.
+  const companies = useMemo(() => {
+    const order: string[] = [];
+    const map = new Map<string, { company: string; contacts: number; replies: number }>();
+    for (const o of outreach) {
+      if (o.status === 'drafting') continue;
+      let e = map.get(o.company);
+      if (!e) {
+        e = { company: o.company, contacts: 0, replies: 0 };
+        map.set(o.company, e);
+        order.push(o.company);
+      }
+      e.contacts += 1;
+      if (o.status === 'replied') e.replies += 1;
+    }
+    return order.map((c) => map.get(c)!);
+  }, [outreach]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Header
         title="Network"
+        mark
         unreadCount={unreadCount}
         onBellPress={() => router.push('/notifications')}
       />
 
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 40 }}>
-        <Card style={{ flexDirection: 'row', paddingVertical: 24 }}>
+      <View style={{ paddingHorizontal: 20, paddingTop: 4 }}>
+        <LinearGradient
+          colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ flexDirection: 'row', paddingVertical: 22, borderRadius: 14 }}>
           <BigNumber value={sentCount} label="Outreach sent" />
-          <View style={{ width: 1, backgroundColor: colors.hairlineLight }} />
+          <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
           <BigNumber value={repliedCount} label="Replies" />
-          <View style={{ width: 1, backgroundColor: colors.hairlineLight }} />
+          <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
           <BigNumber value={trackerRows.length} label="Contacts" />
-        </Card>
+        </LinearGradient>
+      </View>
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {BUCKETS.map((b) => {
-            const selected = b.key === bucket;
+      <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 12 }}>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 22 }}>
+          {TABS.map((t) => {
+            const selected = t === tab;
             return (
               <Pressable
-                key={b.key}
-                onPress={() => setBucket(b.key)}
+                key={t}
+                onPress={() => setTab(t)}
                 style={{
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: selected ? colors.ink : colors.hairline,
-                  backgroundColor: selected ? colors.ink : colors.paper,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
+                  paddingVertical: 10,
+                  borderBottomWidth: 2,
+                  borderBottomColor: selected ? colors.navy : 'transparent',
                 }}>
                 <Text
                   style={{
-                    fontFamily: fonts.sansMedium,
-                    fontSize: 12.5,
-                    color: selected ? colors.paper : colors.inkSecondary,
+                    fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
+                    fontSize: 13.5,
+                    color: selected ? colors.navy : colors.inkTertiary,
                   }}>
-                  {b.label}
+                  {t}
                 </Text>
               </Pressable>
             );
           })}
         </View>
+      </View>
 
-        <View style={{ gap: 8 }}>
-          {rows.length === 0 ? (
-            <Card>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary }}>
-                Nothing in this bucket right now.
-              </Text>
-            </Card>
-          ) : (
-            rows.map((row) => (
-              <Card key={row.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      {tab === 'Contacts' ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 16, gap: 8 }}>
+            {companies.length ? (
+              <>
+                <Pressable
+                  onPress={() => setCompaniesOpen((v) => !v)}
+                  disabled={companies.length <= 1}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingBottom: 2,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+                    Companies you've reached out to
+                  </Text>
+                  {companies.length > 1 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary }}>
+                        {companiesOpen ? 'Show less' : `All ${companies.length}`}
+                      </Text>
+                      <Ionicons
+                        name={companiesOpen ? 'chevron-up' : 'chevron-down'}
+                        size={15}
+                        color={colors.inkTertiary}
+                      />
+                    </View>
+                  ) : null}
+                </Pressable>
+                {(companiesOpen ? companies : companies.slice(0, 1)).map((c) => (
+                  <Pressable
+                    key={c.company}
+                    onPress={() => router.push(`/company/${encodeURIComponent(c.company)}`)}>
+                    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <CompanyLogo name={c.company} size={38} radius={10} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
+                          {c.company}
+                        </Text>
+                        <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
+                          {c.contacts} {c.contacts === 1 ? 'contact' : 'contacts'}
+                          {c.replies > 0 ? ` · ${c.replies} replied` : ''}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                    </Card>
+                  </Pressable>
+                ))}
+              </>
+            ) : null}
+
+            <Pressable onPress={() => router.push('/passed-jobs')}>
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: colors.paper2,
-                    borderWidth: 1,
-                    borderColor: colors.hairline,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: colors.surface,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.navy }}>
-                    {row.contactName
-                      .split(' ')
-                      .map((p) => p.charAt(0))
-                      .slice(0, 2)
-                      .join('')}
-                  </Text>
+                  <Ionicons name="arrow-undo-outline" size={17} color={colors.inkSecondary} />
                 </View>
-                <View style={{ flex: 1, gap: 1 }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                    {row.contactName}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-                    {row.company}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                    {row.lastActivity}
-                  </Text>
-                </View>
-                <Chip label={row.statusLabel} tone={row.statusTone} dot />
+                <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                  Jobs you passed on
+                </Text>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.inkSecondary }}>
+                  {passedCount}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
               </Card>
+            </Pressable>
+          </View>
+
+          <Text
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 13,
+              color: colors.ink,
+              paddingHorizontal: 20,
+              paddingTop: 18,
+              paddingBottom: 6,
+            }}>
+            Your contacts
+          </Text>
+
+          <View style={{ backgroundColor: colors.paper }}>
+            {trackerRows.map((row, i) => (
+              <View key={row.id}>
+                <ContactRow
+                  row={row}
+                  onOpen={() => router.push(`/outreach/${row.outreachId}`)}
+                  onCoffee={() => router.push('/meeting-prep/new')}
+                />
+                {i < trackerRows.length - 1 ? (
+                  <View
+                    style={{
+                      height: StyleSheet.hairlineWidth,
+                      backgroundColor: colors.hairline,
+                      marginLeft: 84,
+                    }}
+                  />
+                ) : null}
+              </View>
+            ))}
+          </View>
+
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              color: colors.inkTertiary,
+              textAlign: 'center',
+              paddingHorizontal: 20,
+              paddingTop: 16,
+              lineHeight: 18,
+            }}>
+            Tap a contact to open the conversation, swipe to prep a meeting. The full
+            pipeline lives on offerloop.ai
+          </Text>
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+              Coffee library
+            </Text>
+            <Button
+              label="New prep"
+              size="sm"
+              icon="cafe-outline"
+              onPress={() => router.push('/meeting-prep/new')}
+            />
+          </View>
+
+          {meetingPreps.length === 0 ? (
+            <Card>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+                No preps yet. Before a coffee chat or career fair, prep someone from their
+                LinkedIn and it lands here.
+              </Text>
+            </Card>
+          ) : (
+            meetingPreps.map((prep) => (
+              <Pressable key={prep.id} onPress={() => router.push(`/meeting-prep/${prep.id}`)}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: colors.navy + '12',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="cafe" size={18} color={colors.navy} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
+                      {prep.name}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
+                      {prep.title} at {prep.company}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                      {prep.createdLabel}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
             ))
           )}
-        </View>
 
-        <Text
-          style={{
-            fontFamily: fonts.sans,
-            fontSize: 12,
-            color: colors.inkTertiary,
-            textAlign: 'center',
-            paddingTop: 8,
-          }}>
-          The full pipeline, stages, and notes live on offerloop.ai
-        </Text>
-      </ScrollView>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              color: colors.inkTertiary,
+              textAlign: 'center',
+              paddingTop: 6,
+            }}>
+            Coffee chat prep costs 15 credits and runs the same research as the web
+          </Text>
+        </ScrollView>
+      )}
     </View>
   );
 }

@@ -1,28 +1,31 @@
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 
 import { useApp } from '@/store/app';
 import { colors, fonts, shadows } from '@/theme/tokens';
 
 /**
- * The optimistic confirmation that slides up after a right swipe.
- * Ink fill, white text, optional jump into the Inbox.
+ * The optimistic confirmation. Drops in from the top (below the status bar)
+ * so it never covers the Feed action buttons at the bottom. Ink fill, white
+ * text, optional jump into the Inbox.
  */
 export function Toast() {
   const { toast } = useApp();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   if (!toast) return null;
 
   return (
     <Animated.View
-      entering={FadeInDown.springify().damping(16)}
-      exiting={FadeOutDown}
+      entering={FadeInUp.springify().damping(16)}
+      exiting={FadeOutUp}
       pointerEvents="box-none"
       style={{
         position: 'absolute',
-        bottom: 104,
+        top: insets.top + 78,
         left: 0,
         right: 0,
         alignItems: 'center',
@@ -34,10 +37,10 @@ export function Toast() {
             alignItems: 'center',
             gap: 14,
             backgroundColor: colors.ink,
-            borderRadius: 10,
-            paddingHorizontal: 16,
+            borderRadius: 22,
+            paddingHorizontal: 18,
             paddingVertical: 11,
-            maxWidth: '88%',
+            maxWidth: '92%',
           },
           shadows.lg,
         ]}>

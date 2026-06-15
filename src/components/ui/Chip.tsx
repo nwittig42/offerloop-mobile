@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from 'react-native';
 
 import { colors, fonts, tint } from '@/theme/tokens';
@@ -6,6 +7,9 @@ import { colors, fonts, tint } from '@/theme/tokens';
  * Web Badge recipe: radius 8, 11px medium text, 10px by 2px padding, thin border.
  * Soft tint: roughly 8 percent fill and 15 percent border of the tone color.
  * Neutral chips: paper-2 fill with secondary-ink text. Optional leading dot.
+ *
+ * size 'lg' is the enlarged, glanceable feed chip (Sorce style): bigger
+ * text and padding, optional leading icon.
  */
 export type ChipTone =
   | 'neutral'
@@ -27,25 +31,31 @@ export function Chip({
   label,
   tone = 'neutral',
   dot = false,
+  icon,
+  size = 'sm',
 }: {
   label: string;
   tone?: ChipTone;
   dot?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+  size?: 'sm' | 'lg';
 }) {
   const isNeutral = tone === 'neutral';
   const c = isNeutral ? null : TONE_COLOR[tone];
   const t = c ? tint(c) : null;
+  const fg = c ?? colors.inkSecondary;
+  const lg = size === 'lg';
 
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 5,
+        gap: lg ? 6 : 5,
         borderRadius: 8,
         borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 2,
+        paddingHorizontal: lg ? 12 : 10,
+        paddingVertical: lg ? 7 : 2,
         alignSelf: 'flex-start',
         backgroundColor: t ? t.fill : colors.paper2,
         borderColor: t ? t.border : colors.hairline,
@@ -56,15 +66,16 @@ export function Chip({
             width: 5,
             height: 5,
             borderRadius: 2.5,
-            backgroundColor: c ?? colors.inkSecondary,
+            backgroundColor: fg,
           }}
         />
       ) : null}
+      {icon ? <Ionicons name={icon} size={lg ? 15 : 12} color={fg} /> : null}
       <Text
         style={{
-          fontSize: 11,
-          fontFamily: fonts.sansMedium,
-          color: c ?? colors.inkSecondary,
+          fontSize: lg ? 14 : 11,
+          fontFamily: lg ? fonts.sansSemibold : fonts.sansMedium,
+          color: fg,
         }}>
         {label}
       </Text>

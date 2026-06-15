@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import NotificationPrompt from '@/components/NotificationPrompt';
 import Toast from '@/components/Toast';
 import { AppProvider } from '@/store/app';
 import { colors } from '@/theme/tokens';
@@ -69,10 +70,19 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="design" options={{ presentation: 'modal' }} />
             <Stack.Screen name="notifications" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="job/[id]" options={{ presentation: 'modal' }} />
             <Stack.Screen name="outreach/[id]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="scout" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="company/[name]" options={{ presentation: 'card' }} />
+            <Stack.Screen name="passed-jobs" options={{ presentation: 'card' }} />
+            <Stack.Screen name="share" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="swipe-settings" options={{ presentation: 'modal' }} />
           </Stack>
           <Toast />
+          <NotificationPrompt />
         </AppProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

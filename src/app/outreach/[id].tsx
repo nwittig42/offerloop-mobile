@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,11 +23,23 @@ export default function OutreachDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { outreach, updateOutreach, markOutreachSent, showToast } = useApp();
+  const { outreach, meetingPreps, updateOutreach, markOutreachSent, showToast } = useApp();
 
   const item = outreach.find((o) => o.id === id);
   const [subject, setSubject] = useState(item?.subject ?? '');
   const [body, setBody] = useState(item?.body ?? '');
+  const [followupOpen, setFollowupOpen] = useState(false);
+  const firstName = item?.contact?.name.split(' ')[0] ?? 'there';
+  const [followup, setFollowup] = useState(
+    `Hi ${firstName},\n\nThanks so much for getting back to me. Thursday afternoon works great on my end. Anytime after 1pm, whatever is easiest for you.\n\nLooking forward to it,\nSample Student`,
+  );
+
+  // Opening a reply clears it from "needs attention" (the red badge).
+  useEffect(() => {
+    if (item && item.status === 'replied' && !item.attended) {
+      updateOutreach(item.id, { attended: true });
+    }
+  }, [item, updateOutreach]);
 
   if (!item) {
     return (
@@ -45,6 +57,17 @@ export default function OutreachDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     showToast('Sent (mock), real Gmail send arrives in Phase 3');
     router.back();
+  };
+
+  const sendFollowup = () => {
+    const nextThread = [
+      ...(item.thread ?? []),
+      { from: 'me' as const, text: followup, timeLabel: 'Just now' },
+    ];
+    updateOutreach(item.id, { thread: nextThread, snippet: 'You sent a follow-up (mock)' });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setFollowupOpen(false);
+    showToast('Follow-up sent (mock), real Gmail send arrives in Phase 3');
   };
 
   return (
@@ -105,39 +128,80 @@ export default function OutreachDetailScreen() {
                       .join('')}
                   </Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, gap: 3 }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
                     {item.contact.name}
                   </Text>
                   <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
                     {item.contact.title} at {item.contact.company}
                   </Text>
+                  {item.contact.relation ? (
+                    <Chip
+                      label={item.contact.relation}
+                      tone={item.contact.relation === 'Hiring manager' ? 'accent' : 'neutral'}
+                    />
+                  ) : null}
                 </View>
-                {item.contact.linkedinUrl ? (
-                  <Ionicons name="logo-linkedin" size={18} color={colors.accent} />
-                ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  {item.contact.linkedinUrl ? (
+                    <Ionicons name="logo-linkedin" size={18} color={colors.accent} />
+                  ) : null}
+                  {(() => {
+                    const prep = meetingPreps.find((p) => p.name === item.contact?.name);
+                    return (
+                      <Pressable
+                        onPress={() =>
+                          prep
+                            ? router.push(`/meeting-prep/${prep.id}`)
+                            : router.push('/meeting-prep/new')
+                        }
+                        accessibilityLabel={prep ? 'View meeting prep' : 'Prep a meeting'}
+                        hitSlop={8}>
+                        <Ionicons
+                          name="cafe"
+                          size={18}
+                          color={colors.coffee}
+                          style={{ opacity: prep ? 1 : 0.35 }}
+                        />
+                      </Pressable>
+                    );
+                  })()}
+                </View>
               </Card>
             ) : null}
 
             {item.status === 'replied' && item.thread ? (
               <View style={{ gap: 10 }}>
+                {item.subject ? (
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 11.5,
+                      color: colors.inkTertiary,
+                      textAlign: 'center',
+                      paddingBottom: 2,
+                    }}>
+                    Email · {item.subject}
+                  </Text>
+                ) : null}
                 {item.thread.map((msg, i) => (
                   <View
                     key={i}
                     style={{
                       alignSelf: msg.from === 'me' ? 'flex-end' : 'flex-start',
-                      maxWidth: '85%',
-                      backgroundColor: msg.from === 'me' ? colors.ink : colors.paper,
-                      borderWidth: msg.from === 'me' ? 0 : 1,
-                      borderColor: colors.hairline,
-                      borderRadius: 10,
-                      padding: 12,
-                      gap: 4,
+                      maxWidth: '82%',
+                      backgroundColor: msg.from === 'me' ? colors.marketing : colors.surface,
+                      borderRadius: 20,
+                      borderBottomRightRadius: msg.from === 'me' ? 6 : 20,
+                      borderBottomLeftRadius: msg.from === 'me' ? 20 : 6,
+                      paddingHorizontal: 14,
+                      paddingVertical: 9,
+                      gap: 3,
                     }}>
                     <Text
                       style={{
                         fontFamily: fonts.sans,
-                        fontSize: 13.5,
+                        fontSize: 14,
                         lineHeight: 20,
                         color: msg.from === 'me' ? colors.paper : colors.ink,
                       }}>
@@ -146,22 +210,39 @@ export default function OutreachDetailScreen() {
                     <Text
                       style={{
                         fontFamily: fonts.sans,
-                        fontSize: 10.5,
-                        color: msg.from === 'me' ? colors.inkTertiary : colors.inkTertiary,
+                        fontSize: 10,
+                        color: msg.from === 'me' ? 'rgba(255,255,255,0.7)' : colors.inkTertiary,
                         alignSelf: 'flex-end',
                       }}>
                       {msg.timeLabel}
                     </Text>
                   </View>
                 ))}
-                <Button
-                  label="Reply in Gmail"
-                  variant="outline"
-                  fullWidth
-                  onPress={() =>
-                    Alert.alert('Phase 3', 'Replying hands off to Gmail once real wiring lands.')
-                  }
-                />
+                {followupOpen ? (
+                  <Card style={{ gap: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="arrow-undo-outline" size={16} color={colors.accent} />
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+                        Your follow-up
+                      </Text>
+                    </View>
+                    <Input value={followup} onChangeText={setFollowup} multiline style={{ minHeight: 150 }} />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Button label="Send follow-up" onPress={sendFollowup} />
+                      <Button label="Cancel" variant="ghost" onPress={() => setFollowupOpen(false)} />
+                    </View>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                      Drafted for you. Edit it, then send without leaving the app.
+                    </Text>
+                  </Card>
+                ) : (
+                  <Button
+                    label="Draft a follow-up"
+                    icon="arrow-undo-outline"
+                    fullWidth
+                    onPress={() => setFollowupOpen(true)}
+                  />
+                )}
               </View>
             ) : (
               <Card style={{ gap: 12 }}>
