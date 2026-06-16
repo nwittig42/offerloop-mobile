@@ -37,7 +37,6 @@ import {
   MOCK_OUTREACH_SEED,
   MOCK_PROFILE,
   MOCK_RESUME_EXPERIENCES,
-  MOCK_TRACKER_ROWS,
 } from '@/mocks/data';
 import type {
   Job,
@@ -49,6 +48,7 @@ import type {
   ProfileFile,
   ResumeExperience,
   SwipeSettings,
+  TrackerRow,
 } from '@/types';
 
 /**
@@ -64,6 +64,58 @@ const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   contacts: 1,
   autoApply: false,
 };
+
+/**
+ * The Network "Contacts" list is the same people as the Inbox — everyone
+ * you've reached out to — just shaped for the iMessage-style row. So we derive
+ * it from the (real, polled) `outreach` array instead of a second fetch, which
+ * also keeps the two surfaces in lockstep. Drops in-flight drafts and
+ * no-contact-found failures (no real person to show yet).
+ */
+function outreachToTrackerRows(outreach: OutreachItem[]): TrackerRow[] {
+  const rows: TrackerRow[] = [];
+  for (const o of outreach) {
+    if (o.status === 'drafting' || o.status === 'failed') continue;
+    const needsYou = (o.status === 'replied' && !o.attended) || o.status === 'ready';
+    let preview: string;
+    let statusLabel: string;
+    let statusTone: TrackerRow['statusTone'];
+    let bucket: TrackerRow['bucket'];
+    if (o.status === 'ready') {
+      preview = 'Draft ready to review';
+      statusLabel = 'Draft ready';
+      statusTone = 'accent';
+      bucket = 'attention';
+    } else if (o.status === 'replied') {
+      const last = o.thread?.[o.thread.length - 1];
+      preview = last && last.from === 'them' ? last.text : o.snippet ?? 'Replied';
+      statusLabel = 'Replied';
+      statusTone = 'positive';
+      bucket = o.attended ? 'active' : 'attention';
+    } else {
+      // sent
+      preview = `You: ${o.subject ?? 'Outreach sent'}`;
+      statusLabel = 'Waiting';
+      statusTone = 'waiting';
+      bucket = 'active';
+    }
+    rows.push({
+      id: o.id,
+      contactName: o.contact?.name ?? o.company,
+      company: o.company,
+      lastActivity: statusLabel,
+      outreachId: o.id,
+      preview,
+      timeShort: o.timeLabel,
+      unread: needsYou,
+      bucket,
+      statusLabel,
+      statusTone,
+      pinned: o.pinned,
+    });
+  }
+  return rows;
+}
 
 /**
  * Swipe "stamina": a batch of SWIPES (gestures) that refills after a
@@ -88,7 +140,7 @@ type AppStore = {
   allJobs: Job[];
   outreach: OutreachItem[];
   notifications: NotificationItem[];
-  trackerRows: typeof MOCK_TRACKER_ROWS;
+  trackerRows: TrackerRow[];
   profile: Profile;
   /**
    * Live state of the server-backed profile call. The app renders MOCK_PROFILE
@@ -286,7 +338,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (meetingPrepsQuery.data) setMeetingPreps(meetingPrepsQuery.data);
   }, [meetingPrepsQuery.data]);
   const [passedJobs, setPassedJobs] = useState<Job[]>([]);
-  const [trackerRows, setTrackerRows] = useState(MOCK_TRACKER_ROWS);
+  // Derived from the real outreach list (no separate fetch): same contacts as
+  // the Inbox, shaped for the Network Contacts list.
+  const trackerRows = useMemo(() => outreachToTrackerRows(outreach), [outreach]);
   const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
 
   const swipeBatchSize = BATCH_BY_PLAN[profile.plan];
@@ -401,9 +455,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  // A Network contact row IS an outreach item (same id), so pinning one pins
+  // the underlying conversation — one source of truth, shared with the Inbox.
   const toggleContactPin = useCallback((id: string) => {
-    setTrackerRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, pinned: !row.pinned } : row)),
+    setOutreach((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)),
     );
   }, []);
 

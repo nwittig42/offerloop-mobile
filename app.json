@@ -12,7 +12,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.offerloop.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "ai.offerloop.app",
