@@ -1,6 +1,7 @@
 import { Image, Text, View } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * Company logo. Renders the real logo when we have a URL, otherwise a clean
@@ -19,6 +20,7 @@ export function CompanyLogo({
   size?: number;
   radius?: number;
 }) {
+  const colors = useColors();
   const r = radius ?? Math.round(size * 0.26);
 
   if (logoUrl) {

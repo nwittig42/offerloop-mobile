@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { TextInput, View, type TextInputProps } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Web Input recipe: height 36, radius 6, hairline border, white fill,
@@ -13,6 +14,7 @@ export function Input({
   style,
   ...rest
 }: TextInputProps) {
+  const colors = useColors();
   const [focused, setFocused] = useState(false);
 
   return (

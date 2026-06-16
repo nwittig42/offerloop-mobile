@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -10,8 +11,10 @@ import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import SearchBar from '@/components/ui/SearchBar';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 import type { TrackerRow } from '@/types';
 
 /**
@@ -26,6 +29,7 @@ const TABS = ['Contacts', 'Meeting prep'] as const;
 type TabKey = (typeof TABS)[number];
 
 function BigNumber({ value, label }: { value: number; label: string }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
       <Text style={{ fontFamily: fonts.display, fontSize: 44, color: colors.paper }}>
@@ -47,11 +51,14 @@ function ContactRow({
   row,
   onOpen,
   onCoffee,
+  onTogglePin,
 }: {
   row: TrackerRow;
   onOpen: () => void;
   onCoffee: () => void;
+  onTogglePin: () => void;
 }) {
+  const colors = useColors();
   return (
     <ReanimatedSwipeable
       friction={1.6}
@@ -72,6 +79,8 @@ function ContactRow({
       )}>
       <Pressable
         onPress={onOpen}
+        onLongPress={onTogglePin}
+        delayLongPress={280}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -79,7 +88,7 @@ function ContactRow({
           paddingLeft: 16,
           paddingRight: 16,
           paddingVertical: 9,
-          backgroundColor: colors.paper,
+          backgroundColor: row.pinned ? colors.paper2 : colors.paper,
         }}>
         <View style={{ width: 8, alignItems: 'center' }}>
           {row.unread ? (
@@ -93,6 +102,9 @@ function ContactRow({
               {row.contactName}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              {row.pinned ? (
+                <Ionicons name="pin" size={12} color={colors.accent} style={{ marginRight: 1 }} />
+              ) : null}
               <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
                 {row.timeShort}
               </Text>
@@ -112,9 +124,30 @@ function ContactRow({
 
 export default function NetworkScreen() {
   const router = useRouter();
-  const { outreach, trackerRows, meetingPreps, unreadCount, passedCount } = useApp();
+  const colors = useColors();
+  const { outreach, trackerRows, meetingPreps, unreadCount, passedCount, toggleContactPin, showToast } =
+    useApp();
   const [tab, setTab] = useState<TabKey>('Contacts');
   const [companiesOpen, setCompaniesOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const filteredContacts = useMemo(() => {
+    const rows =
+      q === ''
+        ? trackerRows
+        : trackerRows.filter((r) =>
+            [r.contactName, r.company, r.preview].some((s) => s?.toLowerCase().includes(q)),
+          );
+    // Pinned float to the top, otherwise keep the existing order.
+    return [...rows].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
+  }, [trackerRows, q]);
+
+  const onTogglePin = (row: TrackerRow) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleContactPin(row.id);
+    showToast(row.pinned ? 'Unpinned' : 'Pinned to top');
+  };
 
   const sentCount = outreach.filter((o) => o.status === 'sent' || o.status === 'replied').length;
   const repliedCount = outreach.filter((o) => o.status === 'replied').length;
@@ -148,17 +181,33 @@ export default function NetworkScreen() {
       />
 
       <View style={{ paddingHorizontal: 20, paddingTop: 4 }}>
-        <LinearGradient
-          colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ flexDirection: 'row', paddingVertical: 22, borderRadius: 14 }}>
-          <BigNumber value={sentCount} label="Outreach sent" />
-          <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
-          <BigNumber value={repliedCount} label="Replies" />
-          <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
-          <BigNumber value={trackerRows.length} label="Contacts" />
-        </LinearGradient>
+        <Pressable onPress={() => router.push('/milestones')} accessibilityRole="button">
+          <LinearGradient
+            colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ borderRadius: 14, paddingVertical: 16, paddingHorizontal: 16, gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 1, color: '#E2E0FB' }}>
+                YOUR GRIND
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="trophy" size={12} color="#FFFFFF" />
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#FFFFFF' }}>
+                  Milestones
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row' }}>
+              <BigNumber value={sentCount} label="Outreach sent" />
+              <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
+              <BigNumber value={repliedCount} label="Replies" />
+              <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
+              <BigNumber value={trackerRows.length} label="Contacts" />
+            </View>
+          </LinearGradient>
+        </Pressable>
       </View>
 
       <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 12 }}>
@@ -271,30 +320,49 @@ export default function NetworkScreen() {
               color: colors.ink,
               paddingHorizontal: 20,
               paddingTop: 18,
-              paddingBottom: 6,
+              paddingBottom: 8,
             }}>
             Your contacts
           </Text>
 
+          <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
+            <SearchBar value={query} onChangeText={setQuery} placeholder="Search contacts or companies" />
+          </View>
+
           <View style={{ backgroundColor: colors.paper }}>
-            {trackerRows.map((row, i) => (
-              <View key={row.id}>
-                <ContactRow
-                  row={row}
-                  onOpen={() => router.push(`/outreach/${row.outreachId}`)}
-                  onCoffee={() => router.push('/meeting-prep/new')}
-                />
-                {i < trackerRows.length - 1 ? (
-                  <View
-                    style={{
-                      height: StyleSheet.hairlineWidth,
-                      backgroundColor: colors.hairline,
-                      marginLeft: 84,
-                    }}
+            {filteredContacts.length === 0 ? (
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 13.5,
+                  color: colors.inkSecondary,
+                  textAlign: 'center',
+                  paddingVertical: 24,
+                  paddingHorizontal: 20,
+                }}>
+                No contacts match "{query.trim()}".
+              </Text>
+            ) : (
+              filteredContacts.map((row, i) => (
+                <View key={row.id}>
+                  <ContactRow
+                    row={row}
+                    onOpen={() => router.push(`/outreach/${row.outreachId}`)}
+                    onCoffee={() => router.push('/meeting-prep/new')}
+                    onTogglePin={() => onTogglePin(row)}
                   />
-                ) : null}
-              </View>
-            ))}
+                  {i < filteredContacts.length - 1 ? (
+                    <View
+                      style={{
+                        height: StyleSheet.hairlineWidth,
+                        backgroundColor: colors.hairline,
+                        marginLeft: 84,
+                      }}
+                    />
+                  ) : null}
+                </View>
+              ))
+            )}
           </View>
 
           <Text
@@ -307,8 +375,8 @@ export default function NetworkScreen() {
               paddingTop: 16,
               lineHeight: 18,
             }}>
-            Tap a contact to open the conversation, swipe to prep a meeting. The full
-            pipeline lives on offerloop.ai
+            Tap a contact to open the conversation, swipe to prep a meeting, long-press to
+            pin. The full pipeline lives on offerloop.ai
           </Text>
         </ScrollView>
       ) : (

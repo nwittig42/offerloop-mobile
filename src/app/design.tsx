@@ -7,7 +7,8 @@ import { ActionCircle, Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import Input from '@/components/ui/Input';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Phase 0 token gallery. Everything on this screen is a SPECIMEN with
@@ -16,6 +17,7 @@ import { colors, fonts } from '@/theme/tokens';
  */
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useColors();
   return (
     <View style={{ gap: 12 }}>
       <Text
@@ -34,6 +36,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Swatch({ name, hex, border }: { name: string; hex: string; border?: boolean }) {
+  const colors = useColors();
   return (
     <View style={{ alignItems: 'center', gap: 4, width: 76 }}>
       <View
@@ -57,6 +60,7 @@ function Swatch({ name, hex, border }: { name: string; hex: string; border?: boo
 export default function DesignGallery() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const colors = useColors();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>

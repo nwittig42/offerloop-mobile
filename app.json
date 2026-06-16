@@ -3,14 +3,16 @@
     "name": "Offerloop",
     "slug": "offerloop-mobile",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "offerloop",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.offerloop.app",
-      "supportsTablet": false,
-      "icon": "./assets/expo.icon"
+      "supportsTablet": false
     },
     "android": {
       "package": "ai.offerloop.app",
@@ -35,10 +37,34 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/offerloop-mark.png",
+          "color": "#2563EB"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "apiBaseUrl": "http://192.168.4.62:5001",
+      "eas": {
+        "projectId": "c2498b56-5d1c-4d17-bea7-b319b137541e"
+      },
+      "firebase": {
+        "apiKey": "AIzaSyCxcZbNwbh09DFw70tBQUSoqBIDaXNwZdE",
+        "authDomain": "offerloop-native.firebaseapp.com",
+        "projectId": "offerloop-native",
+        "storageBucket": "offerloop-native.firebasestorage.app",
+        "messagingSenderId": "184607281467",
+        "appId": "1:184607281467:web:eab1b0e8be341aa8c5271e"
+      },
+      "router": {}
+    },
+    "owner": "rylanbohnett"
   }
 }

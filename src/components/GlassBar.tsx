@@ -2,7 +2,8 @@ import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { type ReactNode } from 'react';
 import { View, type ViewStyle } from 'react-native';
 
-import { colors, shadows } from '@/theme/tokens';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
+import { shadows } from '@/theme/tokens';
 
 /**
  * A floating bar with Apple's liquid glass effect on iOS 26+. On anything
@@ -17,12 +18,14 @@ export function GlassBar({
   children: ReactNode;
   style?: ViewStyle;
 }) {
+  const colors = useColors();
+  const { scheme } = useTheme();
   const radius = 30;
 
   if (isLiquidGlassAvailable()) {
     return (
       <GlassView
-        glassEffectStyle="regular"
+        glassEffectStyle={scheme === 'dark' ? 'clear' : 'regular'}
         isInteractive
         style={[
           {
@@ -50,7 +53,7 @@ export function GlassBar({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: 'rgba(255,255,255,0.86)',
+          backgroundColor: scheme === 'dark' ? 'rgba(30,38,56,0.92)' : 'rgba(255,255,255,0.86)',
           borderWidth: 1,
           borderColor: colors.hairlineLight,
         },

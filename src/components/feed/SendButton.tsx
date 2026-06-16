@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable } from 'react-native';
 
-import { colors } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * The draft/send button: a vibrant blue circle with a baked-in gradient of
@@ -18,6 +18,7 @@ export function SendButton({
   disabled?: boolean;
   size?: number;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}

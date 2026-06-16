@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * A soft, borderless comma field: the selected values live inside the text
@@ -20,6 +21,7 @@ export function CommaField({
   suggestions: string[];
   placeholder?: string;
 }) {
+  const colors = useColors();
   const [focused, setFocused] = useState(false);
 
   const selected = value

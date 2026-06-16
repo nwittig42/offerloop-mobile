@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Jobs you passed on, reachable from the Network summary. Like Sorce's
@@ -19,6 +20,7 @@ export default function PassedJobsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { passedJobs, restorePassedJob, showToast } = useApp();
+  const colors = useColors();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>

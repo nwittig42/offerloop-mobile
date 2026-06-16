@@ -4,7 +4,8 @@ import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 
 /**
  * The "turn on notifications" prompt, shown at launch when push is off
@@ -15,15 +16,17 @@ import { colors, fonts } from '@/theme/tokens';
  * Phase 3 wires real push.
  */
 
-const BENEFITS: { icon: keyof typeof Ionicons.glyphMap; tone: string; text: string }[] = [
-  { icon: 'chatbubble-ellipses-outline', tone: colors.positive, text: 'Know the second a recruiter replies' },
-  { icon: 'document-text-outline', tone: colors.accent, text: 'Get pinged when a draft is ready to send' },
-  { icon: 'infinite', tone: colors.navy, text: 'See what your Loops did each morning' },
+const benefits = (c: Palette): { icon: keyof typeof Ionicons.glyphMap; tone: string; text: string }[] => [
+  { icon: 'chatbubble-ellipses-outline', tone: c.positive, text: 'Know the second a recruiter replies' },
+  { icon: 'document-text-outline', tone: c.accent, text: 'Get pinged when a draft is ready to send' },
+  { icon: 'infinite', tone: c.navy, text: 'See what your Loops did each morning' },
 ];
 
 export function NotificationPrompt() {
   const insets = useSafeAreaInsets();
-  const { notificationsEnabled, notifPromptDismissed, setNotificationsEnabled, dismissNotifPrompt, showToast } =
+  const colors = useColors();
+  const BENEFITS = benefits(colors);
+  const { notificationsEnabled, notifPromptDismissed, setNotificationsEnabled, dismissNotifPrompt } =
     useApp();
 
   const visible = !notificationsEnabled && !notifPromptDismissed;
@@ -128,10 +131,7 @@ export function NotificationPrompt() {
 
           <View style={{ gap: 10, paddingTop: 2 }}>
             <Pressable
-              onPress={() => {
-                setNotificationsEnabled(true);
-                showToast('Notifications on (mock)');
-              }}
+              onPress={() => setNotificationsEnabled(true)}
               accessibilityRole="button">
               <LinearGradient
                 colors={['#3B82F6', '#2563EB', '#4A60A8'] as const}

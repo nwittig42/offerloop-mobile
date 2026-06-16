@@ -5,8 +5,21 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import CompanyLogo from '@/components/CompanyLogo';
 import Chip from '@/components/ui/Chip';
 import { FIXTURE_QUALS, MOCK_COMPANY_INFO } from '@/mocks/data';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
+
+/** A short school-colors pennant stripe, shown on cards when the school theme is on. */
+function SchoolStripe() {
+  const { school } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
+      <View style={{ width: 22, height: 5, borderRadius: 3, backgroundColor: school.primary }} />
+      <View style={{ width: 22, height: 5, borderRadius: 3, backgroundColor: school.secondary }} />
+      <View style={{ width: 22, height: 5, borderRadius: 3, backgroundColor: school.primary }} />
+    </View>
+  );
+}
 
 /**
  * The swipe card body. Collapsed (quick view): centered, compact, the title
@@ -34,6 +47,7 @@ function DetailGroup({
   children: React.ReactNode;
   center: boolean;
 }) {
+  const colors = useColors();
   return (
     <View style={{ gap: 7, alignItems: center ? 'center' : 'flex-start' }}>
       <Text
@@ -59,6 +73,7 @@ function DetailGroup({
 }
 
 function DetailGroups({ job, center }: { job: Job; center: boolean }) {
+  const colors = useColors();
   return (
     <View style={{ gap: 14, alignItems: center ? 'center' : 'stretch' }}>
       {job.compensation ? (
@@ -87,10 +102,13 @@ function DetailGroups({ job, center }: { job: Job; center: boolean }) {
 }
 
 function CollapsedCard({ job }: { job: Job }) {
+  const colors = useColors();
+  const { accentTheme } = useTheme();
   // Reserve room at the bottom so the short description clears the floating
   // glass action bar that rides low over the card.
   return (
     <View style={{ flex: 1, alignItems: 'center', paddingBottom: 72 }}>
+      {accentTheme === 'school' ? <SchoolStripe /> : null}
       <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
       <View style={{ height: 12 }} />
       <Text
@@ -156,6 +174,7 @@ function DetailTile({
   label: string;
   tone: string;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{
@@ -188,6 +207,7 @@ function DetailTile({
  * the floating action bar, so swipe and draft stay available while reading.
  */
 function ExpandedCard({ job, onCollapse }: { job: Job; onCollapse?: () => void }) {
+  const colors = useColors();
   const router = useRouter();
   const info = MOCK_COMPANY_INFO[job.company];
   const quals = job.requiredQualifications ?? FIXTURE_QUALS;

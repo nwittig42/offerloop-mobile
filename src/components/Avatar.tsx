@@ -1,13 +1,15 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * An iMessage-style avatar: a soft blue gradient circle with white initials.
  * Keeps the contact list familiar to anyone who uses Messages.
  */
 export function Avatar({ name, size = 48 }: { name: string; size?: number }) {
+  const colors = useColors();
   const initials = name
     .split(' ')
     .map((p) => p.charAt(0))

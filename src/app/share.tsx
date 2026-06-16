@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Squiggle from '@/components/Squiggle';
 import { Button } from '@/components/ui/Button';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Share your progress. A slick, brand-blue card a student can post to the
@@ -20,6 +21,7 @@ import { colors, fonts } from '@/theme/tokens';
  */
 
 function Stat({ value, label }: { value: number; label: string }) {
+  const colors = useColors();
   return (
     <View style={{ alignItems: 'center', gap: 2, flex: 1 }}>
       <Text style={{ fontFamily: fonts.display, fontSize: 40, color: colors.paper }}>{value}</Text>
@@ -34,6 +36,7 @@ export default function ShareScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { outreach, meetingPreps } = useApp();
+  const colors = useColors();
 
   const emailsSent = outreach.filter((o) => o.status === 'sent' || o.status === 'replied').length;
   const replies = outreach.filter((o) => o.status === 'replied').length;
@@ -71,9 +74,20 @@ export default function ShareScreen() {
           end={{ x: 1, y: 1 }}
           style={{ borderRadius: 24, padding: 22, overflow: 'hidden' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.paper, letterSpacing: 0.4 }}>
-              offerloop
-            </Text>
+            <View
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 8,
+                paddingHorizontal: 9,
+                paddingVertical: 5,
+              }}>
+              <Image
+                source={require('../../assets/images/offerloop-logo.png')}
+                style={{ width: 78, height: 19 }}
+                resizeMode="contain"
+                accessibilityLabel="Offerloop"
+              />
+            </View>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: '#DCE6FB' }}>
               my recruiting week
             </Text>

@@ -20,9 +20,12 @@ import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import StaminaBar from '@/components/feed/StaminaBar';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
-import { ActionCircle, Button } from '@/components/ui/Button';
+import { ActionCircle } from '@/components/ui/Button';
+import { FeedSkeleton } from '@/components/ui/Skeleton';
+import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Feed: the swipe-to-draft hero. Credits on the left of the banner, full
@@ -48,7 +51,9 @@ export default function FeedScreen() {
     undoLastPass,
     resetDeck,
     showToast,
+    feedState,
   } = useApp();
+  const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -132,7 +137,18 @@ export default function FeedScreen() {
         onBellPress={() => router.push('/notifications')}
       />
 
-      {top ? (
+      {feedState.loading ? (
+        <FeedSkeleton />
+      ) : feedState.error ? (
+        <StateView
+          icon="cloud-offline-outline"
+          tone="error"
+          title="Couldn’t load your feed"
+          body="We couldn’t reach Offerloop to pull your ranked jobs. Check your connection and try again."
+          actionLabel="Try again"
+          onAction={feedState.retry}
+        />
+      ) : top ? (
         <View style={{ flex: 1, paddingHorizontal: 16 }}>
           {!outOfSwipes ? (
             <StaminaBar
@@ -198,29 +214,13 @@ export default function FeedScreen() {
           )}
         </View>
       ) : (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
-          <Text
-            style={{
-              fontFamily: fonts.display,
-              fontSize: 26,
-              color: colors.heading,
-              textAlign: 'center',
-            }}>
-            That is the whole mock deck
-          </Text>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 14,
-              color: colors.inkSecondary,
-              textAlign: 'center',
-              lineHeight: 21,
-            }}>
-            Real jobs arrive with backend wiring in Phase 3. Restart the fixtures to keep
-            testing the swipe.
-          </Text>
-          <Button label="Restart mock deck" variant="outline" onPress={resetDeck} />
-        </View>
+        <StateView
+          icon="checkmark-done-circle-outline"
+          title="You’re all caught up"
+          body="You’ve been through every job we ranked for you. New roles get added as they’re posted — check back soon, or restart the deck to revisit ones you passed."
+          actionLabel="Restart deck"
+          onAction={resetDeck}
+        />
       )}
     </View>
   );

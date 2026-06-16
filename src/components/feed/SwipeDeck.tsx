@@ -14,7 +14,8 @@ import Animated, {
 
 import JobCard from '@/components/feed/JobCard';
 import Card from '@/components/ui/Card';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
 /**
@@ -44,6 +45,7 @@ type Props = {
 };
 
 function Stamp({ kind }: { kind: 'pass' | 'draft' }) {
+  const colors = useColors();
   const isPass = kind === 'pass';
   const color = isPass ? colors.negative : colors.accent;
   return (

@@ -5,7 +5,8 @@ import { StyleSheet } from 'react-native';
 import GlassTabBackground from '@/components/GlassTabBackground';
 import { needsAttention } from '@/app/(tabs)/inbox';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Bottom navigation: Feed, Inbox, Loops, Network, Profile.
@@ -15,6 +16,7 @@ import { colors, fonts } from '@/theme/tokens';
  */
 export default function TabsLayout() {
   const { outreach } = useApp();
+  const colors = useColors();
   const attentionCount = outreach.filter(needsAttention).length;
 
   return (

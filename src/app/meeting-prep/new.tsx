@@ -3,30 +3,41 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { isInsufficientCredits } from '@/api/errors';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
- * New meeting prep: paste a LinkedIn URL (or scan a QR at a career fair,
- * Phase 3) and get a brief on the person plus a tailored opener. A uniquely
- * mobile moment, you can do it standing in front of them. Mock generation
- * for now; real LinkedIn enrichment wires in Phase 3.
+ * New meeting prep: paste a LinkedIn URL and get a real brief on the person
+ * plus a tailored opener (the coffee-chat-prep job, 15 credits). A uniquely
+ * mobile moment, you can do it standing in front of them.
  */
 export default function NewMeetingPrepScreen() {
   const router = useRouter();
-  const { addMeetingPrep } = useApp();
+  const { addMeetingPrep, showToast } = useApp();
+  const colors = useColors();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const canGenerate = name.trim().length > 0 || url.trim().length > 0;
+  const canGenerate = url.trim().length > 0 && !busy;
 
-  const generate = () => {
+  const generate = async () => {
     if (!canGenerate) return;
-    const id = addMeetingPrep({ name, linkedinUrl: url });
-    router.replace(`/meeting-prep/${id}`);
+    setBusy(true);
+    try {
+      const id = await addMeetingPrep({ name, linkedinUrl: url });
+      router.replace(`/meeting-prep/${id}`);
+    } catch (e) {
+      setBusy(false);
+      showToast(
+        isInsufficientCredits(e) ? 'Not enough credits for a prep (15)' : 'Could not start the prep',
+      );
+    }
   };
 
   return (
@@ -89,12 +100,15 @@ export default function NewMeetingPrepScreen() {
         </Card>
 
         <Button
-          label="Prep this person"
+          label={busy ? 'Starting prep...' : 'Prep this person'}
           size="lg"
           fullWidth
           disabled={!canGenerate}
           onPress={generate}
         />
+        <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
+          Reads their LinkedIn and writes a brief. Costs 15 credits and takes a few moments.
+        </Text>
       </ScrollView>
     </View>
   );

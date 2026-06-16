@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from 'react-native';
 
-import { colors, fonts, tint } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, tint, type Palette } from '@/theme/tokens';
 
 /**
  * Web Badge recipe: radius 8, 11px medium text, 10px by 2px padding, thin border.
@@ -19,13 +20,13 @@ export type ChipTone =
   | 'negative'
   | 'waiting';
 
-const TONE_COLOR: Record<Exclude<ChipTone, 'neutral'>, string> = {
-  brand: colors.navy,
-  accent: colors.accent,
-  positive: colors.positive,
-  negative: colors.negative,
-  waiting: colors.waiting,
-};
+const toneColor = (c: Palette): Record<Exclude<ChipTone, 'neutral'>, string> => ({
+  brand: c.navy,
+  accent: c.accent,
+  positive: c.positive,
+  negative: c.negative,
+  waiting: c.waiting,
+});
 
 export function Chip({
   label,
@@ -40,8 +41,9 @@ export function Chip({
   icon?: keyof typeof Ionicons.glyphMap;
   size?: 'sm' | 'lg';
 }) {
+  const colors = useColors();
   const isNeutral = tone === 'neutral';
-  const c = isNeutral ? null : TONE_COLOR[tone];
+  const c = isNeutral ? null : toneColor(colors)[tone];
   const t = c ? tint(c) : null;
   const fg = c ?? colors.inkSecondary;
   const lg = size === 'lg';

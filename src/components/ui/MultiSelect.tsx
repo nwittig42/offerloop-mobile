@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import Input from '@/components/ui/Input';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * A tag multi-select: selected values show as removable chips, and a list of
@@ -22,6 +23,7 @@ export function MultiSelect({
   suggestions: string[];
   placeholder: string;
 }) {
+  const colors = useColors();
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
 

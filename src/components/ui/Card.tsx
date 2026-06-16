@@ -1,6 +1,7 @@
 import { View, type ViewProps } from 'react-native';
 
-import { colors, shadows } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { shadows } from '@/theme/tokens';
 
 /**
  * Web Card recipe: radius 10, hairline border, white fill, 20px padding.
@@ -18,6 +19,7 @@ export function Card({
   children,
   ...rest
 }: CardProps) {
+  const colors = useColors();
   return (
     <View
       style={[

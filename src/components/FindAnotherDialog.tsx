@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
-import { colors, fonts, shadows } from '@/theme/tokens';
+import { fonts, shadows } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * Centered confirm popup for "find another contact at this company", the
@@ -23,6 +24,7 @@ export function FindAnotherDialog({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const colors = useColors();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable

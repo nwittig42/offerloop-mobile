@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Pressable, Text, View } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * The swipe stamina indicator. The metered unit is the swipe (gesture): one
@@ -28,6 +29,7 @@ export function StaminaBar({
   secondsLeft: number;
   onRecharge: () => void;
 }) {
+  const colors = useColors();
   const recharging = available === 0;
 
   if (recharging) {

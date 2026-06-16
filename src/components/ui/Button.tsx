@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, Text, View, type ViewStyle } from 'react-native';
 
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 
 /**
  * Web Button recipe: radius 8, 14px medium text, 8px gap, 16px icons.
@@ -42,7 +43,7 @@ const SIZES: Record<
   icon: { height: 36, paddingX: 0, fontSize: 14 },
 };
 
-function variantStyles(variant: ButtonVariant, pressed: boolean) {
+function variantStyles(variant: ButtonVariant, pressed: boolean, colors: Palette) {
   switch (variant) {
     case 'primary':
       return {
@@ -98,9 +99,10 @@ export function Button({
   disabled = false,
   fullWidth = false,
 }: ButtonProps) {
+  const colors = useColors();
   const [pressed, setPressed] = useState(false);
   const s = SIZES[size];
-  const v = variantStyles(variant, pressed);
+  const v = variantStyles(variant, pressed, colors);
 
   const containerStyle: ViewStyle = {
     height: s.height,
@@ -155,6 +157,7 @@ export function ActionCircle({
   tone?: 'neutral' | 'negative' | 'ink';
   disabled?: boolean;
 }) {
+  const colors = useColors();
   const [pressed, setPressed] = useState(false);
   const tones = {
     neutral: { bg: colors.paper, fg: colors.inkSecondary, border: colors.hairline },

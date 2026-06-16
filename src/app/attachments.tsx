@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * What travels with your outreach (the doc button in the Feed action row,
@@ -18,6 +19,7 @@ export default function AttachmentsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, showToast } = useApp();
+  const colors = useColors();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>

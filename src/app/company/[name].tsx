@@ -12,7 +12,8 @@ import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import { MOCK_COMPANY_INFO } from '@/mocks/data';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Company page, modeled on Sorce's: tap a company logo or name from a job
@@ -25,6 +26,7 @@ export default function CompanyScreen() {
   const company = decodeURIComponent(name ?? '');
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const { allJobs, outreach, profile, draftAnotherContact } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
 

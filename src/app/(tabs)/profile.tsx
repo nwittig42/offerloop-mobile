@@ -8,6 +8,7 @@ import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
+import CircleProgress from '@/components/ui/CircleProgress';
 import CommaField from '@/components/ui/CommaField';
 import {
   INDUSTRY_SUGGESTIONS,
@@ -15,7 +16,8 @@ import {
   TARGET_ROLE_SUGGESTIONS,
 } from '@/mocks/data';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 import type { ProfileFile } from '@/types';
 
 const splitList = (s: string) =>
@@ -26,6 +28,7 @@ const splitList = (s: string) =>
 
 /** A soft, borderless personalization row with a hairline under it. */
 function SoftRow({ label, children, last }: { label: string; children: ReactNode; last?: boolean }) {
+  const colors = useColors();
   return (
     <View
       style={{
@@ -38,6 +41,150 @@ function SoftRow({ label, children, last }: { label: string; children: ReactNode
       </Text>
       {children}
     </View>
+  );
+}
+
+/**
+ * Profile completeness nudge (Sorce-style): a ring gauge + a CTA into the
+ * Personal tab. Counts the fields that steer Scout's writing; once they're all
+ * filled the card disappears entirely.
+ */
+function ProfileCompletion({
+  profile,
+  onFinish,
+}: {
+  profile: ReturnType<typeof useApp>['profile'];
+  onFinish: () => void;
+}) {
+  const colors = useColors();
+
+  const checks = [
+    !!profile.linkedinUrl?.trim(),
+    profile.targetRoles.length > 0,
+    profile.industries.length > 0,
+    !!profile.gradYear?.trim(),
+    !!profile.about?.trim(),
+    !!profile.resume?.name,
+    profile.gmailConnected,
+  ];
+  const done = checks.filter(Boolean).length;
+  const ratio = done / checks.length;
+  const pct = Math.round(ratio * 100);
+
+  if (pct >= 100) return null;
+
+  return (
+    <Card style={{ gap: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <CircleProgress size={54} progress={ratio} color={colors.positive} label={`${pct}%`} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            Complete your profile
+          </Text>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
+            The more Scout knows, the better every draft sounds.
+          </Text>
+        </View>
+      </View>
+      <Button label="Finish profile" variant="brand" fullWidth onPress={onFinish} />
+    </Card>
+  );
+}
+
+const APPEARANCE: { key: ThemePref; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'light', label: 'Light', icon: 'sunny-outline' },
+  { key: 'dark', label: 'Dark', icon: 'moon-outline' },
+];
+
+/**
+ * Appearance picker: a two-way segmented control (Light / Dark). The choice is
+ * sticky; it drives the whole app through ThemeProvider.
+ */
+function AppearanceSelector() {
+  const colors = useColors();
+  const { pref, setPref, accentTheme, setAccentTheme, school } = useTheme();
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Ionicons name="contrast-outline" size={18} color={colors.inkSecondary} />
+        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+          Appearance
+        </Text>
+      </View>
+      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+        Choose how Offerloop looks on this device.
+      </Text>
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: 6,
+          backgroundColor: colors.paper2,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.hairline,
+          padding: 4,
+        }}>
+        {APPEARANCE.map((opt) => {
+          const selected = opt.key === pref;
+          return (
+            <Pressable
+              key={opt.key}
+              onPress={() => setPref(opt.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: 7,
+                backgroundColor: selected ? colors.navy : 'transparent',
+              }}>
+              <Ionicons
+                name={opt.icon}
+                size={15}
+                color={selected ? colors.paper : colors.inkSecondary}
+              />
+              <Text
+                style={{
+                  fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
+                  fontSize: 13,
+                  color: selected ? colors.paper : colors.inkSecondary,
+                }}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={{ height: 1, backgroundColor: colors.hairlineLight, marginVertical: 2 }} />
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          <Ionicons name="color-palette-outline" size={18} color={colors.inkSecondary} />
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                {school.name} colors
+              </Text>
+              <Chip label="Milestone reward" tone="accent" />
+            </View>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+              Tint the app in your school's colors. Earned in Milestones.
+            </Text>
+          </View>
+        </View>
+        <Switch
+          value={accentTheme === 'school'}
+          onValueChange={(on) => setAccentTheme(on ? 'school' : 'default')}
+          trackColor={{ true: colors.accent, false: colors.hairline }}
+        />
+      </View>
+    </Card>
   );
 }
 
@@ -67,8 +214,10 @@ const FILE_ICON: Record<ProfileFile['kind'], keyof typeof Ionicons.glyphMap> = {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const colors = useColors();
   const {
     profile,
+    connection,
     resumeExperiences,
     files,
     unreadCount,
@@ -147,7 +296,7 @@ export default function ProfileScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="flash" size={17} color={colors.paper} />
+                <Ionicons name="flash" size={17} color={colors.bolt} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -177,23 +326,30 @@ export default function ProfileScreen() {
           </Pressable>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 4 }}>
-            <View
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 26,
-                backgroundColor: colors.navy,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.paper }}>
-                {profile.name
-                  .split(' ')
-                  .map((p) => p.charAt(0))
-                  .slice(0, 2)
-                  .join('')}
-              </Text>
-            </View>
+            {profile.photoUrl ? (
+              <Image
+                source={{ uri: profile.photoUrl }}
+                style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.paper2 }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: colors.navy,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.paper }}>
+                  {profile.name
+                    .split(' ')
+                    .map((p) => p.charAt(0))
+                    .slice(0, 2)
+                    .join('')}
+                </Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.ink }}>
@@ -217,8 +373,10 @@ export default function ProfileScreen() {
                 {profile.school}
               </Text>
             </View>
-            <Chip label="Mock data" tone="waiting" dot />
+            {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
           </View>
+
+          <ProfileCompletion profile={profile} onFinish={() => setTab('personal')} />
 
           <Pressable onPress={() => router.push('/share')}>
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: colors.accent + '40' }}>
@@ -552,6 +710,8 @@ export default function ProfileScreen() {
                   <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
                 </Card>
               </Pressable>
+
+              <AppearanceSelector />
 
               <Card style={{ gap: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

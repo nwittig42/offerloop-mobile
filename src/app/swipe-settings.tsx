@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Card from '@/components/ui/Card';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 import type { SwipeSettings } from '@/types';
 
 /**
@@ -24,6 +25,7 @@ const ACTIONS: { key: SwipeSettings['action']; label: string; sub: string }[] = 
 export default function SwipeSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const { swipeSettings, updateSwipeSettings, profile } = useApp();
   const { action, contacts, autoApply } = swipeSettings;
 

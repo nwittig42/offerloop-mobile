@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { colors } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * The pass (left swipe) button, given a chunkier, more playful look than a
@@ -9,6 +9,7 @@ import { colors } from '@/theme/tokens';
  * press. Sits in the Feed action bar next to the draft button.
  */
 export function PlayfulPass({ onPress, size = 56 }: { onPress?: () => void; size?: number }) {
+  const colors = useColors();
   const [pressed, setPressed] = useState(false);
   const bar = {
     position: 'absolute' as const,

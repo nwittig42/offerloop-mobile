@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   useCallback,
@@ -8,6 +9,24 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+
+import { fetchFeed } from '@/api/endpoints/feed';
+import { fetchInbox } from '@/api/endpoints/inbox';
+import { createLoop, fetchLoops, setLoopPaused } from '@/api/endpoints/loops';
+import { fetchMe } from '@/api/endpoints/me';
+import {
+  fetchNotifications,
+  markNotificationsRead as apiMarkNotificationsRead,
+} from '@/api/endpoints/notifications';
+import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
+import { runSwipe } from '@/api/endpoints/swipe';
+import { isInsufficientCredits } from '@/api/errors';
+import { qk } from '@/api/queryKeys';
+import { useAuth } from '@/auth/AuthProvider';
+import {
+  hasNotificationPermission,
+  registerForPushNotificationsAsync,
+} from '@/notifications/push';
 
 import {
   MOCK_FILES,
@@ -21,7 +40,6 @@ import {
   MOCK_TRACKER_ROWS,
 } from '@/mocks/data';
 import type {
-  ContactRelation,
   Job,
   Loop,
   LoopActivity,
@@ -34,23 +52,12 @@ import type {
 } from '@/types';
 
 /**
- * Phase 1 in-memory store, mock data only. The shape mirrors what the real
- * backend endpoints will return in Phase 3 so screens swap cleanly later.
- * A right swipe runs the locked optimistic flow: instant confirmation,
- * a "drafting" placeholder in the Inbox, then the item fills in after a
- * simulated async delay.
+ * App store. Profile/credits and the job feed are server-backed via React Query
+ * (GET /api/mobile/me, /api/jobs/feed); a right swipe calls the real
+ * find + draft (/api/prompt-search) behind an optimistic "drafting" placeholder
+ * that reconciles with the returned contact. Inbox, loops, and meeting prep are
+ * still seeded from fixtures pending their own wiring.
  */
-
-const DRAFT_SIMULATION_MS = 4500;
-
-// Index 0 is always the hiring manager, the rest are employees on the team,
-// so a multi-contact swipe builds the "apply, then warm up the team" web.
-const FIXTURE_CONTACTS = [
-  { name: 'Riley Mockwell', title: 'Director, Hiring Manager' },
-  { name: 'Alex Fixture', title: 'Senior Associate' },
-  { name: 'Casey Specimen', title: 'Associate' },
-  { name: 'Morgan Sampleton', title: 'Analyst' },
-];
 
 const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   action: 'draft',
@@ -72,10 +79,6 @@ const BATCH_BY_PLAN: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 
 const REAL_COOLDOWN_HOURS: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 4, Elite: 3 };
 const MOCK_COOLDOWN_SECONDS = 60; // demo timer, stands in for REAL_COOLDOWN_HOURS
 
-function relationFor(index: number): ContactRelation {
-  return index === 0 ? 'Hiring manager' : 'Employee';
-}
-
 type ToastState = { message: string; showInboxAction: boolean } | null;
 
 type Profile = typeof MOCK_PROFILE;
@@ -87,6 +90,23 @@ type AppStore = {
   notifications: NotificationItem[];
   trackerRows: typeof MOCK_TRACKER_ROWS;
   profile: Profile;
+  /**
+   * Live state of the server-backed profile call. The app renders MOCK_PROFILE
+   * whenever the real /api/mobile/me hasn't returned, so `status`/`usingSampleData`
+   * let the UI say so instead of passing fixtures off as real data.
+   */
+  connection: {
+    status: 'ok' | 'loading' | 'error';
+    usingSampleData: boolean;
+    retry: () => void;
+  };
+  /**
+   * Per-screen load state for the job feed and inbox. The store falls back to
+   * fixtures until each query resolves, so these let the Feed/Inbox render their
+   * own skeleton / error placeholder instead of flashing mock cards as real.
+   */
+  feedState: { loading: boolean; error: boolean; retry: () => void };
+  inboxState: { loading: boolean; error: boolean; retry: () => void };
   loops: Loop[];
   loopActivity: LoopActivity[];
   resumeExperiences: ResumeExperience[];
@@ -114,12 +134,14 @@ type AppStore = {
   restorePassedJob: (id: string) => void;
   resetDeck: () => void;
   updateOutreach: (id: string, patch: Partial<OutreachItem>) => void;
+  toggleOutreachPin: (id: string) => void;
+  toggleContactPin: (id: string) => void;
   markOutreachSent: (id: string) => void;
   markNotificationsRead: () => void;
   updateProfile: (patch: Partial<Profile>) => void;
   addLoop: (brief: string) => void;
   toggleLoop: (id: string) => void;
-  addMeetingPrep: (input: { name: string; linkedinUrl: string }) => string;
+  addMeetingPrep: (input: { name: string; linkedinUrl: string }) => Promise<string>;
   showToast: (message: string, showInboxAction?: boolean) => void;
 };
 
@@ -127,17 +149,147 @@ const AppContext = createContext<AppStore | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
+  const [deckSeeded, setDeckSeeded] = useState(false);
   const [outreach, setOutreach] = useState<OutreachItem[]>(MOCK_OUTREACH_SEED);
   const [notifications, setNotifications] = useState<NotificationItem[]>(
     MOCK_NOTIFICATIONS_SEED,
   );
-  const [profile, setProfile] = useState<Profile>(MOCK_PROFILE);
+  // Profile + credits are now server-backed: GET /api/mobile/me via React Query.
+  // Falls back to the fixture until the first fetch resolves (or offline mocks).
+  const { status: authStatus } = useAuth();
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: qk.me,
+    queryFn: fetchMe,
+    enabled: authStatus === 'signedIn',
+  });
+  const profile: Profile = meQuery.data ?? MOCK_PROFILE;
+
+  /** Optimistically patch the cached profile (used by mutations until each gets a real PATCH). */
+  const patchProfile = useCallback(
+    (patch: Partial<Profile>) => {
+      queryClient.setQueryData<Profile>(qk.me, (prev) => ({ ...(prev ?? MOCK_PROFILE), ...patch }));
+    },
+    [queryClient],
+  );
+
+  // Job feed: the ranked deck from GET /api/jobs/feed. Seed the local deck once
+  // so passes/undos keep mutating it client-side as before; allJobs (used by
+  // the company "other roles" view) tracks the full fetched list.
+  const feedQuery = useQuery({
+    queryKey: qk.feed,
+    queryFn: fetchFeed,
+    enabled: authStatus === 'signedIn',
+  });
+  const allJobs = feedQuery.data ?? MOCK_JOBS;
+  useEffect(() => {
+    if (feedQuery.data && !deckSeeded) {
+      setJobs(feedQuery.data);
+      setDeckSeeded(true);
+    }
+  }, [feedQuery.data, deckSeeded]);
+
+  // Inbox: real threads from GET /api/outbox/threads, polled for replies. We
+  // sync to the server list but keep any in-flight "drafting" placeholders on
+  // top (a swipe that hasn't reconciled / been saved server-side yet).
+  const inboxQuery = useQuery({
+    queryKey: qk.inbox,
+    queryFn: fetchInbox,
+    enabled: authStatus === 'signedIn',
+    refetchInterval: 60_000,
+  });
+  useEffect(() => {
+    const server = inboxQuery.data;
+    if (!server) return;
+    setOutreach((prev) => {
+      const serverIds = new Set(server.map((o) => o.id));
+      const inFlight = prev.filter((o) => o.status === 'drafting' && !serverIds.has(o.id));
+      return [...inFlight, ...server];
+    });
+  }, [inboxQuery.data]);
+
+  // Header-bell feed from GET /api/mobile/notifications (the reply-webhook +
+  // loop-cycle outbox doc, the same source push notifications fire from).
+  // Polled so a reply/loop push surfaces in the list + bell badge.
+  const notificationsQuery = useQuery({
+    queryKey: qk.notifications,
+    queryFn: fetchNotifications,
+    enabled: authStatus === 'signedIn',
+    refetchInterval: 60_000,
+  });
+  useEffect(() => {
+    if (notificationsQuery.data) setNotifications(notificationsQuery.data);
+  }, [notificationsQuery.data]);
+
+  // Connection status for the UI. `profile` above is `meQuery.data ?? MOCK_PROFILE`,
+  // so a failed or still-pending /api/mobile/me silently shows the fixture. This
+  // derives an explicit state the ConnectionBanner can render, and a retry that
+  // refetches the server-backed queries.
+  const connection = useMemo<AppStore['connection']>(() => {
+    const signedIn = authStatus === 'signedIn';
+    const usingSampleData = signedIn && meQuery.data === undefined;
+    let status: 'ok' | 'loading' | 'error' = 'ok';
+    if (signedIn) {
+      if (meQuery.isError) status = 'error';
+      else if (meQuery.data === undefined) status = 'loading';
+    }
+    return {
+      status,
+      usingSampleData,
+      retry: () => {
+        queryClient.invalidateQueries({ queryKey: qk.me });
+        queryClient.invalidateQueries({ queryKey: qk.feed });
+        queryClient.invalidateQueries({ queryKey: qk.inbox });
+      },
+    };
+  }, [authStatus, meQuery.isError, meQuery.data, queryClient]);
+
+  // Per-screen load state. `loading` is the first fetch only (isLoading is false
+  // while disabled pre-auth); `error` is a failed fetch with no data to show.
+  const signedIn = authStatus === 'signedIn';
+  const feedState = useMemo<AppStore['feedState']>(
+    () => ({
+      loading: signedIn && feedQuery.isLoading,
+      error: signedIn && feedQuery.isError && feedQuery.data === undefined,
+      retry: () => queryClient.invalidateQueries({ queryKey: qk.feed }),
+    }),
+    [signedIn, feedQuery.isLoading, feedQuery.isError, feedQuery.data, queryClient],
+  );
+  const inboxState = useMemo<AppStore['inboxState']>(
+    () => ({
+      loading: signedIn && inboxQuery.isLoading,
+      error: signedIn && inboxQuery.isError && inboxQuery.data === undefined,
+      retry: () => queryClient.invalidateQueries({ queryKey: qk.inbox }),
+    }),
+    [signedIn, inboxQuery.isLoading, inboxQuery.isError, inboxQuery.data, queryClient],
+  );
+
   const [loops, setLoops] = useState<Loop[]>(MOCK_PROFILE.loops);
+  // Loops fleet from GET /api/agent/loops; re-sync the local list to the server
+  // on each fetch (optimistic add/toggle below patch it in the meantime).
+  const loopsQuery = useQuery({
+    queryKey: qk.loops,
+    queryFn: fetchLoops,
+    enabled: authStatus === 'signedIn',
+  });
+  useEffect(() => {
+    if (loopsQuery.data) setLoops(loopsQuery.data);
+  }, [loopsQuery.data]);
   const [meetingPreps, setMeetingPreps] = useState<MeetingPrep[]>(MOCK_MEETING_PREPS);
+  // Coffee library from GET /api/coffee-chat-prep/all; re-sync to the server.
+  const meetingPrepsQuery = useQuery({
+    queryKey: qk.meetingPreps,
+    queryFn: fetchMeetingPreps,
+    enabled: authStatus === 'signedIn',
+  });
+  useEffect(() => {
+    if (meetingPrepsQuery.data) setMeetingPreps(meetingPrepsQuery.data);
+  }, [meetingPrepsQuery.data]);
   const [passedJobs, setPassedJobs] = useState<Job[]>([]);
+  const [trackerRows, setTrackerRows] = useState(MOCK_TRACKER_ROWS);
   const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
 
-  const swipeBatchSize = BATCH_BY_PLAN[MOCK_PROFILE.plan];
+  const swipeBatchSize = BATCH_BY_PLAN[profile.plan];
   const [swipesAvailable, setSwipesAvailable] = useState(swipeBatchSize);
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -231,8 +383,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const resetDeck = useCallback(() => {
     setPassedJobs([]);
-    setJobs(MOCK_JOBS);
-  }, []);
+    setJobs(feedQuery.data ?? MOCK_JOBS);
+  }, [feedQuery.data]);
 
   const updateOutreach = useCallback(
     (id: string, patch: Partial<OutreachItem>) => {
@@ -243,13 +395,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const toggleOutreachPin = useCallback((id: string) => {
+    setOutreach((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)),
+    );
+  }, []);
+
+  const toggleContactPin = useCallback((id: string) => {
+    setTrackerRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, pinned: !row.pinned } : row)),
+    );
+  }, []);
+
   /**
-   * Shared core of the optimistic flow: spend credits, drop "drafting"
-   * placeholders in the Inbox (one per contact), then fill them in after the
-   * simulated delay. Honors the swipe settings: how many contacts to reach,
-   * whether to draft or auto-send, and whether to also apply. The first
-   * contact in a multi-reach is the hiring manager (the "apply, then warm up
-   * the team" web); the rest are employees.
+   * The hero. Optimistically spend a swipe + drop "drafting" placeholders in
+   * the Inbox (one per contact), then call the real swipe (find + draft + save
+   * via /api/prompt-search) and reconcile each placeholder with the returned
+   * contact + draft. The first contact in a multi-reach is the hiring manager
+   * ("apply, then warm the team"); the rest are employees. On insufficient
+   * credits we roll the placeholders back and point to the web; other failures
+   * mark the placeholder failed so the user can retry.
    */
   const beginDraft = useCallback(
     (
@@ -266,63 +431,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const action = opts.action ?? 'draft';
       const autoApply = opts.autoApply ?? false;
       const firstIsHM = opts.firstIsHiringManager ?? true;
-      const filledStatus: OutreachItem['status'] = action === 'send' ? 'sent' : 'ready';
 
-      setProfile((prev) => ({
-        ...prev,
-        credits: prev.credits - prev.creditsPerSwipe * count,
-      }));
+      // Optimistic: drop a swipe-token and show credits fall now; reconciled
+      // against the server's authoritative count when the swipe returns.
+      queryClient.setQueryData<Profile>(qk.me, (prev) => {
+        const base = prev ?? MOCK_PROFILE;
+        return { ...base, credits: base.credits - base.creditsPerSwipe * count };
+      });
       spendSwipes();
 
       const peopleWord = count === 1 ? 'person' : 'people';
       const verb = action === 'send' ? 'Sending to' : 'Drafted to';
       showToast(`${verb} ${count} ${peopleWord} at ${company}${autoApply ? ', applied' : ''}`, true);
 
+      const placeholderIds: string[] = [];
       for (let k = 0; k < count; k++) {
         idCounter.current += 1;
         const outreachId = `out-new-${idCounter.current}`;
-        const relation: ContactRelation = firstIsHM && k === 0 ? 'Hiring manager' : 'Employee';
-        const fixture = FIXTURE_CONTACTS[k % FIXTURE_CONTACTS.length];
-
+        placeholderIds.push(outreachId);
         setOutreach((prev) => [
           { id: outreachId, jobTitle, company, status: 'drafting', timeLabel: 'Just now' },
           ...prev,
         ]);
-
-        setTimeout(() => {
-          setOutreach((prev) =>
-            prev.map((item) =>
-              item.id === outreachId
-                ? {
-                    ...item,
-                    status: filledStatus,
-                    contact: { name: fixture.name, title: fixture.title, company, relation },
-                    subject: `Student reaching out about ${jobTitle}`,
-                    snippet:
-                      action === 'send'
-                        ? 'Sent from your connected Gmail (mock)'
-                        : 'Draft is ready for your review (mock)',
-                    body: `Hi ${fixture.name.split(' ')[0]},\n\nFixture draft body generated by the mock service for the ${jobTitle} role at ${company}. Edit me to test the editor.\n\nBest,\nSample Student`,
-                  }
-                : item,
-            ),
-          );
-          setNotifications((prev) => [
-            {
-              id: `n-new-${outreachId}`,
-              kind: 'draft_ready',
-              text:
-                action === 'send'
-                  ? `Sent to ${fixture.name} (${relation}) at ${company}`
-                  : `Outreach to ${fixture.name} (${relation}) at ${company} is ready to review`,
-              timeLabel: 'Just now',
-              read: false,
-              outreachId,
-            },
-            ...prev,
-          ]);
-        }, DRAFT_SIMULATION_MS + k * 700);
       }
+
+      runSwipe({ company, jobTitle, count, action, firstIsHiringManager: firstIsHM })
+        .then(({ items, creditsRemaining }) => {
+          setOutreach((prev) => {
+            const next = [...prev];
+            placeholderIds.forEach((pid, k) => {
+              const idx = next.findIndex((o) => o.id === pid);
+              if (idx === -1) return;
+              const item = items[k];
+              next[idx] = item
+                ? { ...item, id: pid }
+                : { ...next[idx], status: 'failed', snippet: 'No contact found' };
+            });
+            return next;
+          });
+          items.forEach((item, k) => {
+            const pid = placeholderIds[k];
+            if (!pid) return;
+            const who = item.contact?.name ?? 'a contact';
+            setNotifications((prev) => [
+              {
+                id: `n-new-${pid}`,
+                kind: 'draft_ready',
+                text:
+                  action === 'send'
+                    ? `Sent to ${who} at ${company}`
+                    : `Outreach to ${who} at ${company} is ready to review`,
+                timeLabel: 'Just now',
+                read: false,
+                outreachId: pid,
+              },
+              ...prev,
+            ]);
+          });
+          if (typeof creditsRemaining === 'number') {
+            patchProfile({ credits: creditsRemaining });
+          } else {
+            queryClient.invalidateQueries({ queryKey: qk.me });
+          }
+        })
+        .catch((err) => {
+          if (isInsufficientCredits(err)) {
+            setOutreach((prev) => prev.filter((o) => !placeholderIds.includes(o.id)));
+            showToast('Not enough credits. Top up on offerloop.ai');
+          } else {
+            setOutreach((prev) =>
+              prev.map((o) =>
+                placeholderIds.includes(o.id)
+                  ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
+                  : o,
+              ),
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: qk.me });
+        });
 
       if (autoApply) {
         idCounter.current += 1;
@@ -338,7 +524,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
       }
     },
-    [profile.creditsPerSwipe, showToast, spendSwipes],
+    [queryClient, patchProfile, showToast, spendSwipes],
   );
 
   const draftJob = useCallback(
@@ -371,12 +557,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSwipeSettings((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  const setNotificationsEnabled = useCallback((value: boolean) => {
-    setNotificationsEnabledState(value);
-    if (value) setNotifPromptDismissed(true);
-  }, []);
+  const setNotificationsEnabled = useCallback(
+    (value: boolean) => {
+      if (!value) {
+        // We can't revoke OS permission from here; just stop reflecting it on.
+        setNotificationsEnabledState(false);
+        return;
+      }
+      // Turning on: ask the OS + register the token. Dismiss the prompt either
+      // way so it doesn't reappear; only flip the toggle on if granted.
+      setNotifPromptDismissed(true);
+      registerForPushNotificationsAsync()
+        .then((res) => {
+          setNotificationsEnabledState(res.granted);
+          showToast(
+            res.granted
+              ? 'Notifications on'
+              : 'Enable notifications for Offerloop in Settings to get reply alerts',
+          );
+        })
+        .catch(() => setNotificationsEnabledState(false));
+    },
+    [showToast],
+  );
 
   const dismissNotifPrompt = useCallback(() => setNotifPromptDismissed(true), []);
+
+  // Returning users who already granted permission: silently re-register the
+  // push token each launch (Expo tokens can rotate) and suppress the prompt.
+  useEffect(() => {
+    if (authStatus !== 'signedIn') return;
+    let cancelled = false;
+    hasNotificationPermission().then((granted) => {
+      if (cancelled || !granted) return;
+      setNotificationsEnabledState(true);
+      setNotifPromptDismissed(true);
+      registerForPushNotificationsAsync().catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus]);
 
   const markOutreachSent = useCallback(
     (id: string) => {
@@ -390,64 +611,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const markNotificationsRead = useCallback(() => {
+    // Optimistic: clear the badge locally, then persist + zero the server
+    // unread counters. Re-fetch on settle so a reply that arrived mid-view
+    // still shows (just no longer unread).
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    apiMarkNotificationsRead()
+      .catch(() => {})
+      .finally(() => queryClient.invalidateQueries({ queryKey: qk.notifications }));
+  }, [queryClient]);
 
-  const updateProfile = useCallback((patch: Partial<Profile>) => {
-    setProfile((prev) => ({ ...prev, ...patch }));
-  }, []);
+  const updateProfile = useCallback(
+    (patch: Partial<Profile>) => {
+      patchProfile(patch);
+    },
+    [patchProfile],
+  );
 
-  const addLoop = useCallback((brief: string) => {
-    idCounter.current += 1;
-    setLoops((prev) => [
-      {
-        id: `loop-new-${idCounter.current}`,
-        brief,
-        status: 'Active',
-        contactsFound: 0,
-        draftsCreated: 0,
-        weeklyTarget: 5,
-        weeklyDone: 0,
-      },
-      ...prev,
-    ]);
-  }, []);
-
-  const toggleLoop = useCallback((id: string) => {
-    setLoops((prev) =>
-      prev.map((loop) =>
-        loop.id === id
-          ? { ...loop, status: loop.status === 'Active' ? 'Paused' : 'Active' }
-          : loop,
-      ),
-    );
-  }, []);
-
-  const addMeetingPrep = useCallback(
-    ({ name, linkedinUrl }: { name: string; linkedinUrl: string }) => {
+  const addLoop = useCallback(
+    (brief: string) => {
       idCounter.current += 1;
-      const id = `prep-new-${idCounter.current}`;
-      const display = name.trim() || 'New contact';
-      setMeetingPreps((prev) => [
+      // Optimistically show the new Loop, then create it server-side and
+      // re-sync from the fleet (which fills in real counts + auto-start state).
+      setLoops((prev) => [
         {
-          id,
-          name: display,
-          title: 'Pulled from LinkedIn (mock)',
-          company: 'Pulled from LinkedIn (mock)',
-          linkedinUrl: linkedinUrl.trim() || undefined,
-          summary: `Fixture brief for ${display}. The real prep reads their LinkedIn and recent activity, then writes a tailored synopsis and opener. This preview shows the shape.`,
-          talkingPoints: [
-            'Fixture talking point about their career path.',
-            'Fixture talking point about a shared connection or interest.',
-            'Fixture question to ask in the meeting.',
-          ],
-          createdLabel: 'Prepped just now',
+          id: `loop-new-${idCounter.current}`,
+          brief,
+          status: 'Active',
+          contactsFound: 0,
+          draftsCreated: 0,
+          weeklyTarget: 5,
+          weeklyDone: 0,
         },
         ...prev,
       ]);
+      createLoop(brief)
+        .catch(() => showToast('Could not create the Loop, try again'))
+        .finally(() => queryClient.invalidateQueries({ queryKey: qk.loops }));
+    },
+    [queryClient, showToast],
+  );
+
+  const toggleLoop = useCallback(
+    (id: string) => {
+      let nowPaused = false;
+      setLoops((prev) =>
+        prev.map((loop) => {
+          if (loop.id !== id) return loop;
+          nowPaused = loop.status === 'Active';
+          return { ...loop, status: nowPaused ? 'Paused' : 'Active' };
+        }),
+      );
+      setLoopPaused(id, nowPaused)
+        .catch(() => showToast('Could not update the Loop, try again'))
+        .finally(() => queryClient.invalidateQueries({ queryKey: qk.loops }));
+    },
+    [queryClient, showToast],
+  );
+
+  const addMeetingPrep = useCallback(
+    async ({ linkedinUrl }: { name: string; linkedinUrl: string }) => {
+      // Kick off the real coffee-chat-prep job (15 credits, async); returns the
+      // prep id to navigate to. The detail screen polls it to completion, and
+      // the library list re-syncs from the server.
+      const id = await createMeetingPrep(linkedinUrl.trim());
+      queryClient.invalidateQueries({ queryKey: qk.meetingPreps });
       return id;
     },
-    [],
+    [queryClient],
   );
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -455,11 +685,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStore>(
     () => ({
       jobs,
-      allJobs: MOCK_JOBS,
+      allJobs,
       outreach,
       notifications,
-      trackerRows: MOCK_TRACKER_ROWS,
+      trackerRows,
       profile,
+      connection,
+      feedState,
+      inboxState,
       loops,
       loopActivity: MOCK_LOOP_ACTIVITY,
       resumeExperiences: MOCK_RESUME_EXPERIENCES,
@@ -487,6 +720,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restorePassedJob,
       resetDeck,
       updateOutreach,
+      toggleOutreachPin,
+      toggleContactPin,
       markOutreachSent,
       markNotificationsRead,
       updateProfile,
@@ -499,7 +734,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       jobs,
       outreach,
       notifications,
+      trackerRows,
       profile,
+      connection,
+      feedState,
+      inboxState,
       loops,
       meetingPreps,
       passedJobs,
@@ -522,6 +761,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restorePassedJob,
       resetDeck,
       updateOutreach,
+      toggleOutreachPin,
+      toggleContactPin,
       markOutreachSent,
       markNotificationsRead,
       updateProfile,

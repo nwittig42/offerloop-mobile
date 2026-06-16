@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -11,8 +12,12 @@ import Animated, {
 
 import Avatar from '@/components/Avatar';
 import Header from '@/components/Header';
+import SearchBar from '@/components/ui/SearchBar';
+import { InboxSkeleton } from '@/components/ui/Skeleton';
+import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 import type { OutreachItem } from '@/types';
 
 /**
@@ -26,7 +31,7 @@ import type { OutreachItem } from '@/types';
 // Whose turn is it (Needs you / Waiting), plus a Replied view that isolates
 // the exciting "they wrote back" conversations (where push notifications
 // land), and All.
-const FILTERS = ['Needs you', 'Replied', 'Waiting', 'All'] as const;
+const FILTERS = ['All', 'Needs you', 'Replied', 'Waiting'] as const;
 type Filter = (typeof FILTERS)[number];
 
 /** Your turn: a ready draft to send, or a reply you have not opened yet. */
@@ -48,25 +53,26 @@ function matchesFilter(item: OutreachItem, filter: Filter) {
 }
 
 /** The message-preview line, colored when it's actionable. */
-function previewFor(item: OutreachItem): { text: string; color: string } {
+function previewFor(item: OutreachItem, c: Palette): { text: string; color: string } {
   switch (item.status) {
     case 'ready':
-      return { text: 'Draft ready to review', color: colors.accent };
+      return { text: 'Draft ready to review', color: c.accent };
     case 'failed':
-      return { text: 'No contact found', color: colors.negative };
+      return { text: 'No contact found', color: c.negative };
     case 'sent':
-      return { text: `You: ${item.subject ?? 'Outreach sent'}`, color: colors.inkSecondary };
+      return { text: `You: ${item.subject ?? 'Outreach sent'}`, color: c.inkSecondary };
     case 'replied': {
       const last = item.thread?.[item.thread.length - 1];
       const text = last && last.from === 'them' ? last.text : item.snippet ?? 'Replied';
-      return { text, color: item.attended ? colors.inkSecondary : colors.ink };
+      return { text, color: item.attended ? c.inkSecondary : c.ink };
     }
     default:
-      return { text: item.snippet ?? '', color: colors.inkSecondary };
+      return { text: item.snippet ?? '', color: c.inkSecondary };
   }
 }
 
 function ShimmerBar({ width }: { width: number }) {
+  const colors = useColors();
   const pulse = useSharedValue(0.45);
   useEffect(() => {
     pulse.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
@@ -79,21 +85,32 @@ function ShimmerBar({ width }: { width: number }) {
   );
 }
 
-function InboxRow({ item, onPress }: { item: OutreachItem; onPress: () => void }) {
+function InboxRow({
+  item,
+  onPress,
+  onTogglePin,
+}: {
+  item: OutreachItem;
+  onPress: () => void;
+  onTogglePin: () => void;
+}) {
+  const colors = useColors();
   const isDrafting = item.status === 'drafting';
   const unread = needsAttention(item);
-  const preview = previewFor(item);
+  const preview = previewFor(item, colors);
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={isDrafting ? undefined : onTogglePin}
+      delayLongPress={280}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
         paddingHorizontal: 16,
         paddingVertical: 9,
-        backgroundColor: colors.paper,
+        backgroundColor: item.pinned ? colors.paper2 : colors.paper,
       }}>
       <View style={{ width: 8, alignItems: 'center' }}>
         {unread ? (
@@ -121,6 +138,9 @@ function InboxRow({ item, onPress }: { item: OutreachItem; onPress: () => void }
             </Text>
           )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            {item.pinned ? (
+              <Ionicons name="pin" size={12} color={colors.accent} style={{ marginRight: 1 }} />
+            ) : null}
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
               {item.timeLabel}
             </Text>
@@ -149,13 +169,68 @@ function InboxRow({ item, onPress }: { item: OutreachItem; onPress: () => void }
   );
 }
 
+/** Small uppercase divider label for the Pinned / Recent sections. */
+function SectionLabel({ text }: { text: string }) {
+  const colors = useColors();
+  return (
+    <Text
+      style={{
+        fontFamily: fonts.sansSemibold,
+        fontSize: 11,
+        letterSpacing: 0.8,
+        color: colors.inkTertiary,
+        paddingHorizontal: 20,
+        paddingTop: 14,
+        paddingBottom: 6,
+      }}>
+      {text.toUpperCase()}
+    </Text>
+  );
+}
+
 export default function InboxScreen() {
   const router = useRouter();
-  const { outreach, unreadCount } = useApp();
-  const [filter, setFilter] = useState<Filter>('All');
+  const colors = useColors();
+  const { outreach, unreadCount, toggleOutreachPin, showToast, inboxState } = useApp();
+  // Default to the actionable subset: with a large real inbox, "All" is a wall.
+  const [filter, setFilter] = useState<Filter>('Needs you');
+  const [query, setQuery] = useState('');
 
-  const items = outreach.filter((item) => matchesFilter(item, filter));
   const attentionCount = outreach.filter(needsAttention).length;
+
+  const q = query.trim().toLowerCase();
+  const items = useMemo(() => {
+    const matchesSearch = (item: OutreachItem) =>
+      q === '' ||
+      [item.contact?.name, item.company, item.jobTitle, item.subject, item.snippet]
+        .some((s) => s?.toLowerCase().includes(q));
+    return outreach.filter((item) => matchesFilter(item, filter) && matchesSearch(item));
+  }, [outreach, filter, q]);
+
+  const pinned = items.filter((i) => i.pinned);
+  const rest = items.filter((i) => !i.pinned);
+
+  const onTogglePin = (item: OutreachItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleOutreachPin(item.id);
+    showToast(item.pinned ? 'Unpinned' : 'Pinned to top');
+  };
+
+  const renderRows = (list: OutreachItem[]) =>
+    list.map((item, i) => (
+      <View key={item.id}>
+        <InboxRow
+          item={item}
+          onPress={() => router.push(`/outreach/${item.id}`)}
+          onTogglePin={() => onTogglePin(item)}
+        />
+        {i < list.length - 1 ? (
+          <View
+            style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
+          />
+        ) : null}
+      </View>
+    ));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
@@ -165,6 +240,23 @@ export default function InboxScreen() {
         unreadCount={unreadCount}
         onBellPress={() => router.push('/notifications')}
       />
+
+      {inboxState.loading ? (
+        <InboxSkeleton />
+      ) : inboxState.error ? (
+        <StateView
+          icon="cloud-offline-outline"
+          tone="error"
+          title="Couldn’t load your inbox"
+          body="We couldn’t reach Offerloop to pull your conversations. Check your connection and try again."
+          actionLabel="Try again"
+          onAction={inboxState.retry}
+        />
+      ) : (
+        <>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Search name, company, subject" />
+      </View>
 
       <View style={{ paddingBottom: 10 }}>
         <ScrollView
@@ -219,33 +311,70 @@ export default function InboxScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {items.length === 0 ? (
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 14,
-              color: colors.inkSecondary,
-              textAlign: 'center',
-              padding: 32,
-              lineHeight: 21,
-            }}>
-            Nothing here yet. Swipe right on a job in the Feed and the draft lands in this
-            inbox.
-          </Text>
-        ) : (
-          items.map((item, i) => (
-            <View key={item.id}>
-              <InboxRow item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
-              {i < items.length - 1 ? (
-                <View
-                  style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
-                />
-              ) : null}
+      <FlatList
+        data={rest}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+        initialNumToRender={12}
+        windowSize={11}
+        removeClippedSubviews
+        ListHeaderComponent={
+          pinned.length > 0 ? (
+            <View>
+              <SectionLabel text="Pinned" />
+              {renderRows(pinned)}
+              {rest.length > 0 ? <SectionLabel text="Recent" /> : null}
             </View>
-          ))
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <InboxRow
+            item={item}
+            onPress={() => router.push(`/outreach/${item.id}`)}
+            onTogglePin={() => onTogglePin(item)}
+          />
         )}
-      </ScrollView>
+        ItemSeparatorComponent={() => (
+          <View
+            style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
+          />
+        )}
+        ListEmptyComponent={
+          items.length === 0 ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 14,
+                color: colors.inkSecondary,
+                textAlign: 'center',
+                padding: 32,
+                lineHeight: 21,
+              }}>
+              {q
+                ? `No conversations match "${query.trim()}".`
+                : 'Nothing here yet. Swipe right on a job in the Feed and the draft lands in this inbox.'}
+            </Text>
+          ) : null
+        }
+        ListFooterComponent={
+          items.length > 0 ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 11.5,
+                color: colors.inkTertiary,
+                textAlign: 'center',
+                paddingHorizontal: 20,
+                paddingTop: 16,
+              }}>
+              Long-press a conversation to pin it to the top.
+            </Text>
+          ) : null
+        }
+      />
+        </>
+      )}
     </View>
   );
 }

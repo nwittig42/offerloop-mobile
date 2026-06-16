@@ -4,7 +4,8 @@ import { useEffect } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 
 /**
  * The notification hub (header bell). Draft-ready, replies, and Loop
@@ -17,14 +18,16 @@ const KIND_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   loop: 'sync-outline',
 };
 
-const KIND_COLOR: Record<string, string> = {
-  draft_ready: colors.accent,
-  reply: colors.positive,
-  loop: colors.navy,
-};
+const kindColor = (c: Palette): Record<string, string> => ({
+  draft_ready: c.accent,
+  reply: c.positive,
+  loop: c.navy,
+});
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const colors = useColors();
+  const KIND_COLOR = kindColor(colors);
   const { notifications, markNotificationsRead } = useApp();
 
   useEffect(() => {

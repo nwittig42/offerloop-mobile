@@ -69,6 +69,10 @@ export type OutreachItem = {
   thread?: ThreadMessage[];
   /** A replied item the user has opened, so it no longer needs attention. */
   attended?: boolean;
+  /** Pinned to the top of the Inbox (iMessage-style). */
+  pinned?: boolean;
+  /** Deep link to the Gmail draft, for the cold-open send (no in-app send-draft endpoint). */
+  gmailDraftUrl?: string;
 };
 
 export type NotificationItem = {
@@ -115,6 +119,8 @@ export type TrackerRow = {
   bucket: TrackerBucket;
   statusLabel: string;
   statusTone: 'positive' | 'waiting' | 'accent';
+  /** Pinned to the top of the Contacts list (iMessage-style). */
+  pinned?: boolean;
 };
 
 /** Parsed straight out of the resume, the "here is what we gathered" view. */
@@ -143,4 +149,8 @@ export type MeetingPrep = {
   summary: string;
   talkingPoints: string[];
   createdLabel: string;
+  /** Async prep job state (coffee-chat-prep runs in the background). */
+  status?: 'processing' | 'completed' | 'failed';
+  /** Link to the generated full prep PDF, when done. */
+  pdfUrl?: string;
 };

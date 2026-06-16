@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { colors } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * An animated gradient border that signals the user's plan, the only plan
@@ -29,7 +29,7 @@ export function PlanBorder({
   children,
   radius = 9,
   borderWidth = 1.5,
-  surface = colors.paper2,
+  surface: surfaceProp,
 }: {
   plan: Plan;
   children: ReactNode;
@@ -37,6 +37,8 @@ export function PlanBorder({
   borderWidth?: number;
   surface?: string;
 }) {
+  const colors = useColors();
+  const surface = surfaceProp ?? colors.paper2;
   const spin = useSharedValue(0);
   const [box, setBox] = useState({ w: 0, h: 0 });
 

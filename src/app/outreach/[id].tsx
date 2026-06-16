@@ -1,33 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { isGmailDisconnected } from '@/api/errors';
+import { sendDraft, sendReply } from '@/api/endpoints/outreach';
+import { qk } from '@/api/queryKeys';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Outreach detail. Three states:
  * - drafting: the async placeholder, contact still being found
- * - ready/sent: contact card plus the editable email (Send is mock until
- *   Phase 3 wires the real Gmail integration)
- * - replied: the thread view
+ * - ready/sent: contact card plus the draft. The cold-open send opens the real
+ *   Gmail draft to review + send (no in-app send-draft endpoint yet).
+ * - replied: the thread view, with a real in-app follow-up via send-reply.
  */
 export default function OutreachDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { outreach, meetingPreps, updateOutreach, markOutreachSent, showToast } = useApp();
+  const colors = useColors();
+  const { outreach, meetingPreps, updateOutreach, showToast } = useApp();
+  const queryClient = useQueryClient();
 
   const item = outreach.find((o) => o.id === id);
   const [subject, setSubject] = useState(item?.subject ?? '');
-  const [body, setBody] = useState(item?.body ?? '');
+  const [body, setBody] = useState(item?.body ?? item?.snippet ?? '');
   const [followupOpen, setFollowupOpen] = useState(false);
   const firstName = item?.contact?.name.split(' ')[0] ?? 'there';
   const [followup, setFollowup] = useState(
@@ -51,23 +59,48 @@ export default function OutreachDetailScreen() {
     );
   }
 
-  const send = () => {
-    updateOutreach(item.id, { subject, body });
-    markOutreachSent(item.id);
+  // Send in-app: the backend sends the Gmail draft directly, so the user never
+  // leaves. Falls back to opening the Gmail draft if the item hasn't synced to
+  // the server yet (a swipe whose contact id is still the local placeholder).
+  const send = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast('Sent (mock), real Gmail send arrives in Phase 3');
-    router.back();
+    try {
+      await sendDraft(item.id);
+      updateOutreach(item.id, { status: 'sent', snippet: 'Sent from your Gmail', timeLabel: 'Just now' });
+      showToast('Sent');
+      queryClient.invalidateQueries({ queryKey: qk.inbox });
+      router.back();
+    } catch (e) {
+      if (isGmailDisconnected(e)) {
+        showToast('Connect Gmail to send');
+      } else if (item.gmailDraftUrl) {
+        Linking.openURL(item.gmailDraftUrl);
+        showToast('Opening your draft in Gmail');
+        router.back();
+      } else {
+        showToast('Could not send, give it a moment and try from the Inbox');
+      }
+    }
   };
 
-  const sendFollowup = () => {
+  const sendFollowup = async () => {
+    const text = followup;
     const nextThread = [
       ...(item.thread ?? []),
-      { from: 'me' as const, text: followup, timeLabel: 'Just now' },
+      { from: 'me' as const, text, timeLabel: 'Just now' },
     ];
-    updateOutreach(item.id, { thread: nextThread, snippet: 'You sent a follow-up (mock)' });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    updateOutreach(item.id, { thread: nextThread, snippet: 'You sent a follow-up' });
     setFollowupOpen(false);
-    showToast('Follow-up sent (mock), real Gmail send arrives in Phase 3');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await sendReply(item.id, text);
+      showToast('Follow-up sent');
+      queryClient.invalidateQueries({ queryKey: qk.inbox });
+    } catch (e) {
+      showToast(
+        isGmailDisconnected(e) ? 'Connect Gmail to send replies' : 'Could not send, try again',
+      );
+    }
   };
 
   return (
@@ -101,8 +134,8 @@ export default function OutreachDetailScreen() {
               Finding a contact at {item.company}
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-              The mock service is writing your outreach for the {item.jobTitle} role. This
-              fills in automatically, usually within a few seconds.
+              We’re finding the right person for the {item.jobTitle} role and writing your
+              outreach. This fills in automatically, usually within a few seconds.
             </Text>
           </Card>
         ) : (
@@ -250,7 +283,7 @@ export default function OutreachDetailScreen() {
                   <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
                     Subject
                   </Text>
-                  <Input value={subject} onChangeText={setSubject} editable={item.status === 'ready'} />
+                  <Input value={subject} onChangeText={setSubject} editable={false} />
                 </View>
                 <View style={{ gap: 6 }}>
                   <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
@@ -260,21 +293,16 @@ export default function OutreachDetailScreen() {
                     value={body}
                     onChangeText={setBody}
                     multiline
-                    editable={item.status === 'ready'}
+                    editable={false}
                     style={{ minHeight: 200 }}
                   />
                 </View>
                 {item.status === 'ready' ? (
                   <View style={{ gap: 8 }}>
                     <Button label="Send" fullWidth size="lg" onPress={send} />
-                    <Button
-                      label="Open in Gmail"
-                      variant="ghost"
-                      fullWidth
-                      onPress={() =>
-                        Alert.alert('Phase 3', 'The Gmail handoff arrives with real wiring.')
-                      }
-                    />
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
+                      Sends from your connected Gmail, no need to leave the app.
+                    </Text>
                   </View>
                 ) : (
                   <Chip label="Sent" />

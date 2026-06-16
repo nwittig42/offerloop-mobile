@@ -16,7 +16,8 @@ import Chip from '@/components/ui/Chip';
 import Input from '@/components/ui/Input';
 import { MOCK_SCOUT_CHATS } from '@/mocks/data';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
  * Scout, the AI assistant, as a summonable sheet. A small history sidebar
@@ -39,6 +40,7 @@ export default function ScoutScreen() {
   const insets = useSafeAreaInsets();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
   const { jobs } = useApp();
+  const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
 
   const job = jobId ? jobs.find((j) => j.id === jobId) : undefined;

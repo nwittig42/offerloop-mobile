@@ -5,33 +5,25 @@ import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Card from '@/components/ui/Card';
-import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts } from '@/theme/tokens';
 
 /**
- * Credits, styled to match the website, with its vibrant blue energy. The
- * top is a gradient card showing the current balance, plan, and a button to
- * change plans on the web (subscription changes belong on the site). Below
- * are the buyable one-time credit packs (real prices, never expire). Mock
- * purchases until real App Store in-app purchase wiring.
+ * Credits, web-first (Flo model). The app sells nothing through Apple IAP: it
+ * reflects the real balance + plan from /api/mobile/me and links out to
+ * offerloop.ai to manage the plan or buy credits. The website owns checkout;
+ * whatever the user buys there shows up here automatically.
  */
-
-const PACKS = [
-  { key: 'starter', label: 'STARTER', credits: 500, price: '$4.99', amount: 500 },
-  { key: 'best', label: 'BEST VALUE', credits: 1000, price: '$9.99', amount: 1000, best: true },
-  { key: 'bulk', label: 'BULK', credits: 3000, price: '$24.99', amount: 3000 },
-];
-
 export default function CreditsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, updateProfile, showToast } = useApp();
+  const { profile } = useApp();
+  const colors = useColors();
 
-  const buy = (amount: number) => {
-    updateProfile({ credits: profile.credits + amount });
-    showToast(`Added ${amount.toLocaleString()} credits (mock)`);
-  };
+  const usedPct = profile.maxCredits
+    ? Math.round((profile.credits / profile.maxCredits) * 100)
+    : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -50,14 +42,13 @@ export default function CreditsScreen() {
         <Text style={{ fontFamily: fonts.display, fontSize: 28, color: colors.heading, flex: 1 }}>
           Credits
         </Text>
-        <Chip label="Mock preview" tone="waiting" dot />
         <Pressable onPress={() => router.back()} accessibilityRole="button" style={{ padding: 6 }}>
           <Ionicons name="close" size={22} color={colors.ink} />
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: insets.bottom + 40 }}>
-        {/* Vibrant balance + plan + change-on-web */}
+        {/* Balance + plan, reflected from the account. */}
         <LinearGradient
           colors={['#1B2A44', '#2563EB', '#5B9BF4'] as const}
           start={{ x: 0, y: 0 }}
@@ -85,7 +76,7 @@ export default function CreditsScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
-            <Text style={{ fontFamily: fonts.display, fontSize: 48, color: colors.paper, lineHeight: 50 }}>
+            <Text style={{ fontFamily: fonts.display, fontSize: 48, color: colors.bolt, lineHeight: 50 }}>
               {profile.credits.toLocaleString()}
             </Text>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 15, color: colors.paper, paddingBottom: 9 }}>
@@ -93,14 +84,13 @@ export default function CreditsScreen() {
             </Text>
           </View>
 
-          {/* Usage bar: filled portion is what's still available this month. */}
           <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)' }}>
             <View
               style={{
                 height: 6,
                 borderRadius: 3,
-                width: `${Math.round((profile.credits / profile.maxCredits) * 100)}%`,
-                backgroundColor: colors.paper,
+                width: `${Math.max(0, Math.min(100, usedPct))}%`,
+                backgroundColor: colors.bolt,
               }}
             />
           </View>
@@ -122,142 +112,21 @@ export default function CreditsScreen() {
               paddingVertical: 11,
             }}>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.paper }}>
-              Change your plan on offerloop.ai
+              Manage credits & plan on offerloop.ai
             </Text>
             <Ionicons name="open-outline" size={15} color={colors.paper} />
           </Pressable>
         </LinearGradient>
 
-        {/* Packs hero, website-style serif with an italic accent */}
-        <View style={{ alignItems: 'center', gap: 4, paddingTop: 4 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 1.4, color: colors.marketing }}>
-            CREDIT PACKS
+        <Card style={{ gap: 8 }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            More credits, more reach
           </Text>
-          <Text
-            style={{
-              fontFamily: fonts.display,
-              fontSize: 32,
-              color: colors.heading,
-              textAlign: 'center',
-              lineHeight: 36,
-            }}>
-            Need more credits?{' '}
-            <Text style={{ fontFamily: fonts.displayItalic, color: colors.marketing }}>Top up anytime.</Text>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
+            Credits power your swipes, drafts, and meeting preps. Upgrade your plan or top up
+            on offerloop.ai and it updates here right away.
           </Text>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 13.5,
-              color: colors.inkSecondary,
-              textAlign: 'center',
-              lineHeight: 20,
-            }}>
-            One-time packs. Credits you buy never expire.
-          </Text>
-        </View>
-
-        {/* The packs */}
-        <View style={{ gap: 18 }}>
-          {PACKS.map((pack) => {
-            const addColors = (
-              pack.best ? ['#A855F7', '#EC4899'] : ['#4A60A8', '#3B82F6']
-            ) as readonly [string, string, ...string[]];
-
-            const content = (
-              <>
-                <View>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sansSemibold,
-                      fontSize: 10.5,
-                      letterSpacing: 1,
-                      color: pack.best ? '#A855F7' : colors.inkTertiary,
-                    }}>
-                    {pack.label}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5 }}>
-                    <Text style={{ fontFamily: fonts.display, fontSize: 38, color: colors.heading, lineHeight: 42 }}>
-                      {pack.credits.toLocaleString()}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary, paddingBottom: 8 }}>
-                      credits
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.ink }}>
-                    {pack.price}
-                  </Text>
-                  <Pressable onPress={() => buy(pack.amount)} accessibilityRole="button">
-                    <LinearGradient
-                      colors={addColors}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 5,
-                        borderRadius: 8,
-                        paddingHorizontal: 18,
-                        paddingVertical: 9,
-                      }}>
-                      <Ionicons name="add" size={15} color={colors.paper} />
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
-                        Add
-                      </Text>
-                    </LinearGradient>
-                  </Pressable>
-                </View>
-              </>
-            );
-
-            if (pack.best) {
-              // Pink/purple gradient border. The badge is a sibling outside
-              // the gradient so its rounded corners do not clip it.
-              return (
-                <View key={pack.key}>
-                  <LinearGradient
-                    colors={['#A855F7', '#EC4899'] as const}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ borderRadius: 11.5, padding: 1.5 }}>
-                    <View style={{ backgroundColor: colors.paper, borderRadius: 10, padding: 20, gap: 12 }}>
-                      {content}
-                    </View>
-                  </LinearGradient>
-                  <LinearGradient
-                    colors={['#A855F7', '#EC4899'] as const}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{
-                      position: 'absolute',
-                      top: -10,
-                      left: 16,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 3,
-                      borderRadius: 6,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                    }}>
-                    <Ionicons name="star" size={9} color={colors.paper} />
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 9, color: colors.paper, letterSpacing: 0.5 }}>
-                      BEST VALUE
-                    </Text>
-                  </LinearGradient>
-                </View>
-              );
-            }
-            return (
-              <Card key={pack.key} style={{ gap: 12 }}>
-                {content}
-              </Card>
-            );
-          })}
-        </View>
+        </Card>
 
         <Text
           style={{
@@ -267,8 +136,7 @@ export default function CreditsScreen() {
             textAlign: 'center',
             lineHeight: 17,
           }}>
-          Preview only. Credit packs arrive through the App Store; plan changes are
-          managed on offerloop.ai.
+          Plans and credits are managed on offerloop.ai.
         </Text>
       </ScrollView>
     </View>

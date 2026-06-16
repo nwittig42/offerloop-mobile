@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 
 import { useApp } from '@/store/app';
-import { colors, fonts, shadows } from '@/theme/tokens';
+import { fonts, shadows } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * The optimistic confirmation. Drops in from the top (below the status bar)
@@ -12,6 +13,7 @@ import { colors, fonts, shadows } from '@/theme/tokens';
  * text, optional jump into the Inbox.
  */
 export function Toast() {
+  const colors = useColors();
   const { toast } = useApp();
   const router = useRouter();
   const insets = useSafeAreaInsets();

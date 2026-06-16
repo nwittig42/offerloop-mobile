@@ -4,7 +4,8 @@ import { type ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, fonts } from '@/theme/tokens';
+import { fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
 
 /**
  * Shared screen header. The title (Instrument Serif) or the full Offerloop
@@ -30,6 +31,7 @@ export function Header({
   left?: ReactNode;
   right?: ReactNode;
 }) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 

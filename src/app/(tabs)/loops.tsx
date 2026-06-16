@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
@@ -7,9 +8,11 @@ import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
+import GradientButton from '@/components/ui/GradientButton';
 import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
-import { colors, fonts } from '@/theme/tokens';
+import { useColors } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 import type { LoopActivity } from '@/types';
 
 /**
@@ -22,6 +25,10 @@ import type { LoopActivity } from '@/types';
 const TABS = ['Loops', 'Activity'] as const;
 type TabKey = (typeof TABS)[number];
 
+// Vibrant blue -> indigo -> purple, matching the Network dashboard + credits
+// surfaces. Active Loops wear it; paused Loops go muted so the state reads.
+const LOOP_GRADIENT = ['#2563EB', '#4F46E5', '#7C3AED'] as const;
+
 const ACTIVITY_ICON: Record<LoopActivity['kind'], keyof typeof Ionicons.glyphMap> = {
   run: 'sync-outline',
   draft: 'document-text-outline',
@@ -29,15 +36,17 @@ const ACTIVITY_ICON: Record<LoopActivity['kind'], keyof typeof Ionicons.glyphMap
   reply: 'chatbubble-ellipses-outline',
 };
 
-const ACTIVITY_COLOR: Record<LoopActivity['kind'], string> = {
-  run: colors.navy,
-  draft: colors.accent,
-  sent: colors.inkSecondary,
-  reply: colors.positive,
-};
+const activityColor = (c: Palette): Record<LoopActivity['kind'], string> => ({
+  run: c.navy,
+  draft: c.accent,
+  sent: c.marketing,
+  reply: c.positive,
+});
 
 export default function LoopsScreen() {
   const router = useRouter();
+  const colors = useColors();
+  const ACTIVITY_COLOR = activityColor(colors);
   const { loops, loopActivity, profile, unreadCount, addLoop, toggleLoop, showToast } = useApp();
   const [tab, setTab] = useState<TabKey>('Loops');
   const [brief, setBrief] = useState('');
@@ -173,20 +182,41 @@ export default function LoopsScreen() {
             <Button label="New Loop" variant="accent" onPress={() => setComposing(true)} />
           )}
 
-          {loops.map((loop) => (
-            <Card key={loop.id} style={{ gap: 10 }}>
+          {loops.map((loop) => {
+            const active = loop.status === 'Active';
+            const pct = Math.min(100, Math.round((loop.weeklyDone / loop.weeklyTarget) * 100));
+            return (
+            <Card
+              key={loop.id}
+              style={{ gap: 10, borderColor: active ? '#4F46E5' + '33' : colors.hairline }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 17,
-                    backgroundColor: colors.accent + '14',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                  <Ionicons name="infinite" size={18} color={colors.accent} />
-                </View>
+                {active ? (
+                  <LinearGradient
+                    colors={LOOP_GRADIENT}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="infinite" size={18} color="#FFFFFF" />
+                  </LinearGradient>
+                ) : (
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      backgroundColor: colors.inkTertiary + '22',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="infinite" size={18} color={colors.inkTertiary} />
+                  </View>
+                )}
                 <Text
                   numberOfLines={2}
                   style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink, flex: 1, lineHeight: 20 }}>
@@ -194,7 +224,7 @@ export default function LoopsScreen() {
                 </Text>
                 <Chip
                   label={loop.status}
-                  tone={loop.status === 'Active' ? 'positive' : 'waiting'}
+                  tone={active ? 'positive' : 'waiting'}
                   dot
                 />
               </View>
@@ -207,15 +237,19 @@ export default function LoopsScreen() {
                     {loop.weeklyDone} of {loop.weeklyTarget} drafted
                   </Text>
                 </View>
-                <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.hairlineLight }}>
-                  <View
-                    style={{
-                      height: 6,
-                      borderRadius: 3,
-                      width: `${Math.min(100, Math.round((loop.weeklyDone / loop.weeklyTarget) * 100))}%`,
-                      backgroundColor: loop.status === 'Active' ? colors.accent : colors.inkTertiary,
-                    }}
-                  />
+                <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.hairlineLight, overflow: 'hidden' }}>
+                  {active ? (
+                    <LinearGradient
+                      colors={LOOP_GRADIENT}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ height: 6, borderRadius: 3, width: `${pct}%` }}
+                    />
+                  ) : (
+                    <View
+                      style={{ height: 6, borderRadius: 3, width: `${pct}%`, backgroundColor: colors.inkTertiary }}
+                    />
+                  )}
                 </View>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
@@ -230,7 +264,8 @@ export default function LoopsScreen() {
                 />
               </View>
             </Card>
-          ))}
+            );
+          })}
 
           <Card style={{ gap: 12, borderColor: colors.accent + '40', borderWidth: 1.5, marginTop: 4 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -254,9 +289,8 @@ export default function LoopsScreen() {
               weekly targets, send rules and budgets, multi-step sequences, and full
               control over who each Loop targets.
             </Text>
-            <Button
+            <GradientButton
               label="Open offerloop.ai"
-              variant="accent"
               icon="open-outline"
               fullWidth
               onPress={() => Linking.openURL('https://offerloop.ai')}
@@ -277,20 +311,23 @@ export default function LoopsScreen() {
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 12,
-                paddingVertical: 10,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.hairlineLight,
+                paddingVertical: 11,
+                paddingHorizontal: 12,
+                borderRadius: 12,
+                backgroundColor: ACTIVITY_COLOR[a.kind] + '0F',
+                borderWidth: 1,
+                borderColor: ACTIVITY_COLOR[a.kind] + '26',
               }}>
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: ACTIVITY_COLOR[a.kind] + '14',
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  backgroundColor: ACTIVITY_COLOR[a.kind],
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name={ACTIVITY_ICON[a.kind]} size={15} color={ACTIVITY_COLOR[a.kind]} />
+                <Ionicons name={ACTIVITY_ICON[a.kind]} size={16} color="#FFFFFF" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>

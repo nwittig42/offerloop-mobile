@@ -426,6 +426,7 @@ export const MOCK_MEETING_PREPS: MeetingPrep[] = [
 
 export const MOCK_PROFILE = {
   name: 'Sample Student',
+  photoUrl: '',
   school: 'Sample University',
   tier: 'Pro (mock)',
   plan: 'Pro' as 'Free' | 'Pro' | 'Elite',
