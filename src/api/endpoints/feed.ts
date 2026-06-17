@@ -44,12 +44,25 @@ function employmentLabel(type: unknown): string | undefined {
  * Only fields the feed actually carries are mapped; the rest stay undefined so
  * the card chips simply do not render (no mock fallbacks).
  */
+function cleanList(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+  return out.length ? out : undefined;
+}
+
 function mapJob(raw: RawJob): Job {
   const s = raw.structured || {};
   // Only assert "Remote" — the feed's `remote` flag is boolean; a false value
   // can mean on-site OR unknown, so we don't claim on-site we can't verify.
   const workArrangement = raw.remote ? 'Remote' : employmentLabel(raw.type);
-  const requirements = Array.isArray(s.requirements) ? s.requirements.filter(Boolean) : undefined;
+  const requirements = cleanList(s.requirements);
+  // The feed strips description_raw, but `structured.responsibilities` IS in the
+  // payload — the same content the web job board renders under "What you'll do".
+  // Use it as the immediate card description so every enriched job shows prose;
+  // when it's absent, leave description empty so JobCard lazy-fetches the full
+  // description_raw from /api/jobs/{id}/description.
+  const responsibilities = cleanList(s.responsibilities);
+  const description = responsibilities ? responsibilities.map((r) => `• ${r}`).join('\n') : '';
   return {
     id: String(raw.job_id || raw.id || raw.apply_url || Math.random()),
     title: raw.title || 'Untitled role',
@@ -61,10 +74,8 @@ function mapJob(raw: RawJob): Job {
     experienceLevel: s.experience_level || undefined,
     education: undefined,
     companySize: undefined,
-    // Empty here by design — JobCard lazy-fetches the prose from
-    // /api/jobs/{id}/description when first shown.
-    description: '',
-    requiredQualifications: requirements && requirements.length ? requirements : undefined,
+    description,
+    requiredQualifications: requirements,
   };
 }
 
