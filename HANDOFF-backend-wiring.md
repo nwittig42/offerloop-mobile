@@ -262,3 +262,16 @@ mattered: removed unused `@expo/ui` canary that broke the native Swift compile.)
   for now — do NOT run the phase build-out in another terminal against the same
   files (`mobile.py`, `store/app.tsx`, `feed.ts`, `profile.tsx`) concurrently.
 - Still needs the **backend restart** for all the `me()` + `/company` routes.
+
+## 2026-06-17 (cont.) — In-app LinkedIn enrichment
+
+- Personal-tab **"Auto-fill from LinkedIn"** now wires the LinkedIn field to the
+  existing `POST /api/enrich-linkedin-onboarding` (reused, no new backend). Enter
+  URL → tap → server scrapes/structures → `me` refetches → grad year, school,
+  resume experiences, and LinkedIn highlights all populate.
+- New `src/api/endpoints/profile.ts` (`enrichLinkedin`) + store action +
+  fill-empty-fields effect (never clobbers user edits).
+- **This is how Rylan populates his own (empty) account to verify round-2 work.**
+- Note: enrichment is a ~10–25s live scrape; UI shows "Pulling from LinkedIn…".
+- Other Personal fields (roles/industries/about) are still local-only by design
+  (web-first; no profile-save endpoint).
