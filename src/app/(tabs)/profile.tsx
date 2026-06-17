@@ -1,8 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import { Alert, Image, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
@@ -226,18 +236,40 @@ export default function ProfileScreen() {
     notificationsEnabled,
     setNotificationsEnabled,
     updateProfile,
+    enrichLinkedin,
     showToast,
   } = useApp();
 
   const [tab, setTab] = useState<TabKey>('personal');
   const [parseOpen, setParseOpen] = useState(false);
   const [linkedinOpen, setLinkedinOpen] = useState(false);
+  const [enriching, setEnriching] = useState(false);
 
   const [linkedinUrl, setLinkedinUrl] = useState(profile.linkedinUrl);
   const [rolesText, setRolesText] = useState(profile.targetRoles.join(', '));
   const [industriesText, setIndustriesText] = useState(profile.industries.join(', '));
   const [gradYear, setGradYear] = useState(profile.gradYear);
   const [about, setAbout] = useState(profile.about);
+
+  // When the profile refetches (e.g. after LinkedIn enrichment populates it),
+  // fill any *empty* form fields from it — never clobber what the user typed.
+  useEffect(() => {
+    setLinkedinUrl((cur) => cur || profile.linkedinUrl);
+    setGradYear((cur) => cur || profile.gradYear);
+    setAbout((cur) => cur || profile.about);
+    setRolesText((cur) => cur || profile.targetRoles.join(', '));
+    setIndustriesText((cur) => cur || profile.industries.join(', '));
+  }, [profile.linkedinUrl, profile.gradYear, profile.about, profile.targetRoles, profile.industries]);
+
+  const handleEnrich = async () => {
+    if (!linkedinUrl.trim() || enriching) return;
+    setEnriching(true);
+    try {
+      await enrichLinkedin(linkedinUrl);
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   const swipesLabel =
     swipesAvailable > 0
@@ -499,6 +531,33 @@ export default function ProfileScreen() {
                   />
                 </SoftRow>
               </Card>
+
+              {/* One tap pulls grad year, school, experiences, and the LinkedIn
+                  view from the entered profile via the enrichment service. */}
+              <Pressable
+                onPress={handleEnrich}
+                disabled={!linkedinUrl.trim() || enriching}
+                accessibilityRole="button"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  borderWidth: 1,
+                  borderColor: colors.accent,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  opacity: !linkedinUrl.trim() || enriching ? 0.5 : 1,
+                }}>
+                {enriching ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Ionicons name="logo-linkedin" size={17} color={colors.accent} />
+                )}
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.accent }}>
+                  {enriching ? 'Pulling from LinkedIn…' : 'Auto-fill from LinkedIn'}
+                </Text>
+              </Pressable>
 
               <Button
                 label={dirty ? 'Save changes' : 'Saved'}

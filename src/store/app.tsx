@@ -19,6 +19,7 @@ import {
   markNotificationsRead as apiMarkNotificationsRead,
 } from '@/api/endpoints/notifications';
 import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
+import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
 import { runSwipe } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
 import { qk } from '@/api/queryKeys';
@@ -190,6 +191,8 @@ type AppStore = {
   markOutreachSent: (id: string) => void;
   markNotificationsRead: () => void;
   updateProfile: (patch: Partial<Profile>) => void;
+  /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
+  enrichLinkedin: (url: string) => Promise<EnrichResult>;
   addLoop: (brief: string) => void;
   toggleLoop: (id: string) => void;
   addMeetingPrep: (input: { name: string; linkedinUrl: string }) => Promise<string>;
@@ -682,6 +685,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchProfile],
   );
 
+  const enrichLinkedinProfile = useCallback(
+    async (url: string): Promise<EnrichResult> => {
+      const clean = url.trim();
+      if (!clean) return { enriched: false, error: 'Enter your LinkedIn URL first' };
+      patchProfile({ linkedinUrl: clean }); // optimistic; enrichment persists it server-side
+      try {
+        const res = await enrichLinkedin(clean);
+        if (res.enriched) {
+          // The endpoint wrote linkedinUrl + resumeParsed + linkedinResumeParsed
+          // to Firestore; refetch /me so grad year, school, experiences, and the
+          // LinkedIn highlights fill in.
+          await queryClient.invalidateQueries({ queryKey: qk.me });
+          showToast('LinkedIn pulled in — profile updated');
+        } else {
+          showToast(res.error || 'Could not read that LinkedIn profile');
+        }
+        return res;
+      } catch {
+        showToast('Could not reach enrichment, try again');
+        return { enriched: false, error: 'network' };
+      }
+    },
+    [patchProfile, queryClient, showToast],
+  );
+
   const addLoop = useCallback(
     (brief: string) => {
       idCounter.current += 1;
@@ -780,6 +808,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markOutreachSent,
       markNotificationsRead,
       updateProfile,
+      enrichLinkedin: enrichLinkedinProfile,
       addLoop,
       toggleLoop,
       addMeetingPrep,
@@ -821,6 +850,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markOutreachSent,
       markNotificationsRead,
       updateProfile,
+      enrichLinkedinProfile,
       addLoop,
       toggleLoop,
       addMeetingPrep,
