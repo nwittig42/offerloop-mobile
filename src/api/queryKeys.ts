@@ -6,6 +6,7 @@ export const qk = {
   me: ['me'] as const,
   feed: ['feed'] as const,
   jobDescription: (id: string) => ['jobDescription', id] as const,
+  company: (name: string) => ['company', name] as const,
   inbox: ['inbox'] as const,
   outreach: (id: string) => ['outreach', id] as const,
   loops: ['loops'] as const,

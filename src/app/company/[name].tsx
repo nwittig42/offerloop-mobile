@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -6,11 +7,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { fetchCompany } from '@/api/endpoints/company';
+import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
 import FindAnotherDialog from '@/components/FindAnotherDialog';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
-import { MOCK_COMPANY_INFO } from '@/mocks/data';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -30,7 +32,12 @@ export default function CompanyScreen() {
   const { allJobs, outreach, profile, draftAnotherContact } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const info = MOCK_COMPANY_INFO[company];
+  const { data: info, isLoading: companyLoading } = useQuery({
+    queryKey: qk.company(company),
+    queryFn: () => fetchCompany(company),
+    enabled: !!company,
+    staleTime: 30 * 60 * 1000,
+  });
   const roles = allJobs.filter((j) => j.company === company);
   const reached = outreach.filter((o) => o.company === company && o.status !== 'drafting');
 
@@ -63,11 +70,13 @@ export default function CompanyScreen() {
         </Text>
       </View>
 
-      {info ? (
+      {info && (info.industry || info.size || info.hq) ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, paddingBottom: 14 }}>
-          <Chip label={info.industry} tone="brand" icon="briefcase-outline" size="lg" />
-          <Chip label={info.size} tone="accent" icon="people-outline" size="lg" />
-          <Chip label={info.hq} tone="positive" icon="location-outline" size="lg" />
+          {info.industry ? (
+            <Chip label={info.industry} tone="brand" icon="briefcase-outline" size="lg" />
+          ) : null}
+          {info.size ? <Chip label={info.size} tone="accent" icon="people-outline" size="lg" /> : null}
+          {info.hq ? <Chip label={info.hq} tone="positive" icon="location-outline" size="lg" /> : null}
         </View>
       ) : null}
 
@@ -132,8 +141,10 @@ export default function CompanyScreen() {
                 </Text>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, lineHeight: 22 }}>
-                {info?.about ??
-                  'No company profile yet. Real company details arrive with backend wiring in Phase 3.'}
+                {companyLoading
+                  ? 'Gathering company details…'
+                  : info?.about ||
+                    'No public profile found for this company. For deeper firm research, use offerloop.ai.'}
               </Text>
             </View>
             {info?.news.length ? (
