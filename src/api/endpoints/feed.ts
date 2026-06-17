@@ -23,23 +23,62 @@ function locationString(loc: unknown): string {
   return '';
 }
 
+/** "INTERNSHIP" -> "Internship", "FULLTIME" -> "Full-time". */
+function employmentLabel(type: unknown): string | undefined {
+  switch (String(type || '').toUpperCase()) {
+    case 'INTERNSHIP':
+      return 'Internship';
+    case 'FULLTIME':
+      return 'Full-time';
+    case 'PARTTIME':
+      return 'Part-time';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Map a backend FeedJob (see api.ts `FeedJob`/`JobStructured`) onto the mobile
+ * Job shape. The feed is intentionally lean — `description` (description_raw) is
+ * stripped server-side and fetched lazily per card via fetchJobDescription.
+ * Only fields the feed actually carries are mapped; the rest stay undefined so
+ * the card chips simply do not render (no mock fallbacks).
+ */
 function mapJob(raw: RawJob): Job {
   const s = raw.structured || {};
+  // Only assert "Remote" — the feed's `remote` flag is boolean; a false value
+  // can mean on-site OR unknown, so we don't claim on-site we can't verify.
+  const workArrangement = raw.remote ? 'Remote' : employmentLabel(raw.type);
+  const requirements = Array.isArray(s.requirements) ? s.requirements.filter(Boolean) : undefined;
   return {
-    id: String(raw.job_id || raw.id || raw.url || Math.random()),
-    title: raw.title || s.title || 'Untitled role',
-    company: raw.company || s.company || '',
-    location: locationString(raw.location ?? s.location),
-    logoUrl: raw.logo_url || raw.company_logo_url || s.logo_url || undefined,
-    compensation: raw.compensation || raw.salary || s.compensation || undefined,
-    workArrangement: raw.work_arrangement || raw.workArrangement || s.work_arrangement || undefined,
-    experienceLevel: raw.experience_level || raw.seniority || s.experience_level || undefined,
-    education: raw.education || s.education || undefined,
-    companySize: raw.company_size || raw.companySize || s.company_size || undefined,
-    description: raw.description || raw.description_text || raw.summary || s.description || '',
-    requiredQualifications:
-      raw.required_qualifications || raw.qualifications || s.required_qualifications || undefined,
+    id: String(raw.job_id || raw.id || raw.apply_url || Math.random()),
+    title: raw.title || 'Untitled role',
+    company: raw.company || '',
+    location: locationString(raw.location),
+    logoUrl: raw.employer_logo || undefined,
+    compensation: raw.salary_display || undefined,
+    workArrangement,
+    experienceLevel: s.experience_level || undefined,
+    education: undefined,
+    companySize: undefined,
+    // Empty here by design — JobCard lazy-fetches the prose from
+    // /api/jobs/{id}/description when first shown.
+    description: '',
+    requiredQualifications: requirements && requirements.length ? requirements : undefined,
   };
+}
+
+/**
+ * Lazy per-job description. The feed strips description_raw to stay lean, so the
+ * card pulls the prose on demand. Returns '' when the job has no stored text so
+ * the card can show an honest empty state rather than placeholder filler.
+ */
+export async function fetchJobDescription(jobId: string): Promise<string> {
+  if (USE_MOCKS) return '';
+  const res = await apiFetch<{ description: string | null }>(
+    `/api/jobs/${encodeURIComponent(jobId)}/description`,
+  );
+  return res.description || '';
 }
 
 /**

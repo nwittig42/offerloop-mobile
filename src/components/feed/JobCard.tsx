@@ -1,10 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { USE_MOCKS } from '@/api/config';
+import { fetchJobDescription } from '@/api/endpoints/feed';
+import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
 import Chip from '@/components/ui/Chip';
-import { FIXTURE_QUALS, MOCK_COMPANY_INFO } from '@/mocks/data';
+import { MOCK_COMPANY_INFO } from '@/mocks/data';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
@@ -101,7 +105,7 @@ function DetailGroups({ job, center }: { job: Job; center: boolean }) {
   );
 }
 
-function CollapsedCard({ job }: { job: Job }) {
+function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
   // Reserve room at the bottom so the short description clears the floating
@@ -152,7 +156,7 @@ function CollapsedCard({ job }: { job: Job }) {
             lineHeight: 20,
             textAlign: 'center',
           }}>
-          {job.description}
+          {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 4 }}>
           <Ionicons name="expand-outline" size={12} color={colors.accent} />
@@ -206,11 +210,19 @@ function DetailTile({
  * grid, the full description, and required qualifications. Scrolls under
  * the floating action bar, so swipe and draft stay available while reading.
  */
-function ExpandedCard({ job, onCollapse }: { job: Job; onCollapse?: () => void }) {
+function ExpandedCard({
+  job,
+  descLoading,
+  onCollapse,
+}: {
+  job: Job;
+  descLoading: boolean;
+  onCollapse?: () => void;
+}) {
   const colors = useColors();
   const router = useRouter();
   const info = MOCK_COMPANY_INFO[job.company];
-  const quals = job.requiredQualifications ?? FIXTURE_QUALS;
+  const quals = job.requiredQualifications ?? [];
   const openCompany = () => router.push(`/company/${encodeURIComponent(job.company)}`);
 
   const tiles: { icon: keyof typeof Ionicons.glyphMap; label: string; tone: string }[] = [];
@@ -314,23 +326,25 @@ function ExpandedCard({ job, onCollapse }: { job: Job; onCollapse?: () => void }
             Job description
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 14.5, color: colors.inkSecondary, lineHeight: 23 }}>
-            {job.description}
+            {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
         </View>
 
-        <View style={{ gap: 10 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-            Required qualifications
-          </Text>
-          {quals.map((q, i) => (
-            <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-              <Text style={{ color: colors.inkTertiary, fontSize: 14 }}>•</Text>
-              <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, lineHeight: 22 }}>
-                {q}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {quals.length ? (
+          <View style={{ gap: 10 }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+              Required qualifications
+            </Text>
+            {quals.map((q, i) => (
+              <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
+                <Text style={{ color: colors.inkTertiary, fontSize: 14 }}>•</Text>
+                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, lineHeight: 22 }}>
+                  {q}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -345,7 +359,23 @@ export function JobCard({
   expanded?: boolean;
   onCollapse?: () => void;
 }) {
-  return expanded ? <ExpandedCard job={job} onCollapse={onCollapse} /> : <CollapsedCard job={job} />;
+  // The feed omits description (stripped server-side); fetch it lazily the
+  // first time a card is shown, cached so re-renders/expand don't refetch.
+  const needsDesc = !job.description;
+  const { data: lazyDesc, isLoading } = useQuery({
+    queryKey: qk.jobDescription(job.id),
+    queryFn: () => fetchJobDescription(job.id),
+    enabled: needsDesc && !USE_MOCKS,
+    staleTime: 5 * 60 * 1000,
+  });
+  const effJob = needsDesc ? { ...job, description: lazyDesc ?? '' } : job;
+  const descLoading = needsDesc && isLoading;
+
+  return expanded ? (
+    <ExpandedCard job={effJob} descLoading={descLoading} onCollapse={onCollapse} />
+  ) : (
+    <CollapsedCard job={effJob} descLoading={descLoading} />
+  );
 }
 
 export default JobCard;
