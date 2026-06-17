@@ -445,6 +445,8 @@ export const MOCK_PROFILE = {
   gradYear: '2027',
   about:
     'Fixture bio. Junior at a fixture university, treasurer of the investment club, recruiting for banking and research. This box is where a student adds the color a resume misses.',
+  resumeExperiences: MOCK_RESUME_EXPERIENCES,
+  linkedinHighlights: MOCK_LINKEDIN_HIGHLIGHTS,
   loops: [
     {
       id: 'loop-1',

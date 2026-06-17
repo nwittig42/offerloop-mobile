@@ -1,6 +1,7 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
 import { MOCK_PROFILE } from '@/mocks/data';
+import type { ResumeExperience } from '@/types';
 
 /** The app-facing profile shape (what every screen reads via useApp().profile). */
 export type Profile = typeof MOCK_PROFILE;
@@ -25,6 +26,8 @@ type MeResponse = {
   industries: string[];
   gradYear: string;
   about: string;
+  resumeExperiences: ResumeExperience[];
+  linkedinHighlights: string[];
 };
 
 /**
@@ -59,6 +62,8 @@ export async function fetchMe(): Promise<Profile> {
     industries: me.industries || [],
     gradYear: me.gradYear || '',
     about: me.about || '',
+    resumeExperiences: me.resumeExperiences || [],
+    linkedinHighlights: me.linkedinHighlights || [],
     loops: [],
   };
 }

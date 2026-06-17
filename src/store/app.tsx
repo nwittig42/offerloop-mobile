@@ -36,7 +36,6 @@ import {
   MOCK_NOTIFICATIONS_SEED,
   MOCK_OUTREACH_SEED,
   MOCK_PROFILE,
-  MOCK_RESUME_EXPERIENCES,
 } from '@/mocks/data';
 import type {
   Job,
@@ -751,7 +750,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       inboxState,
       loops,
       loopActivity: MOCK_LOOP_ACTIVITY,
-      resumeExperiences: MOCK_RESUME_EXPERIENCES,
+      resumeExperiences: profile.resumeExperiences,
       files: MOCK_FILES,
       meetingPreps,
       toast,

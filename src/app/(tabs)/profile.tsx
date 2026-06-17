@@ -12,7 +12,6 @@ import CircleProgress from '@/components/ui/CircleProgress';
 import CommaField from '@/components/ui/CommaField';
 import {
   INDUSTRY_SUGGESTIONS,
-  MOCK_LINKEDIN_HIGHLIGHTS,
   TARGET_ROLE_SUGGESTIONS,
 } from '@/mocks/data';
 import { useApp } from '@/store/app';
@@ -539,16 +538,21 @@ export default function ProfileScreen() {
                 <Chip label="Attached" tone="positive" dot />
               </Card>
 
-              {/* LinkedIn, the second source we gather from, above the parse */}
-              <Pressable onPress={() => setLinkedinOpen((v) => !v)}>
+              {/* LinkedIn, the second source we gather from, above the parse.
+                  Only expandable when we actually have gathered highlights —
+                  otherwise it's an honest status row (no fabricated bullets). */}
+              <Pressable
+                onPress={() => profile.linkedinHighlights.length && setLinkedinOpen((v) => !v)}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Ionicons name="logo-linkedin" size={17} color={colors.accent} />
                   <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {linkedinUrl.trim()
-                      ? 'What we gathered from your LinkedIn'
-                      : 'Add your LinkedIn in Personal'}
+                    {!linkedinUrl.trim()
+                      ? 'Add your LinkedIn in Personal'
+                      : profile.linkedinHighlights.length
+                        ? 'What we gathered from your LinkedIn'
+                        : linkedinUrl.trim()}
                   </Text>
-                  {linkedinUrl.trim() ? (
+                  {linkedinUrl.trim() && profile.linkedinHighlights.length ? (
                     <Ionicons
                       name={linkedinOpen ? 'chevron-up' : 'chevron-down'}
                       size={16}
@@ -558,9 +562,9 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
-              {linkedinUrl.trim() && linkedinOpen ? (
+              {linkedinOpen && profile.linkedinHighlights.length ? (
                 <Card style={{ gap: 6 }}>
-                  {MOCK_LINKEDIN_HIGHLIGHTS.map((h, i) => (
+                  {profile.linkedinHighlights.map((h, i) => (
                     <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
                       <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
                       <Text
@@ -586,7 +590,22 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
-              {parseOpen ? (
+              {parseOpen && resumeExperiences.length === 0 ? (
+                <Card>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sans,
+                      fontSize: 12.5,
+                      color: colors.inkTertiary,
+                      lineHeight: 18,
+                    }}>
+                    No resume on file yet. Upload one on offerloop.ai and the parse shows up
+                    here.
+                  </Text>
+                </Card>
+              ) : null}
+
+              {parseOpen && resumeExperiences.length > 0 ? (
                 resumeExperiences.map((exp) => (
                   <Card key={exp.id} style={{ gap: 8 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
@@ -614,7 +633,7 @@ export default function ProfileScreen() {
                     </View>
                   </Card>
                 ))
-              ) : (
+              ) : !parseOpen ? (
                 <View style={{ alignItems: 'center', paddingVertical: 12, gap: 10 }}>
                   <Image
                     source={require('../../../assets/images/scout-prep.png')}
@@ -634,7 +653,7 @@ export default function ProfileScreen() {
                     what we picked up.
                   </Text>
                 </View>
-              )}
+              ) : null}
 
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
                 Rebuild your resume or update your LinkedIn on offerloop.ai and the parse
