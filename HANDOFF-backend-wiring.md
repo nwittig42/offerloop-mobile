@@ -247,3 +247,18 @@ mattered: removed unused `@expo/ui` canary that broke the native Swift compile.)
 4. The batched polish pass (cosmetic nitpicks, done on-device).
 5. Optional: onboarding capture (resume upload + LinkedIn enrichment) so accounts
    populate the now-wired profile fields.
+
+## 2026-06-17 (cont.) — Company page wired
+
+- **New endpoint** `GET /api/mobile/company/{name}` (mobile.py): firm-intel
+  pipeline (Perplexity website discovery → Firecrawl `extract_company_profile`),
+  mapped to `CompanyInfo` (about/industry/size/hq; **news deferred to v1**).
+  Cached globally in Firestore `companyProfiles/{slug}` for 30 days — the live
+  call is slow (~5–15s) and costs Perplexity+Firecrawl credits. Honest-empty +
+  only caches real hits.
+- **`company/[name].tsx`** now uses React Query (`qk.company`) instead of
+  `MOCK_COMPANY_INFO`. Loading state + per-field chips + empty state.
+- **Coordination:** this terminal is the sole driver of the mobile↔backend wiring
+  for now — do NOT run the phase build-out in another terminal against the same
+  files (`mobile.py`, `store/app.tsx`, `feed.ts`, `profile.tsx`) concurrently.
+- Still needs the **backend restart** for all the `me()` + `/company` routes.
