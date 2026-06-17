@@ -131,3 +131,36 @@ After the build, install it on the phone and run `npx expo start --dev-client`
 ### projectId is committed-safe (unlike the LAN IP)
 Unlike the `apiBaseUrl` LAN IP (do NOT commit), the `projectId` is meant to live in
 `app.json` and is safe to commit.
+
+---
+
+## 2026-06-17 — Feed + Profile data wiring (on-device dogfood round 2)
+
+**If you're another terminal: read this before touching `feed.ts`, `JobCard.tsx`,
+`profile.tsx`, `me.ts`, or `backend/app/routes/mobile.py`.**
+
+### Done this session (committed both repos)
+- **Feed cards were starved.** `feed.ts` mapJob read guessed keys that don't exist
+  on the backend `FeedJob` shape. Now maps the real keys: `employer_logo`,
+  `salary_display`, `remote`→"Remote" (+ employment `type`),
+  `structured.experience_level`, `structured.requirements`. Description now comes
+  from `structured.responsibilities` (in the feed payload) shown as bullets; jobs
+  without it lazy-fetch `/api/jobs/{id}/description` (description_raw). Dropped the
+  `FIXTURE_QUALS` mock fallback.
+- **Profile resume/LinkedIn un-mocked.** `me()` now returns `resumeExperiences`
+  (from `resumeParsed.experience`) and `linkedinHighlights` (from
+  `linkedinResumeParsed`: objective + skills + extracurriculars). `gradYear`
+  auto-extracts from `resumeParsed.education.graduation`; school already falls back
+  to `resumeParsed.education.university`; a parsed resume counts as "on file";
+  `about` falls back to the parsed objective. `profile.tsx` renders real data with
+  honest empty states; removed `MOCK_RESUME_EXPERIENCES` / `MOCK_LINKEDIN_HIGHLIGHTS`.
+
+### ⚠️ Action required
+- **Restart the local backend** (gunicorn has no `--reload`) so the `me()` changes
+  take effect. Mobile JS changes hot-reload on their own.
+
+### Known caveat
+- Rylan's own account has **no resume parse and no LinkedIn enrichment**, so grad
+  year / LinkedIn view / resume experiences are correctly wired but **invisible on
+  his profile** until he uploads a resume / runs enrichment on web. Verify against
+  an account that has `resumeParsed`, or wire onboarding capture next.
