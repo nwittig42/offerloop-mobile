@@ -184,7 +184,13 @@ export default function LoopsScreen() {
 
           {loops.map((loop) => {
             const active = loop.status === 'Active';
-            const pct = Math.min(100, Math.round((loop.weeklyDone / loop.weeklyTarget) * 100));
+            // Cumulative Found toward the goal — mirrors the Loop detail funnel,
+            // so the list shows the same progress the detail does (was a
+            // this-week count that read 0 even with contacts found last week).
+            const pct = Math.max(
+              loop.contactsFound > 0 ? 6 : 0,
+              Math.min(100, Math.round((loop.contactsFound / Math.max(1, loop.weeklyTarget)) * 100)),
+            );
             return (
             <Card
               key={loop.id}
@@ -233,10 +239,10 @@ export default function LoopsScreen() {
               <View style={{ gap: 6 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
-                    This week
+                    Toward your goal
                   </Text>
                   <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.ink }}>
-                    {loop.weeklyDone} of {loop.weeklyTarget} drafted
+                    {loop.contactsFound} of {loop.weeklyTarget}
                   </Text>
                 </View>
                 <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.hairlineLight, overflow: 'hidden' }}>
@@ -255,7 +261,7 @@ export default function LoopsScreen() {
                 </View>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                {loop.contactsFound} contacts found · {loop.draftsCreated} drafts all time
+                {loop.draftsCreated} drafts created all time
               </Text>
               </Pressable>
               <View style={{ flexDirection: 'row', gap: 8 }}>
