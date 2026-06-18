@@ -97,7 +97,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           left: -20,
           right: -20,
           bottom: -20,
-          borderRadius: 10,
+          borderRadius: 22,
           overflow: 'hidden',
         }}>
         <LinearGradient

@@ -160,7 +160,7 @@ export default function FeedScreen() {
           ) : null}
 
           <View
-            style={{ flex: 1, paddingBottom: 56, opacity: outOfSwipes ? 0.3 : 1 }}
+            style={{ flex: 1, marginTop: 8, paddingBottom: 56, opacity: outOfSwipes ? 0.3 : 1 }}
             pointerEvents={outOfSwipes ? 'none' : 'auto'}>
             <SwipeDeck
               ref={deckRef}

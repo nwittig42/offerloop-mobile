@@ -52,6 +52,26 @@ function cleanList(v: unknown): string[] | undefined {
   return out.length ? out : undefined;
 }
 
+/** Build a readable description from the structured fields — the same shape the
+ *  web job board renders (What you'll do / What we're looking for / Nice to
+ *  have). Mirrors backend services/job_description.compose_from_structured so a
+ *  card filled from the feed payload matches the lazy-fetched detail. */
+function composeFromStructured(s: RawJob): string {
+  const sections: [string, unknown][] = [
+    ["What you'll do", s.responsibilities],
+    ["What we're looking for", s.requirements],
+    ['Nice to have', s.nice_to_have],
+  ];
+  const parts: string[] = [];
+  for (const [header, items] of sections) {
+    const bullets = cleanList(items);
+    if (!bullets) continue;
+    parts.push(header);
+    parts.push(...bullets.map((b) => `• ${b}`));
+  }
+  return parts.join('\n');
+}
+
 /** Decode the HTML entities scraped job text carries (&nbsp;, &amp;, &#39; …) so
  *  the card renders clean text instead of raw entity codes. Keeps newlines. */
 export function decodeEntities(s: string): string {
@@ -77,13 +97,11 @@ function mapJob(raw: RawJob): Job {
   // can mean on-site OR unknown, so we don't claim on-site we can't verify.
   const workArrangement = raw.remote ? 'Remote' : employmentLabel(raw.type);
   const requirements = cleanList(s.requirements);
-  // The feed strips description_raw, but `structured.responsibilities` IS in the
-  // payload — the same content the web job board renders under "What you'll do".
-  // Use it as the immediate card description so every enriched job shows prose;
-  // when it's absent, leave description empty so JobCard lazy-fetches the full
-  // description_raw from /api/jobs/{id}/description.
-  const responsibilities = cleanList(s.responsibilities);
-  const description = responsibilities ? responsibilities.map((r) => `• ${r}`).join('\n') : '';
+  // The feed strips description_raw but keeps `structured`, so compose the card
+  // description from the structured sections immediately (most enriched jobs).
+  // When structured is empty too, leave it blank so JobCard lazy-fetches the
+  // full description_raw (or the backend's structured summary) on demand.
+  const description = composeFromStructured(s);
   return {
     id: String(raw.job_id || raw.id || raw.apply_url || Math.random()),
     title: raw.title || 'Untitled role',

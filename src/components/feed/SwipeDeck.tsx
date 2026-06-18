@@ -179,7 +179,7 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
           <Animated.View
             key={next.id}
             style={[{ position: 'absolute', top: 10, left: 0, right: 0, bottom: 10 }, nextStyle]}>
-            <Card elevated="md" padded style={{ flex: 1 }}>
+            <Card elevated="md" padded style={{ flex: 1, borderRadius: 22 }}>
               <JobCard job={next} />
             </Card>
           </Animated.View>
@@ -188,11 +188,11 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
         <GestureDetector gesture={gesture}>
           <Animated.View key={top.id} style={[{ flex: 1, paddingVertical: 10 }, topStyle]}>
             {expanded ? (
-              <Card elevated="lg" padded style={{ flex: 1 }}>
+              <Card elevated="lg" padded style={{ flex: 1, borderRadius: 22 }}>
                 <JobCard job={top} expanded onCollapse={() => onToggleExpand(false)} />
               </Card>
             ) : (
-              <Card elevated="lg" padded style={{ flex: 1 }}>
+              <Card elevated="lg" padded style={{ flex: 1, borderRadius: 22 }}>
                 <JobCard job={top} />
               </Card>
             )}
