@@ -409,6 +409,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCooldownEndsAt(null);
   }, [swipeBatchSize]);
 
+  // Give a swipe-token back when a swipe finds no contact (nothing was actually
+  // reached, so it shouldn't cost stamina or trip the cooldown).
+  const refundSwipe = useCallback(() => {
+    setSwipesAvailable((prev) => Math.min(swipeBatchSize, prev + 1));
+    setCooldownEndsAt(null);
+  }, [swipeBatchSize]);
+
   const cooldownSecondsLeft =
     cooldownEndsAt !== null ? Math.max(0, Math.ceil((cooldownEndsAt - nowMs) / 1000)) : 0;
 
@@ -531,15 +538,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       runSwipe({ company, jobTitle, count, action, firstIsHiringManager: firstIsHM })
         .then(({ items, creditsRemaining }) => {
+          const foundCount = items.length;
           setOutreach((prev) => {
+            // Fill placeholders that got a real contact; DROP the rest. A swipe
+            // that found no contact shouldn't leave a "No contact found" row in
+            // the Inbox — nothing was reached.
             const next = [...prev];
             placeholderIds.forEach((pid, k) => {
               const idx = next.findIndex((o) => o.id === pid);
               if (idx === -1) return;
               const item = items[k];
-              next[idx] = item
-                ? { ...item, id: pid }
-                : { ...next[idx], status: 'failed', snippet: 'No contact found' };
+              if (item) next[idx] = { ...item, id: pid };
+              else next.splice(idx, 1);
             });
             return next;
           });
@@ -562,6 +572,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               ...prev,
             ]);
           });
+          if (foundCount === 0) {
+            // No one found — give the swipe-token back and reconcile credits
+            // from the server (which charges per contact, so a miss costs 0).
+            refundSwipe();
+            showToast(`No contact found at ${company} — no credits used`);
+          }
           if (typeof creditsRemaining === 'number') {
             patchProfile({ credits: creditsRemaining });
           } else {
@@ -598,7 +614,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
       }
     },
-    [queryClient, patchProfile, showToast, spendSwipes],
+    [queryClient, patchProfile, showToast, spendSwipes, refundSwipe],
   );
 
   const draftJob = useCallback(
