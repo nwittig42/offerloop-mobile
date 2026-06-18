@@ -372,6 +372,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [cooldownEndsAt]);
 
+  // The plan (and thus batch size) resolves after the mock default — e.g. an
+  // Elite user starts seeded at the Pro number. Keep the available count in
+  // lockstep when the batch grows, but never while a cooldown is running (so it
+  // doesn't skip the recharge wait). Fires only when the batch size changes, so
+  // mid-session spends aren't clobbered.
+  useEffect(() => {
+    if (cooldownEndsAt === null) {
+      setSwipesAvailable((prev) => (prev < swipeBatchSize ? swipeBatchSize : prev));
+    }
+  }, [swipeBatchSize, cooldownEndsAt]);
+
   // When the cooldown elapses, refill the batch and ping the user.
   useEffect(() => {
     if (cooldownEndsAt !== null && nowMs >= cooldownEndsAt) {
