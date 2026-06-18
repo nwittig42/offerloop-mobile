@@ -13,7 +13,7 @@ import {
 
 import { fetchFeed } from '@/api/endpoints/feed';
 import { fetchInbox } from '@/api/endpoints/inbox';
-import { createLoop, fetchLoops, setLoopPaused } from '@/api/endpoints/loops';
+import { createLoop, fetchLoops, setLoopPaused, type LoopPeople } from '@/api/endpoints/loops';
 import { fetchMe } from '@/api/endpoints/me';
 import {
   fetchNotifications,
@@ -210,7 +210,7 @@ type AppStore = {
   updateProfile: (patch: Partial<Profile>) => void;
   /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
   enrichLinkedin: (url: string) => Promise<EnrichResult>;
-  addLoop: (brief: string) => void;
+  addLoop: (brief: string, people?: LoopPeople) => void;
   toggleLoop: (id: string) => void;
   addMeetingPrep: (input: { name: string; linkedinUrl: string }) => Promise<string>;
   showToast: (message: string, showInboxAction?: boolean) => void;
@@ -814,7 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addLoop = useCallback(
-    (brief: string) => {
+    (brief: string, people?: LoopPeople) => {
       idCounter.current += 1;
       // Optimistically show the new Loop, then create it server-side and
       // re-sync from the fleet (which fills in real counts + auto-start state).
@@ -830,7 +830,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         ...prev,
       ]);
-      createLoop(brief)
+      createLoop(brief, people)
         .catch(() => showToast('Could not create the Loop, try again'))
         .finally(() => queryClient.invalidateQueries({ queryKey: qk.loops }));
     },

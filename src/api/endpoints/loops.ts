@@ -74,10 +74,22 @@ export async function runLoopNow(id: string): Promise<void> {
   await apiFetch(`/api/agent/loops/${encodeURIComponent(id)}/run-now`, { method: 'POST' });
 }
 
-/** Create + auto-start a Loop from a natural-language brief. */
-export async function createLoop(brief: string): Promise<void> {
+/** Per-cycle people targets the loop aims for (caps): hiring managers (0-3) +
+ *  employees (0-5), same split as the job board's Find People panel. */
+export type LoopPeople = { hmPerCycle: number; employeesPerCycle: number };
+
+/** Create + auto-start a Loop from a natural-language brief + per-cycle mix. */
+export async function createLoop(brief: string, people?: LoopPeople): Promise<void> {
   if (USE_MOCKS) return;
-  await apiFetch('/api/agent/loops', { method: 'POST', body: { briefText: brief } });
+  await apiFetch('/api/agent/loops', {
+    method: 'POST',
+    body: {
+      briefText: brief,
+      ...(people
+        ? { hmPerCycle: people.hmPerCycle, employeesPerCycle: people.employeesPerCycle }
+        : {}),
+    },
+  });
 }
 
 /** Pause or resume a Loop (POST .../pause | .../start). */

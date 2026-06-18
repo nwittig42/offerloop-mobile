@@ -43,6 +43,67 @@ const activityColor = (c: Palette): Record<LoopActivity['kind'], string> => ({
   reply: c.positive,
 });
 
+/** A labeled −/+ counter row for the per-cycle people targets. */
+function PeopleStepper({
+  icon,
+  title,
+  hint,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+}) {
+  const colors = useColors();
+  const btn = (disabled: boolean) => ({
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: disabled ? colors.paper2 : colors.paper,
+    opacity: disabled ? 0.5 : 1,
+  });
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        borderWidth: 1,
+        borderColor: colors.hairline,
+        borderRadius: 10,
+        paddingVertical: 9,
+        paddingHorizontal: 11,
+        backgroundColor: colors.paper2,
+      }}>
+      <Ionicons name={icon} size={18} color={colors.accent} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>{title}</Text>
+        <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.inkTertiary }}>{hint}</Text>
+      </View>
+      <Pressable onPress={() => onChange(Math.max(min, value - 1))} disabled={value <= min} style={btn(value <= min)}>
+        <Ionicons name="remove" size={16} color={value <= min ? colors.inkTertiary : colors.ink} />
+      </Pressable>
+      <Text style={{ minWidth: 16, textAlign: 'center', fontFamily: fonts.sansBold, fontSize: 15, color: colors.ink }}>
+        {value}
+      </Text>
+      <Pressable onPress={() => onChange(Math.min(max, value + 1))} disabled={value >= max} style={btn(value >= max)}>
+        <Ionicons name="add" size={16} color={value >= max ? colors.inkTertiary : colors.ink} />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function LoopsScreen() {
   const router = useRouter();
   const colors = useColors();
@@ -51,6 +112,9 @@ export default function LoopsScreen() {
   const [tab, setTab] = useState<TabKey>('Loops');
   const [brief, setBrief] = useState('');
   const [composing, setComposing] = useState(false);
+  // Per-cycle people mix the loop aims for (caps). Defaults mirror the backend.
+  const [hmPerCycle, setHmPerCycle] = useState(1);
+  const [employeesPerCycle, setEmployeesPerCycle] = useState(3);
 
   // Loop briefs suggested from the user's own profile, so they can tap
   // instead of writing one from scratch.
@@ -74,10 +138,12 @@ export default function LoopsScreen() {
   const create = () => {
     const trimmed = brief.trim();
     if (!trimmed) return;
-    addLoop(trimmed);
+    addLoop(trimmed, { hmPerCycle, employeesPerCycle });
     setBrief('');
+    setHmPerCycle(1);
+    setEmployeesPerCycle(3);
     setComposing(false);
-    showToast('Loop created (mock), it starts working in Phase 3');
+    showToast('Loop created — it starts working on its next cycle');
   };
 
   return (
@@ -172,6 +238,32 @@ export default function LoopsScreen() {
                   ))}
                 </View>
               ) : null}
+
+              {/* Per-cycle people mix — the loop aims for up to this many of
+                  each each run (caps, same split as the job board). */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
+                  People per cycle
+                </Text>
+                <PeopleStepper
+                  icon="rocket-outline"
+                  title="Hiring managers"
+                  hint="10 credits each"
+                  value={hmPerCycle}
+                  min={0}
+                  max={3}
+                  onChange={setHmPerCycle}
+                />
+                <PeopleStepper
+                  icon="people-outline"
+                  title="Employees"
+                  hint="4 credits each · peers worth a coffee chat"
+                  value={employeesPerCycle}
+                  min={0}
+                  max={5}
+                  onChange={setEmployeesPerCycle}
+                />
+              </View>
 
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button label="Create Loop" onPress={create} disabled={!brief.trim()} />
