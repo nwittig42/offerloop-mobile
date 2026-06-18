@@ -10,7 +10,6 @@ import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
 import { cardArt } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
-import { MOCK_COMPANY_INFO } from '@/mocks/data';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
@@ -82,46 +81,14 @@ function DetailGroup({
   );
 }
 
-function DetailGroups({ job, center }: { job: Job; center: boolean }) {
-  const colors = useColors();
-  return (
-    <View style={{ gap: 14, alignItems: center ? 'center' : 'stretch' }}>
-      {job.compensation ? (
-        <DetailGroup label="Compensation" center={center}>
-          <Chip label={job.compensation} tone="positive" icon="cash-outline" size="lg" />
-        </DetailGroup>
-      ) : null}
-      {job.workArrangement || job.experienceLevel ? (
-        <DetailGroup label="Role" center={center}>
-          {job.workArrangement ? (
-            <Chip
-              label={job.workArrangement}
-              tone="brand"
-              icon={arrangementIcon(job.workArrangement)}
-              size="lg"
-            />
-          ) : null}
-          {job.experienceLevel ? (
-            <Chip label={job.experienceLevel} tone="accent" icon="school-outline" size="lg" />
-          ) : null}
-          {job.education ? <Chip label={job.education} icon="book-outline" size="lg" /> : null}
-        </DetailGroup>
-      ) : null}
-    </View>
-  );
-}
-
 function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
   const art = cardArt(job.id);
-  // Reserve room at the bottom so the short description clears the floating
-  // glass action bar that rides low over the card.
   return (
-    <View style={{ flex: 1, alignItems: 'center', paddingBottom: 72 }}>
+    <View style={{ flex: 1 }}>
       {/* Full-bleed palette wash + hand-drawn loop watermark, breaking out of
-          the Card's 20px padding and clipped to its corners — branded color and
-          texture instead of empty white. */}
+          the Card's 20px padding and clipped to its corners. */}
       <View
         pointerEvents="none"
         style={{
@@ -134,29 +101,29 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           overflow: 'hidden',
         }}>
         <LinearGradient
-          colors={[BRAND_BLUE + '14', '#FAFBFF00']}
+          colors={[BRAND_BLUE + '12', '#FAFBFF00']}
           start={{ x: 0, y: 0 }}
-          end={{ x: 0.9, y: 0.7 }}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
+          end={{ x: 0.9, y: 0.6 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 190 }}
         />
         <Image
           source={art.watermark}
           resizeMode="contain"
-          style={{ position: 'absolute', bottom: 24, right: -10, width: 210, height: 250, opacity: 0.06 }}
+          style={{ position: 'absolute', bottom: 14, right: -18, width: 170, height: 190, opacity: 0.05 }}
         />
       </View>
+
       {accentTheme === 'school' ? <SchoolStripe /> : null}
-      <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
-      <View style={{ height: 12 }} />
+
+      {/* Title — left-aligned, the focal point (Sorce-style). */}
       <Text
         numberOfLines={2}
         style={{
           fontFamily: fonts.sansBold,
-          fontSize: 26,
+          fontSize: 23,
           color: colors.heading,
-          lineHeight: 32,
-          letterSpacing: -0.4,
-          textAlign: 'center',
+          lineHeight: 28,
+          letterSpacing: -0.3,
         }}>
         {job.title}
       </Text>
@@ -164,44 +131,75 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
       <Image
         source={art.squiggle}
         resizeMode="contain"
-        style={{ width: 156, height: 15, marginTop: 3, tintColor: BRAND_ORANGE, opacity: 0.9 }}
+        style={{ width: 120, height: 12, marginTop: 4, tintColor: BRAND_ORANGE, opacity: 0.9 }}
       />
-      <View style={{ height: 8 }} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink }}>
-          {job.company}
-        </Text>
-        <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.inkTertiary }} />
-        <Ionicons name="location-outline" size={12} color={colors.inkTertiary} />
-        <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
-          {job.location}
-        </Text>
+
+      {/* Company + location with the logo beside it — flex-contained and
+          single-line so a long name/location can never clip off the edge. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 14 }}>
+        <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={42} radius={11} />
+        <View style={{ flex: 1 }}>
+          <Text
+            numberOfLines={1}
+            style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            {job.company || 'Company'}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
+            <Ionicons name="location-outline" size={11} color={colors.inkTertiary} />
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+              {job.location || 'Location not listed'}
+            </Text>
+          </View>
+        </View>
       </View>
 
-      <View style={{ height: 18 }} />
-      <DetailGroups job={job} center />
+      {/* Labeled detail sections — each renders only when the data exists. */}
+      <View style={{ gap: 13, marginTop: 18 }}>
+        {job.compensation ? (
+          <DetailGroup label="Compensation" center={false}>
+            <Chip label={job.compensation} tone="positive" icon="cash-outline" size="lg" />
+          </DetailGroup>
+        ) : null}
+        {job.workArrangement ? (
+          <DetailGroup label="Work arrangement" center={false}>
+            <Chip
+              label={job.workArrangement}
+              tone="brand"
+              icon={arrangementIcon(job.workArrangement)}
+              size="lg"
+            />
+          </DetailGroup>
+        ) : null}
+        {job.experienceLevel ? (
+          <DetailGroup label="Experience level" center={false}>
+            <Chip label={job.experienceLevel} tone="accent" icon="school-outline" size="lg" />
+          </DetailGroup>
+        ) : null}
 
-      {/* Description sits right below the role, no big gap. */}
-      <View style={{ width: '100%', gap: 6, paddingTop: 16, alignItems: 'center' }}>
-        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
-          Job description
-        </Text>
-        <Text
-          numberOfLines={4}
-          style={{
-            fontFamily: fonts.sans,
-            fontSize: 13,
-            color: colors.inkSecondary,
-            lineHeight: 20,
-            textAlign: 'center',
-          }}>
-          {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 4 }}>
-          <Ionicons name="expand-outline" size={12} color={colors.accent} />
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.accent }}>
-            Tap anywhere to enlarge
+        {/* Job description */}
+        <View style={{ gap: 5 }}>
+          <Text
+            style={{ fontFamily: fonts.sansMedium, fontSize: 11, letterSpacing: 0.3, color: colors.inkTertiary }}>
+            Job description
           </Text>
+          <Text
+            numberOfLines={4}
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              color: colors.inkSecondary,
+              lineHeight: 19,
+            }}>
+            {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="expand-outline" size={12} color={colors.accent} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.accent }}>
+              Tap anywhere to enlarge
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -260,7 +258,6 @@ function ExpandedCard({
 }) {
   const colors = useColors();
   const router = useRouter();
-  const info = MOCK_COMPANY_INFO[job.company];
   const quals = job.requiredQualifications ?? [];
   const openCompany = () => router.push(`/company/${encodeURIComponent(job.company)}`);
 
@@ -271,10 +268,6 @@ function ExpandedCard({
     tiles.push({ icon: arrangementIcon(job.workArrangement), label: job.workArrangement, tone: colors.marketing });
   if (job.experienceLevel)
     tiles.push({ icon: 'school-outline', label: job.experienceLevel, tone: colors.accent });
-  if (job.education)
-    tiles.push({ icon: 'book-outline', label: job.education, tone: colors.waiting });
-  if (info?.size)
-    tiles.push({ icon: 'business-outline', label: info.size, tone: colors.navy });
 
   return (
     <View style={{ flex: 1 }}>

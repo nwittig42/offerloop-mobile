@@ -46,8 +46,29 @@ function employmentLabel(type: unknown): string | undefined {
  */
 function cleanList(v: unknown): string[] | undefined {
   if (!Array.isArray(v)) return undefined;
-  const out = v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+  const out = v
+    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    .map(decodeEntities);
   return out.length ? out : undefined;
+}
+
+/** Decode the HTML entities scraped job text carries (&nbsp;, &amp;, &#39; …) so
+ *  the card renders clean text instead of raw entity codes. Keeps newlines. */
+export function decodeEntities(s: string): string {
+  if (!s) return '';
+  return s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&rsquo;|&lsquo;|&apos;/gi, "'")
+    .replace(/&mdash;/gi, '—')
+    .replace(/&ndash;/gi, '–')
+    .replace(/&hellip;/gi, '…')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 function mapJob(raw: RawJob): Job {
@@ -89,7 +110,7 @@ export async function fetchJobDescription(jobId: string): Promise<string> {
   const res = await apiFetch<{ description: string | null }>(
     `/api/jobs/${encodeURIComponent(jobId)}/description`,
   );
-  return res.description || '';
+  return res.description ? decodeEntities(res.description) : '';
 }
 
 /**
