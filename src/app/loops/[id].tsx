@@ -186,20 +186,23 @@ export default function LoopDetailScreen() {
 
           <View style={{ gap: 6 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>This week</Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
+                Toward your goal
+              </Text>
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.ink }}>
-                {loop.stats.foundThisWeek} of {loop.weeklyTarget} found
+                {loop.stats.found} of {loop.weeklyTarget}
+                {loop.stats.foundThisWeek > 0 ? ` · ${loop.stats.foundThisWeek} this week` : ''}
               </Text>
             </View>
-            <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.hairlineLight, overflow: 'hidden' }}>
+            <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.hairlineLight, overflow: 'hidden' }}>
               <LinearGradient
                 colors={LOOP_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={{
-                  height: 6,
-                  borderRadius: 3,
-                  width: `${Math.min(100, Math.round((loop.stats.foundThisWeek / Math.max(1, loop.weeklyTarget)) * 100))}%`,
+                  height: 8,
+                  borderRadius: 4,
+                  width: `${Math.max(6, Math.min(100, Math.round((loop.stats.found / Math.max(1, loop.weeklyTarget)) * 100)))}%`,
                 }}
               />
             </View>

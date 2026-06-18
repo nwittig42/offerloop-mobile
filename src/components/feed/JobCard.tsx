@@ -1,18 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { USE_MOCKS } from '@/api/config';
 import { fetchJobDescription } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
+import { cardArt } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
 import { MOCK_COMPANY_INFO } from '@/mocks/data';
-import { companyColor } from '@/theme/companyColor';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
+
+// Offerloop design-system palette (Figma): primary blue + orange accent.
+const BRAND_BLUE = '#4C62A8';
+const BRAND_ORANGE = '#DE8040';
 
 /** A short school-colors pennant stripe, shown on cards when the school theme is on. */
 function SchoolStripe() {
@@ -109,25 +114,39 @@ function DetailGroups({ job, center }: { job: Job; center: boolean }) {
 function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
-  const accent = companyColor(job.company);
+  const art = cardArt(job.id);
   // Reserve room at the bottom so the short description clears the floating
   // glass action bar that rides low over the card.
   return (
     <View style={{ flex: 1, alignItems: 'center', paddingBottom: 72 }}>
-      {accentTheme === 'school' ? <SchoolStripe /> : null}
-      {/* Soft company-colored halo gives each card its own hue behind the logo. */}
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <View
-          style={{
-            position: 'absolute',
-            width: 84,
-            height: 84,
-            borderRadius: 42,
-            backgroundColor: accent + '14',
-          }}
+      {/* Full-bleed palette wash + hand-drawn loop watermark, breaking out of
+          the Card's 20px padding and clipped to its corners — branded color and
+          texture instead of empty white. */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: -20,
+          left: -20,
+          right: -20,
+          bottom: -20,
+          borderRadius: 10,
+          overflow: 'hidden',
+        }}>
+        <LinearGradient
+          colors={[BRAND_BLUE + '14', '#FAFBFF00']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.9, y: 0.7 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
         />
-        <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
+        <Image
+          source={art.watermark}
+          resizeMode="contain"
+          style={{ position: 'absolute', bottom: 24, right: -10, width: 210, height: 250, opacity: 0.06 }}
+        />
       </View>
+      {accentTheme === 'school' ? <SchoolStripe /> : null}
+      <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
       <View style={{ height: 12 }} />
       <Text
         numberOfLines={2}
@@ -141,6 +160,12 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         }}>
         {job.title}
       </Text>
+      {/* Hand-drawn squiggle underline from the design system, accent-tinted. */}
+      <Image
+        source={art.squiggle}
+        resizeMode="contain"
+        style={{ width: 156, height: 15, marginTop: 3, tintColor: BRAND_ORANGE, opacity: 0.9 }}
+      />
       <View style={{ height: 8 }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={{ fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink }}>
@@ -158,7 +183,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
 
       {/* Description sits right below the role, no big gap. */}
       <View style={{ width: '100%', gap: 6, paddingTop: 16, alignItems: 'center' }}>
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 0.3, color: accent }}>
+        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
           Job description
         </Text>
         <Text

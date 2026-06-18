@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image, Text, View } from 'react-native';
 
-import { companyColor } from '@/theme/companyColor';
 import { fonts } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 
@@ -68,21 +67,20 @@ export function CompanyLogo({
     );
   }
 
-  const accent = companyColor(name);
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: r,
-        backgroundColor: accent + '1A',
+        backgroundColor: colors.paper2,
         borderWidth: 1,
-        borderColor: accent + '40',
+        borderColor: colors.hairline,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <Text style={{ fontFamily: fonts.sansBold, fontSize: size * 0.42, color: accent }}>
-        {(name || '?').charAt(0).toUpperCase()}
+      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: size * 0.4, color: colors.navy }}>
+        {(name || '?').charAt(0)}
       </Text>
     </View>
   );
