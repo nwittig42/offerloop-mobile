@@ -143,8 +143,7 @@ export default function CompanyScreen() {
               <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, lineHeight: 22 }}>
                 {companyLoading
                   ? 'Gathering company details…'
-                  : info?.about ||
-                    'No public profile found for this company. For deeper firm research, use offerloop.ai.'}
+                  : info?.about || 'No public profile found for this company yet.'}
               </Text>
             </View>
             {info?.news.length ? (

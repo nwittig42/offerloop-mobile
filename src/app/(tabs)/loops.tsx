@@ -189,6 +189,7 @@ export default function LoopsScreen() {
             <Card
               key={loop.id}
               style={{ gap: 10, borderColor: active ? '#4F46E5' + '33' : colors.hairline }}>
+              <Pressable onPress={() => router.push(`/loops/${loop.id}`)} style={{ gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 {active ? (
                   <LinearGradient
@@ -227,6 +228,7 @@ export default function LoopsScreen() {
                   tone={active ? 'positive' : 'waiting'}
                   dot
                 />
+                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
               </View>
               <View style={{ gap: 6 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -255,6 +257,7 @@ export default function LoopsScreen() {
               <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
                 {loop.contactsFound} contacts found · {loop.draftsCreated} drafts all time
               </Text>
+              </Pressable>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button
                   label={loop.status === 'Active' ? 'Pause' : 'Resume'}
