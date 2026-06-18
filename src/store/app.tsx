@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -128,6 +129,11 @@ function outreachToTrackerRows(outreach: OutreachItem[]): TrackerRow[] {
  * Real cooldowns would be hours; the mock compresses them to see the rhythm.
  */
 const BATCH_BY_PLAN: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 8, Elite: 12 };
+
+// Persist the last feed so a cold launch lands on the previous deck instantly
+// while a fresh one loads in the background (instead of a spinner). Bump the
+// suffix if the Job shape changes so a stale cache can't deserialize wrong.
+const FEED_CACHE_KEY = 'offerloop.feed.v1';
 const REAL_COOLDOWN_HOURS: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 4, Elite: 3 };
 const MOCK_COOLDOWN_SECONDS = 60; // demo timer, stands in for REAL_COOLDOWN_HOURS
 
@@ -242,6 +248,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDeckSeeded(true);
     }
   }, [feedQuery.data, deckSeeded]);
+
+  // On launch, seed the feed cache from disk so the deck shows the previous
+  // cards instantly while the live query refetches. Skip if the live query
+  // already produced data (don't clobber a fresh fetch that beat the disk read).
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(FEED_CACHE_KEY)
+      .then((raw) => {
+        if (cancelled || !raw || queryClient.getQueryData(qk.feed)) return;
+        const cached = JSON.parse(raw) as Job[];
+        if (Array.isArray(cached) && cached.length) {
+          queryClient.setQueryData<Job[]>(qk.feed, cached);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
+
+  // Persist the latest feed whenever a fresh fetch lands, for the next launch.
+  useEffect(() => {
+    if (feedQuery.isSuccess && feedQuery.data?.length) {
+      AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(feedQuery.data)).catch(() => {});
+    }
+  }, [feedQuery.isSuccess, feedQuery.data]);
 
   // Inbox: real threads from GET /api/outbox/threads, polled for replies. We
   // sync to the server list but keep any in-flight "drafting" placeholders on

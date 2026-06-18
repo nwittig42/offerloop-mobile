@@ -9,7 +9,8 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Bottom navigation: Feed, Inbox, Loops, Network, Profile.
+ * Bottom navigation: Feed, Inbox, Network, Loops, Profile — the user's journey
+ * (draft → replies → pipeline → autopilot → account), daily-use tabs left.
  * The bar is a liquid-glass surface (GlassTabBackground) with a hairline top
  * border and ink active state. The notification hub is the header bell, not
  * a tab. Scout is a summonable sheet from the header, not a tab.
@@ -58,20 +59,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="loops"
-        options={{
-          title: 'Loops',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="infinite" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="network"
         options={{
           title: 'Network',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="loops"
+        options={{
+          title: 'Loops',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="infinite" size={size} color={color} />
           ),
         }}
       />
