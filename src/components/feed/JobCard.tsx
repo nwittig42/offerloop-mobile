@@ -9,6 +9,7 @@ import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
 import Chip from '@/components/ui/Chip';
 import { MOCK_COMPANY_INFO } from '@/mocks/data';
+import { companyColor } from '@/theme/companyColor';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
@@ -108,12 +109,25 @@ function DetailGroups({ job, center }: { job: Job; center: boolean }) {
 function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
+  const accent = companyColor(job.company);
   // Reserve room at the bottom so the short description clears the floating
   // glass action bar that rides low over the card.
   return (
     <View style={{ flex: 1, alignItems: 'center', paddingBottom: 72 }}>
       {accentTheme === 'school' ? <SchoolStripe /> : null}
-      <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
+      {/* Soft company-colored halo gives each card its own hue behind the logo. */}
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            position: 'absolute',
+            width: 84,
+            height: 84,
+            borderRadius: 42,
+            backgroundColor: accent + '14',
+          }}
+        />
+        <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
+      </View>
       <View style={{ height: 12 }} />
       <Text
         numberOfLines={2}
@@ -144,7 +158,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
 
       {/* Description sits right below the role, no big gap. */}
       <View style={{ width: '100%', gap: 6, paddingTop: 16, alignItems: 'center' }}>
-        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 0.3, color: accent }}>
           Job description
         </Text>
         <Text
