@@ -275,3 +275,17 @@ mattered: removed unused `@expo/ui` canary that broke the native Swift compile.)
 - Note: enrichment is a ~10–25s live scrape; UI shows "Pulling from LinkedIn…".
 - Other Personal fields (roles/industries/about) are still local-only by design
   (web-first; no profile-save endpoint).
+
+## 2026-06-17 (cont.) — Loop detail, feed color, company .env fix
+
+- **Company page was empty** because `backend/.env` (the one `load_dotenv()` loads,
+  walking up from `backend/app/`) was **missing `PERPLEXITY_API_KEY` +
+  `FIRECRAWL_API_KEY`** (root `.env` had them but isn't loaded). Both keys appended
+  to `backend/.env`. **Restart the backend** → company pages populate.
+- **Loop detail screen** (`src/app/loops/[id].tsx`): tap a Loop → Found/Emailed/
+  Replied funnel + "What this Loop found" activity + Pause/Resume + Run now. Reads
+  `GET /api/agent/loops/{id}` (+`liveStats`) and `/activity`.
+- **Feed color**: `src/theme/companyColor.ts` — decorative per-company accent
+  (logo halo + tinted monogram). Real logos via CompanyLogo (Clearbit/favicon).
+- Sparse descriptions on some cards are a real data gap (no `description_raw` and
+  no `structured.responsibilities`), not a bug.
