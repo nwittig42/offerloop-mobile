@@ -486,9 +486,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } = {},
     ) => {
       const count = opts.count ?? 1;
-      const action = opts.action ?? 'draft';
+      let action = opts.action ?? 'draft';
       const autoApply = opts.autoApply ?? false;
       const firstIsHM = opts.firstIsHiringManager ?? true;
+
+      // Off-hours guard: a swipe-to-send fired outside good sending hours
+      // (8am–10pm device-local) would land an email with a late-night
+      // timestamp. Quietly downgrade to a draft and tell the user, so it waits
+      // in the Inbox to send (one tap) when the timing is better. Mirrors the
+      // Loop scheduler's 8a–10p quiet-hours window (loop_budget.py).
+      const hour = new Date().getHours();
+      const offHoursDeferred = action === 'send' && (hour < 8 || hour >= 22);
+      if (offHoursDeferred) action = 'draft';
 
       // Optimistic: drop a swipe-token and show credits fall now; reconciled
       // against the server's authoritative count when the swipe returns.
@@ -499,8 +508,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       spendSwipes();
 
       const peopleWord = count === 1 ? 'person' : 'people';
-      const verb = action === 'send' ? 'Sending to' : 'Drafted to';
-      showToast(`${verb} ${count} ${peopleWord} at ${company}${autoApply ? ', applied' : ''}`, true);
+      if (offHoursDeferred) {
+        showToast(
+          `It's after hours — saved as a draft so it doesn't land overnight. Send from your Inbox when ready.`,
+          true,
+        );
+      } else {
+        const verb = action === 'send' ? 'Sending to' : 'Drafted to';
+        showToast(`${verb} ${count} ${peopleWord} at ${company}${autoApply ? ', applied' : ''}`, true);
+      }
 
       const placeholderIds: string[] = [];
       for (let k = 0; k < count; k++) {

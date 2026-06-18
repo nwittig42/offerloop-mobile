@@ -106,7 +106,8 @@ export default function SwipeSettingsScreen() {
               <Ionicons name="warning-outline" size={14} color={colors.waiting} />
               <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 11.5, color: colors.waiting, lineHeight: 16 }}>
                 Auto-send fires real emails with no review. Your daily cap protects you,
-                but the draft has to be good every time.
+                but the draft has to be good every time. Swipes after 10pm or before 8am
+                are saved as drafts instead, so nothing lands overnight.
               </Text>
             </View>
           ) : null}
