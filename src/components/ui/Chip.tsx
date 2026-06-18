@@ -53,11 +53,11 @@ export function Chip({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: lg ? 6 : 5,
-        borderRadius: 8,
+        gap: lg ? 7 : 5,
+        borderRadius: lg ? 10 : 8,
         borderWidth: 1,
-        paddingHorizontal: lg ? 12 : 10,
-        paddingVertical: lg ? 7 : 2,
+        paddingHorizontal: lg ? 14 : 10,
+        paddingVertical: lg ? 9 : 2,
         alignSelf: 'flex-start',
         backgroundColor: t ? t.fill : colors.paper2,
         borderColor: t ? t.border : colors.hairline,
@@ -72,10 +72,10 @@ export function Chip({
           }}
         />
       ) : null}
-      {icon ? <Ionicons name={icon} size={lg ? 15 : 12} color={fg} /> : null}
+      {icon ? <Ionicons name={icon} size={lg ? 17 : 12} color={fg} /> : null}
       <Text
         style={{
-          fontSize: lg ? 14 : 11,
+          fontSize: lg ? 15.5 : 11,
           fontFamily: lg ? fonts.sansSemibold : fonts.sansMedium,
           color: fg,
         }}>

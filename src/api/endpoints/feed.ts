@@ -102,13 +102,16 @@ function mapJob(raw: RawJob): Job {
   // When structured is empty too, leave it blank so JobCard lazy-fetches the
   // full description_raw (or the backend's structured summary) on demand.
   const description = composeFromStructured(s);
+  // Match the web board's comp source: prefer salary_display, fall back to the
+  // structured salary_range_text (what offerloop.ai shows under "At a glance").
+  const comp = String(raw.salary_display || s.salary_range_text || '').trim();
   return {
     id: String(raw.job_id || raw.id || raw.apply_url || Math.random()),
     title: raw.title || 'Untitled role',
     company: raw.company || '',
     location: locationString(raw.location),
     logoUrl: raw.employer_logo || undefined,
-    compensation: raw.salary_display || undefined,
+    compensation: comp ? decodeEntities(comp) : undefined,
     workArrangement,
     experienceLevel: s.experience_level || undefined,
     education: undefined,

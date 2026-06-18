@@ -58,11 +58,11 @@ function DetailGroup({
 }) {
   const colors = useColors();
   return (
-    <View style={{ gap: 7, alignItems: center ? 'center' : 'flex-start' }}>
+    <View style={{ gap: 8, alignItems: center ? 'center' : 'flex-start' }}>
       <Text
         style={{
           fontFamily: fonts.sansMedium,
-          fontSize: 11,
+          fontSize: 12,
           letterSpacing: 0.3,
           color: colors.inkTertiary,
         }}>
@@ -135,20 +135,21 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
       />
 
       {/* Company + location with the logo beside it — flex-contained and
-          single-line so a long name/location can never clip off the edge. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 14 }}>
-        <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={42} radius={11} />
+          single-line so a long name/location can never clip off the edge.
+          Sized up for at-a-glance readability (Sorce-style). */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 16 }}>
+        <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={54} radius={14} />
         <View style={{ flex: 1 }}>
           <Text
-            numberOfLines={1}
-            style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            numberOfLines={2}
+            style={{ fontFamily: fonts.sansBold, fontSize: 17.5, color: colors.ink, lineHeight: 22 }}>
             {job.company || 'Company'}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
-            <Ionicons name="location-outline" size={11} color={colors.inkTertiary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="location-outline" size={14} color={colors.inkTertiary} />
             <Text
               numberOfLines={1}
-              style={{ flex: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+              style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
               {job.location || 'Location not listed'}
             </Text>
           </View>
@@ -156,7 +157,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
       </View>
 
       {/* Labeled detail sections — each renders only when the data exists. */}
-      <View style={{ gap: 13, marginTop: 18 }}>
+      <View style={{ gap: 14, marginTop: 18 }}>
         {job.compensation ? (
           <DetailGroup label="Compensation" center={false}>
             <Chip label={job.compensation} tone="positive" icon="cash-outline" size="lg" />
@@ -178,25 +179,25 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           </DetailGroup>
         ) : null}
 
-        {/* Job description */}
-        <View style={{ gap: 5 }}>
+        {/* Job description — show more before the tap-to-enlarge cue. */}
+        <View style={{ gap: 6 }}>
           <Text
-            style={{ fontFamily: fonts.sansMedium, fontSize: 11, letterSpacing: 0.3, color: colors.inkTertiary }}>
+            style={{ fontFamily: fonts.sansMedium, fontSize: 12, letterSpacing: 0.3, color: colors.inkTertiary }}>
             Job description
           </Text>
           <Text
-            numberOfLines={4}
+            numberOfLines={7}
             style={{
               fontFamily: fonts.sans,
-              fontSize: 13,
+              fontSize: 14,
               color: colors.inkSecondary,
-              lineHeight: 19,
+              lineHeight: 21,
             }}>
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-            <Ionicons name="expand-outline" size={12} color={colors.accent} />
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.accent }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+            <Ionicons name="expand-outline" size={13} color={colors.accent} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
               Tap anywhere to enlarge
             </Text>
           </View>
