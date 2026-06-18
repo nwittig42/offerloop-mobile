@@ -91,6 +91,33 @@ export function decodeEntities(s: string): string {
     .trim();
 }
 
+/** Some jobs carry a multi-location comp blob ("US employees in NYC, LA … :
+ *  $75,900 - $85,400 USD; US employees outside … : $68,300 - $76,900 USD").
+ *  Collapse any such prose into a single honest outer range ($68,300 – $85,400)
+ *  so the comp chip stays one line on the card instead of ballooning into a
+ *  paragraph. A plain, already-clean "$75,900 - $85,400 USD" passes through. */
+function condenseComp(text: string): string {
+  const amounts: number[] = [];
+  const re = /\$\s?([\d,]+(?:\.\d+)?)\s?([kKmM])?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    let n = parseFloat(m[1].replace(/,/g, ''));
+    if (!isFinite(n)) continue;
+    const suffix = (m[2] || '').toLowerCase();
+    if (suffix === 'k') n *= 1_000;
+    else if (suffix === 'm') n *= 1_000_000;
+    amounts.push(n);
+  }
+  // Only rewrite verbose blobs (prose / multiple ranges) — leave clean ranges be.
+  const verbose = text.length > 46 || /;|employees|based|outside|\barea\b/i.test(text);
+  if (!verbose || amounts.length < 2) return text;
+  const lo = Math.min(...amounts);
+  const hi = Math.max(...amounts);
+  // Manual grouping — Hermes' Intl doesn't reliably honor toLocaleString.
+  const fmt = (n: number) => '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return lo === hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`;
+}
+
 function mapJob(raw: RawJob): Job {
   const s = raw.structured || {};
   // Only assert "Remote" — the feed's `remote` flag is boolean; a false value
@@ -111,7 +138,7 @@ function mapJob(raw: RawJob): Job {
     company: raw.company || '',
     location: locationString(raw.location),
     logoUrl: raw.employer_logo || undefined,
-    compensation: comp ? decodeEntities(comp) : undefined,
+    compensation: comp ? condenseComp(decodeEntities(comp)) : undefined,
     workArrangement,
     experienceLevel: s.experience_level || undefined,
     education: undefined,

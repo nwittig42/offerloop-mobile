@@ -178,15 +178,18 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
             <Chip label={job.experienceLevel} tone="accent" icon="school-outline" size="lg" />
           </DetailGroup>
         ) : null}
+      </View>
 
-        {/* Job description — show more before the tap-to-enlarge cue. */}
-        <View style={{ gap: 6 }}>
+      {/* Job description fills whatever space is left and clips at the card edge
+          (overflow hidden) so a long description can never bleed past the bottom,
+          however tall the fields above it are. The tap cue stays pinned below. */}
+      <View style={{ flex: 1, minHeight: 0, marginTop: 14, gap: 6 }}>
+        <Text
+          style={{ fontFamily: fonts.sansMedium, fontSize: 12, letterSpacing: 0.3, color: colors.inkTertiary }}>
+          Job description
+        </Text>
+        <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <Text
-            style={{ fontFamily: fonts.sansMedium, fontSize: 12, letterSpacing: 0.3, color: colors.inkTertiary }}>
-            Job description
-          </Text>
-          <Text
-            numberOfLines={7}
             style={{
               fontFamily: fonts.sans,
               fontSize: 14,
@@ -195,12 +198,12 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
             }}>
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
-            <Ionicons name="expand-outline" size={13} color={colors.accent} />
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
-              Tap anywhere to enlarge
-            </Text>
-          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+          <Ionicons name="expand-outline" size={13} color={colors.accent} />
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+            Tap anywhere to enlarge
+          </Text>
         </View>
       </View>
     </View>
