@@ -38,13 +38,47 @@ function contactName(c: RawContact): string {
   return full || c.Name || c.name || 'New contact';
 }
 
+/** Classify a contact by their ACTUAL title — honest, not by list position.
+ *  Recruiters/TA → Recruiter; managers/leads/heads → Hiring manager; else
+ *  Employee. */
+function relationFor(title: string): ContactRelation {
+  const t = (title || '').toLowerCase();
+  if (/recruit|talent|sourcer|\bhr\b|human resources|people ops|people operations/.test(t)) {
+    return 'Recruiter';
+  }
+  if (/manager|lead\b|head of|director|\bvp\b|vice president|chief|founder|president|owner/.test(t)) {
+    return 'Hiring manager';
+  }
+  return 'Employee';
+}
+
+function dedupeKey(c: RawContact): string {
+  return (
+    (c.Email || c.email || '').toLowerCase() ||
+    String(c.pdlId || c.id || '') ||
+    `${contactName(c)}|${(c.Company || c.company || '').toLowerCase()}`
+  );
+}
+
+async function promptSearch(
+  prompt: string,
+  batchSize: number,
+  mode: string,
+): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
+  const res = await apiFetch<PromptSearchResponse>('/api/prompt-search', {
+    method: 'POST',
+    body: { prompt, batchSize, mode },
+  });
+  return { contacts: res.contacts || [], creditsRemaining: res.credits_remaining };
+}
+
 function mapContact(
   c: RawContact,
   idx: number,
   args: SwipeArgs,
 ): OutreachItem {
-  const relation: ContactRelation =
-    (args.firstIsHiringManager ?? true) && idx === 0 ? 'Hiring manager' : 'Employee';
+  const title = c.Title || c.JobTitle || c.title || '';
+  const relation: ContactRelation = relationFor(title);
   const sent = args.action === 'send';
   const subject = c.emailSubject || c.email_subject || `Reaching out about ${args.jobTitle}`;
   const body = c.emailBody || c.email_body || '';
@@ -80,16 +114,30 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
     return { items };
   }
 
-  const res = await apiFetch<PromptSearchResponse>('/api/prompt-search', {
-    method: 'POST',
-    body: {
-      prompt: `${args.jobTitle} at ${args.company}`,
-      batchSize: args.count,
-      mode: args.action === 'send' ? 'send' : 'draft',
-    },
-  });
+  const mode = args.action === 'send' ? 'send' : 'draft';
 
-  const contacts = (res.contacts || []).slice(0, args.count);
-  const items = contacts.map((c, i) => mapContact(c, i, args));
-  return { items, creditsRemaining: res.credits_remaining };
+  // Prefer a recruiter / hiring manager at the company (the highest-value cold
+  // outreach target). Each prompt-search call finds + drafts + saves + charges
+  // per contact, so a miss costs nothing.
+  const primary = await promptSearch(`recruiter or hiring manager at ${args.company}`, args.count, mode);
+  let contacts = primary.contacts;
+  let creditsRemaining = primary.creditsRemaining;
+
+  // Fallback: fill the rest of the batch from the role's team (employees), so a
+  // swipe rarely comes back empty even when no recruiter is indexed.
+  if (contacts.length < args.count) {
+    const need = args.count - contacts.length;
+    const seen = new Set(contacts.map(dedupeKey));
+    const fallback = await promptSearch(`${args.jobTitle} at ${args.company}`, need, mode);
+    for (const c of fallback.contacts) {
+      const key = dedupeKey(c);
+      if (key && seen.has(key)) continue;
+      seen.add(key);
+      contacts.push(c);
+    }
+    if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
+  }
+
+  const items = contacts.slice(0, args.count).map((c, i) => mapContact(c, i, args));
+  return { items, creditsRemaining };
 }
