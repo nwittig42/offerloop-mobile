@@ -130,10 +130,21 @@ function outreachToTrackerRows(outreach: OutreachItem[]): TrackerRow[] {
  */
 const BATCH_BY_PLAN: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 8, Elite: 12 };
 
-// Persist the last feed so a cold launch lands on the previous deck instantly
-// while a fresh one loads in the background (instead of a spinner). Bump the
-// suffix if the Job shape changes so a stale cache can't deserialize wrong.
-const FEED_CACHE_KEY = 'offerloop.feed.v1';
+// Queries persisted to disk so a cold launch lands on the previous data
+// instantly (the deck, inbox, loops, profile, …) while live queries refetch in
+// the background. Keyed per-user so accounts never share a cache. Bump the
+// version suffix if any of these shapes change so a stale blob can't restore.
+const PERSIST_CACHE_VERSION = 'v1';
+const PERSISTED_QUERIES: { name: string; key: readonly unknown[] }[] = [
+  { name: 'me', key: qk.me },
+  { name: 'feed', key: qk.feed },
+  { name: 'inbox', key: qk.inbox },
+  { name: 'loops', key: qk.loops },
+  { name: 'meetingPreps', key: qk.meetingPreps },
+  { name: 'notifications', key: qk.notifications },
+];
+const cacheStorageKey = (uid: string, name: string) =>
+  `offerloop.cache.${uid}.${name}.${PERSIST_CACHE_VERSION}`;
 const REAL_COOLDOWN_HOURS: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 4, Elite: 3 };
 const MOCK_COOLDOWN_SECONDS = 60; // demo timer, stands in for REAL_COOLDOWN_HOURS
 
@@ -216,7 +227,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   // Profile + credits are now server-backed: GET /api/mobile/me via React Query.
   // Falls back to the fixture until the first fetch resolves (or offline mocks).
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, user } = useAuth();
+  const uid = user?.uid;
   const queryClient = useQueryClient();
   const meQuery = useQuery({
     queryKey: qk.me,
@@ -249,31 +261,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [feedQuery.data, deckSeeded]);
 
-  // On launch, seed the feed cache from disk so the deck shows the previous
-  // cards instantly while the live query refetches. Skip if the live query
-  // already produced data (don't clobber a fresh fetch that beat the disk read).
+  // On launch, restore the persisted queries from disk so the deck/inbox/loops/
+  // profile show the previous data instantly while live queries refetch. Skip
+  // any query the live fetch already populated (don't clobber a fresh result).
   useEffect(() => {
+    if (!uid) return;
     let cancelled = false;
-    AsyncStorage.getItem(FEED_CACHE_KEY)
-      .then((raw) => {
-        if (cancelled || !raw || queryClient.getQueryData(qk.feed)) return;
-        const cached = JSON.parse(raw) as Job[];
-        if (Array.isArray(cached) && cached.length) {
-          queryClient.setQueryData<Job[]>(qk.feed, cached);
+    void Promise.all(
+      PERSISTED_QUERIES.map(async ({ name, key }) => {
+        if (queryClient.getQueryData(key)) return;
+        const raw = await AsyncStorage.getItem(cacheStorageKey(uid, name)).catch(() => null);
+        if (cancelled || !raw) return;
+        try {
+          const data = JSON.parse(raw);
+          if (data != null && !queryClient.getQueryData(key)) {
+            queryClient.setQueryData(key, data);
+          }
+        } catch {
+          /* ignore a corrupt/stale blob */
         }
-      })
-      .catch(() => {});
+      }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [queryClient]);
+  }, [uid, queryClient]);
 
-  // Persist the latest feed whenever a fresh fetch lands, for the next launch.
+  // Persist those queries to disk whenever their cache updates, keyed per-user.
   useEffect(() => {
-    if (feedQuery.isSuccess && feedQuery.data?.length) {
-      AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(feedQuery.data)).catch(() => {});
-    }
-  }, [feedQuery.isSuccess, feedQuery.data]);
+    if (!uid) return;
+    const nameByKey = new Map(PERSISTED_QUERIES.map((q) => [JSON.stringify(q.key), q.name]));
+    return queryClient.getQueryCache().subscribe((event) => {
+      const q = event?.query;
+      if (!q) return;
+      const name = nameByKey.get(JSON.stringify(q.queryKey));
+      if (!name) return;
+      const data = q.state.data;
+      if (data != null) {
+        AsyncStorage.setItem(cacheStorageKey(uid, name), JSON.stringify(data)).catch(() => {});
+      }
+    });
+  }, [uid, queryClient]);
 
   // Inbox: real threads from GET /api/outbox/threads, polled for replies. We
   // sync to the server list but keep any in-flight "drafting" placeholders on
