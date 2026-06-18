@@ -34,12 +34,15 @@ export function Chip({
   dot = false,
   icon,
   size = 'sm',
+  numberOfLines,
 }: {
   label: string;
   tone?: ChipTone;
   dot?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
   size?: 'sm' | 'lg';
+  /** Clamp the label to N lines with an ellipsis (e.g. a long comp range). */
+  numberOfLines?: number;
 }) {
   const colors = useColors();
   const isNeutral = tone === 'neutral';
@@ -74,7 +77,9 @@ export function Chip({
       ) : null}
       {icon ? <Ionicons name={icon} size={lg ? 17 : 12} color={fg} /> : null}
       <Text
+        numberOfLines={numberOfLines}
         style={{
+          flexShrink: 1,
           fontSize: lg ? 15.5 : 11,
           fontFamily: lg ? fonts.sansSemibold : fonts.sansMedium,
           color: fg,

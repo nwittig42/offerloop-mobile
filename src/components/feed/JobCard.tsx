@@ -160,7 +160,13 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
       <View style={{ gap: 14, marginTop: 18 }}>
         {job.compensation ? (
           <DetailGroup label="Compensation" center={false}>
-            <Chip label={job.compensation} tone="positive" icon="cash-outline" size="lg" />
+            <Chip
+              label={job.compensation}
+              tone="positive"
+              icon="cash-outline"
+              size="lg"
+              numberOfLines={2}
+            />
           </DetailGroup>
         ) : null}
         {job.workArrangement ? (
@@ -214,19 +220,22 @@ function DetailTile({
   icon,
   label,
   tone,
+  full,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   tone: string;
+  /** Span the full row and wrap freely (used for a long comp range). */
+  full?: boolean;
 }) {
   const colors = useColors();
   return (
     <View
       style={{
         flexGrow: 1,
-        flexBasis: '46%',
+        flexBasis: full ? '100%' : '46%',
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: full ? 'flex-start' : 'center',
         gap: 8,
         borderWidth: 1,
         borderColor: tone + '33',
@@ -235,10 +244,10 @@ function DetailTile({
         paddingHorizontal: 12,
         paddingVertical: 12,
       }}>
-      <Ionicons name={icon} size={16} color={tone} />
+      <Ionicons name={icon} size={16} color={tone} style={full ? { marginTop: 1 } : undefined} />
       <Text
-        numberOfLines={1}
-        style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}>
+        numberOfLines={full ? undefined : 1}
+        style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink, lineHeight: full ? 19 : undefined }}>
         {label}
       </Text>
     </View>
@@ -265,9 +274,10 @@ function ExpandedCard({
   const quals = job.requiredQualifications ?? [];
   const openCompany = () => router.push(`/company/${encodeURIComponent(job.company)}`);
 
-  const tiles: { icon: keyof typeof Ionicons.glyphMap; label: string; tone: string }[] = [];
+  const tiles: { icon: keyof typeof Ionicons.glyphMap; label: string; tone: string; full?: boolean }[] = [];
   if (job.compensation)
-    tiles.push({ icon: 'cash-outline', label: job.compensation, tone: colors.positive });
+    // Comp can be a long multi-location range — give it the full row to wrap.
+    tiles.push({ icon: 'cash-outline', label: job.compensation, tone: colors.positive, full: job.compensation.length > 28 });
   if (job.workArrangement)
     tiles.push({ icon: arrangementIcon(job.workArrangement), label: job.workArrangement, tone: colors.marketing });
   if (job.experienceLevel)
@@ -351,7 +361,7 @@ function ExpandedCard({
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               {tiles.map((t) => (
-                <DetailTile key={t.label} icon={t.icon} label={t.label} tone={t.tone} />
+                <DetailTile key={t.label} icon={t.icon} label={t.label} tone={t.tone} full={t.full} />
               ))}
             </View>
           </View>
