@@ -205,7 +205,9 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+        {/* Lifted clear of the floating action bar that overlaps the card's
+            lower edge, so the cue is never hidden behind the buttons. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 36 }}>
           <Ionicons name="expand-outline" size={13} color={colors.accent} />
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
             Tap anywhere to enlarge
