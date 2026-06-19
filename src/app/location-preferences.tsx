@@ -72,7 +72,7 @@ export default function LocationPreferencesScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View
         style={{
-          paddingTop: 18,
+          paddingTop: insets.top + 12,
           paddingHorizontal: 20,
           paddingBottom: 12,
           backgroundColor: colors.paper,

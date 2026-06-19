@@ -476,6 +476,33 @@ export default function ProfileScreen() {
                 This is what Offerloop uses to write like you. Keep it loose and human.
               </Text>
 
+              {/* Application profile lives here too (also in Settings) — it's what
+                  auto-apply fills on every job, so keep it easy to reach. */}
+              <Pressable onPress={() => router.push('/application-profile')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Application profile
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      What auto-apply fills in for you on every job
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
               {/* One soft card, rows separated by hairlines, no boxy inputs. */}
               <Card padded={false} style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
                 <SoftRow label="LinkedIn">
