@@ -189,6 +189,7 @@ export function appliedStatusMeta(s: AutoApplyStatus): {
     case 'submit_failed':
       return { label: 'Failed', tone: 'negative' };
     default:
-      return { label: 'In progress', tone: 'neutral' };
+      // queued / running — the slow part (Browserbase fills + submits the form)
+      return { label: 'Auto-applying…', tone: 'neutral' };
   }
 }

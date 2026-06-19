@@ -170,6 +170,39 @@ export async function fetchJobDescription(jobId: string): Promise<string> {
  * GET /api/jobs/feed, de-duped by id, mapped to the mobile Job shape. Missing
  * fields come back undefined so the card chips simply do not render.
  */
+/**
+ * Lean the deck toward the user's preferred locations without boxing them in.
+ * Jobs whose location (or remote flag) matches a preference are front-loaded,
+ * but every 4th card is a wildcard from elsewhere so the deck keeps volume and
+ * the occasional out-of-area role still shows. No prefs → untouched order.
+ * Matches on the city token (before the comma) so "New York, NY" hits a job
+ * listed as just "New York", and "Remote" matches remote roles.
+ */
+export function rankJobsByLocation(jobs: Job[], prefs: string[]): Job[] {
+  const tokens = (prefs || [])
+    .map((p) => p.split(',')[0].trim().toLowerCase())
+    .filter(Boolean);
+  if (!tokens.length) return jobs;
+
+  const matches: Job[] = [];
+  const rest: Job[] = [];
+  for (const j of jobs) {
+    const hay = `${j.location || ''} ${j.workArrangement || ''}`.toLowerCase();
+    (hay && tokens.some((t) => hay.includes(t)) ? matches : rest).push(j);
+  }
+  // Nothing to reorder if everything (or nothing) matched.
+  if (!matches.length || !rest.length) return jobs;
+
+  const out: Job[] = [];
+  let mi = 0;
+  let ri = 0;
+  while (mi < matches.length || ri < rest.length) {
+    for (let k = 0; k < 3 && mi < matches.length; k++) out.push(matches[mi++]);
+    if (ri < rest.length) out.push(rest[ri++]); // one wildcard per 3 matches
+  }
+  return out;
+}
+
 export async function fetchFeed(): Promise<Job[]> {
   if (USE_MOCKS) return MOCK_JOBS;
 

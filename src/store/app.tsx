@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { fetchFeed } from '@/api/endpoints/feed';
+import { fetchFeed, rankJobsByLocation } from '@/api/endpoints/feed';
 import { fetchInbox } from '@/api/endpoints/inbox';
 import { createLoop, fetchLoops, setLoopPaused, type LoopPeople } from '@/api/endpoints/loops';
 import { fetchMe } from '@/api/endpoints/me';
@@ -256,10 +256,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const allJobs = feedQuery.data ?? MOCK_JOBS;
   useEffect(() => {
     if (feedQuery.data && !deckSeeded) {
-      setJobs(feedQuery.data);
+      // Lean the freshly-seeded deck toward the user's preferred locations
+      // (with wildcards for volume). Done once at seed so the order doesn't
+      // reshuffle mid-swipe.
+      setJobs(rankJobsByLocation(feedQuery.data, meQuery.data?.preferredLocations ?? []));
       setDeckSeeded(true);
     }
-  }, [feedQuery.data, deckSeeded]);
+  }, [feedQuery.data, deckSeeded, meQuery.data?.preferredLocations]);
 
   // On launch, restore the persisted queries from disk so the deck/inbox/loops/
   // profile show the previous data instantly while live queries refetch. Skip

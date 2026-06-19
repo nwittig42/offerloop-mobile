@@ -23,6 +23,7 @@ type MeResponse = {
   resume: { name: string; url?: string } | null;
   linkedinUrl: string;
   phone: string;
+  preferredLocations: string[];
   targetRoles: string[];
   industries: string[];
   gradYear: string;
@@ -60,6 +61,7 @@ export async function fetchMe(): Promise<Profile> {
       : { name: 'No resume yet', updatedLabel: 'Add on offerloop.ai' },
     linkedinUrl: me.linkedinUrl || '',
     phone: me.phone || '',
+    preferredLocations: me.preferredLocations || [],
     targetRoles: me.targetRoles || [],
     industries: me.industries || [],
     gradYear: me.gradYear || '',

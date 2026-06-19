@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import {
@@ -519,11 +519,17 @@ export default function NetworkScreen() {
                     </View>
                     <View
                       style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
                         paddingHorizontal: 9,
                         paddingVertical: 4,
                         borderRadius: 8,
                         backgroundColor: toneColor + '1A',
                       }}>
+                      {!AUTO_APPLY_TERMINAL.includes(j.status) ? (
+                        <ActivityIndicator size="small" color={toneColor} />
+                      ) : null}
                       <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11.5, color: toneColor }}>
                         {meta.label}
                       </Text>

@@ -441,6 +441,7 @@ export const MOCK_PROFILE = {
   resume: { name: 'Sample_Resume.pdf', updatedLabel: 'Updated May 2026 (mock)' },
   linkedinUrl: 'linkedin.com/in/sample-student',
   phone: '(555) 010-2027',
+  preferredLocations: ['New York, NY', 'San Francisco, CA'],
   targetRoles: ['Investment Banking Analyst', 'Equity Research Associate'],
   industries: ['Investment Banking', 'Management Consulting'],
   gradYear: '2027',

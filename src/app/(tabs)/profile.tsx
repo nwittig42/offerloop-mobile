@@ -789,6 +789,59 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
+              <Pressable onPress={() => router.push('/location-preferences')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="location-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Location preferences
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      {profile.preferredLocations?.length
+                        ? profile.preferredLocations.slice(0, 3).join(' · ') +
+                          (profile.preferredLocations.length > 3 ? ' …' : '')
+                        : 'Where you’d actually take a job'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/application-profile')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Application profile
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      Work authorization + details for auto-apply
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
               <AppearanceSelector />
 
               <Card style={{ gap: 14 }}>
