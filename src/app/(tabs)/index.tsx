@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -19,8 +20,12 @@ import CooldownView from '@/components/feed/CooldownView';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import StaminaBar from '@/components/feed/StaminaBar';
-import ApplyReviewSheet from '@/components/feed/ApplyReviewSheet';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
+import {
+  getApplicationProfile,
+  isProfileReady,
+  startAutoApply,
+} from '@/api/endpoints/autoApply';
 import { ActionCircle } from '@/components/ui/Button';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
@@ -57,11 +62,21 @@ export default function FeedScreen() {
   } = useApp();
   const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
+  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  // The job whose auto-apply review sheet is open (null = closed). Set when a
-  // user swipes an eligible job with auto-apply turned on.
-  const [reviewJob, setReviewJob] = useState<Job | null>(null);
   const canAutoApply = profile.plan === 'Pro' || profile.plan === 'Elite';
+
+  // Application-profile readiness — gates auto-apply. Only fetched when the user
+  // has auto-apply on and the tier for it; cached so the swipe path is instant.
+  const appProfileQuery = useQuery({
+    queryKey: ['applicationProfile'],
+    queryFn: getApplicationProfile,
+    enabled: swipeSettings.autoApply && canAutoApply,
+  });
+  const profileReady = isProfileReady(appProfileQuery.data);
+  // Show the "set up your profile" prompt only once we know it's incomplete.
+  const needsApplyProfile =
+    swipeSettings.autoApply && canAutoApply && !!appProfileQuery.data && !profileReady;
 
   const top = jobs[0];
   const canDraft = swipesAvailable >= 1;
@@ -109,11 +124,27 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
       draftJob(job.id);
-      // Auto-apply on + this job is on a supported ATS form → open the review
-      // sheet so the user confirms one real submission. Free tier can't submit,
-      // so we don't pop the sheet for them (the backend would 403 anyway).
+      // Auto-apply on + eligible job → fire the real submission in the
+      // BACKGROUND so swiping never blocks (Sorce-style). It surfaces in the
+      // Applied tab with live status. If the application profile isn't set up
+      // yet, we don't apply — the banner + toast point them to set it up.
       if (swipeSettings.autoApply && job.autoApplyEligible && canAutoApply) {
-        setReviewJob(job);
+        if (!profileReady) {
+          showToast('Set up your application profile to auto-apply');
+        } else {
+          showToast(`Auto-applying to ${job.title} — see Network › Applied`, true);
+          startAutoApply(job.id).then((r) => {
+            if (r.ok) {
+              queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
+            } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+              showToast('Set up your application profile to auto-apply');
+            } else if (r.code === 'INSUFFICIENT_CREDITS') {
+              showToast('Not enough credits to auto-apply');
+            } else if (r.code !== 'INELIGIBLE') {
+              showToast('Could not auto-apply, try again');
+            }
+          });
+        }
       }
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -169,6 +200,33 @@ export default function FeedScreen() {
               secondsLeft={cooldownSecondsLeft}
               onRecharge={rechargeNow}
             />
+          ) : null}
+
+          {/* Auto-apply is on but the application profile isn't set up, so a
+              right swipe can't actually apply yet — point them to finish it. */}
+          {needsApplyProfile ? (
+            <Pressable
+              onPress={() => router.push('/application-profile')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 8,
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 12,
+                backgroundColor: colors.waiting + '1A',
+                borderWidth: 1,
+                borderColor: colors.waiting + '40',
+              }}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.waiting} />
+              <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.ink }}>
+                Set up your application profile to auto-apply
+              </Text>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: colors.waiting }}>
+                Set up
+              </Text>
+            </Pressable>
           ) : null}
 
           <View
@@ -234,8 +292,6 @@ export default function FeedScreen() {
           onAction={resetDeck}
         />
       )}
-
-      <ApplyReviewSheet job={reviewJob} onClose={() => setReviewJob(null)} />
     </View>
   );
 }

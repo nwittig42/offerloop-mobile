@@ -25,18 +25,22 @@ export type ApplicationProfile = {
 };
 
 export async function getApplicationProfile(): Promise<ApplicationProfile> {
-  return apiFetch<ApplicationProfile>('/api/users/application-profile');
+  // Backend wraps it: { profile, acknowledged, work_auth_complete }.
+  const r = await apiFetch<any>('/api/users/application-profile');
+  return (r?.profile ?? r ?? {}) as ApplicationProfile;
 }
 
 /** POST merges into the stored profile and stamps acknowledgedAt server-side,
- *  so saving = acknowledging. Returns the saved profile. */
+ *  so saving = acknowledging. The backend expects the profile NESTED under a
+ *  `profile` key (and returns it the same way), so wrap/unwrap here. */
 export async function saveApplicationProfile(
   patch: ApplicationProfile,
 ): Promise<ApplicationProfile> {
-  return apiFetch<ApplicationProfile>('/api/users/application-profile', {
+  const r = await apiFetch<any>('/api/users/application-profile', {
     method: 'POST',
-    body: patch,
+    body: { profile: patch },
   });
+  return (r?.profile ?? r ?? {}) as ApplicationProfile;
 }
 
 export function isProfileReady(p: ApplicationProfile | null | undefined): boolean {
@@ -116,6 +120,24 @@ export async function submitAutoApply(
     body: { dry_run: opts.dryRun ?? false, edited_answers: opts.editedAnswers || {} },
   });
   return { autoApplyId: String(r.auto_apply_id), status: r.status || 'queued' };
+}
+
+/** Fire-and-forget submit for the swipe flow — no blocking review. Returns a
+ *  discriminated result so the caller can react (profile gate, no credits, etc.)
+ *  without try/catch. The backend checks eligibility + profile BEFORE charging,
+ *  so a gate failure here never costs credits. */
+export async function startAutoApply(
+  jobId: string,
+): Promise<{ ok: true; autoApplyId: string } | { ok: false; code: string; message: string }> {
+  try {
+    const r = await submitAutoApply(jobId, { dryRun: false });
+    return { ok: true, autoApplyId: r.autoApplyId };
+  } catch (e) {
+    if (e instanceof ApiError) {
+      return { ok: false, code: (e.body?.code as string) || 'ERROR', message: e.message };
+    }
+    return { ok: false, code: 'ERROR', message: 'Could not start the application.' };
+  }
 }
 
 /** Terminal + paused states the status doc reports. */
