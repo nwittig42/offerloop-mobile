@@ -149,3 +149,46 @@ export const AUTO_APPLY_TERMINAL: AutoApplyStatus[] = [
   'needs_attention',
   'needs_verification',
 ];
+
+// ── Applied-jobs list (the "Applied" tab) ─────────────────────────────────
+
+export type AppliedJob = {
+  auto_apply_id: string;
+  job_id: string;
+  job_title: string;
+  company: string;
+  ats_platform?: string;
+  apply_url?: string;
+  status: AutoApplyStatus;
+  stage?: string;
+  dry_run?: boolean;
+  created_at?: string;
+};
+
+/** Every auto-apply this user has run, newest first. Dry-runs are filtered out
+ *  here — they're previews, not real applications, so they don't belong in a
+ *  "jobs I applied to" view. */
+export async function listAppliedJobs(): Promise<AppliedJob[]> {
+  const r = await apiFetch<{ items?: AppliedJob[] }>('/api/job-board/auto-apply/list');
+  return (r.items || []).filter((j) => !j.dry_run);
+}
+
+/** Human-facing label + tone for an application status. */
+export function appliedStatusMeta(s: AutoApplyStatus): {
+  label: string;
+  tone: 'positive' | 'waiting' | 'negative' | 'neutral';
+} {
+  switch (s) {
+    case 'submitted':
+      return { label: 'Applied', tone: 'positive' };
+    case 'needs_verification':
+      return { label: 'Needs verification', tone: 'waiting' };
+    case 'needs_attention':
+      return { label: 'Needs your input', tone: 'waiting' };
+    case 'failed':
+    case 'submit_failed':
+      return { label: 'Failed', tone: 'negative' };
+    default:
+      return { label: 'In progress', tone: 'neutral' };
+  }
+}

@@ -1,10 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+
+import {
+  AUTO_APPLY_TERMINAL,
+  appliedStatusMeta,
+  listAppliedJobs,
+  type AppliedJob,
+} from '@/api/endpoints/autoApply';
 
 import Avatar from '@/components/Avatar';
 import CompanyLogo from '@/components/CompanyLogo';
@@ -25,7 +33,7 @@ import type { TrackerRow } from '@/types';
  * move surfaced right on the row). Deep pipeline work stays on the web.
  */
 
-const TABS = ['Contacts', 'Meeting prep'] as const;
+const TABS = ['Contacts', 'Meeting prep', 'Applied'] as const;
 type TabKey = (typeof TABS)[number];
 
 function BigNumber({ value, label }: { value: number; label: string }) {
@@ -129,6 +137,20 @@ export default function NetworkScreen() {
     useApp();
   const [tab, setTab] = useState<TabKey>('Contacts');
   const [companiesOpen, setCompaniesOpen] = useState(false);
+
+  // Applications submitted via auto-apply. Fetched only when the Applied tab is
+  // open; polls every 8s while any application is still in flight (queued /
+  // running) so a submit lands without a manual refresh.
+  const appliedQuery = useQuery({
+    queryKey: ['appliedJobs'],
+    queryFn: listAppliedJobs,
+    enabled: tab === 'Applied',
+    refetchInterval: (q) => {
+      const items = q.state.data as AppliedJob[] | undefined;
+      return items?.some((j) => !AUTO_APPLY_TERMINAL.includes(j.status)) ? 8000 : false;
+    },
+  });
+  const appliedJobs = appliedQuery.data ?? [];
   const [query, setQuery] = useState('');
 
   const q = query.trim().toLowerCase();
@@ -379,7 +401,7 @@ export default function NetworkScreen() {
             pin. The full pipeline lives on offerloop.ai
           </Text>
         </ScrollView>
-      ) : (
+      ) : tab === 'Meeting prep' ? (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
           <View
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -443,6 +465,89 @@ export default function NetworkScreen() {
             }}>
             Coffee chat prep costs 15 credits and runs the same research as the web
           </Text>
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
+          {appliedQuery.isLoading ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 13.5,
+                color: colors.inkSecondary,
+                textAlign: 'center',
+                paddingVertical: 24,
+              }}>
+              Loading your applications…
+            </Text>
+          ) : appliedJobs.length === 0 ? (
+            <Card>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+                No applications yet. Turn on Auto-apply in swipe settings, then swipe right on a
+                job tagged “Auto-apply ready.” Every application you submit shows up here with its
+                status.
+              </Text>
+            </Card>
+          ) : (
+            appliedJobs.map((j) => {
+              const meta = appliedStatusMeta(j.status);
+              const toneColor =
+                meta.tone === 'positive'
+                  ? colors.positive
+                  : meta.tone === 'waiting'
+                    ? colors.waiting
+                    : meta.tone === 'negative'
+                      ? colors.negative
+                      : colors.inkTertiary;
+              return (
+                <Pressable
+                  key={j.auto_apply_id}
+                  onPress={() => j.apply_url && Linking.openURL(j.apply_url)}>
+                  <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <CompanyLogo name={j.company} size={38} radius={10} />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
+                        {j.job_title || 'Role'}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
+                        {j.company}
+                        {j.ats_platform ? ` · ${j.ats_platform}` : ''}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        paddingHorizontal: 9,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                        backgroundColor: toneColor + '1A',
+                      }}>
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11.5, color: toneColor }}>
+                        {meta.label}
+                      </Text>
+                    </View>
+                  </Card>
+                </Pressable>
+              );
+            })
+          )}
+
+          {appliedJobs.length > 0 ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                color: colors.inkTertiary,
+                textAlign: 'center',
+                paddingTop: 6,
+                lineHeight: 18,
+              }}>
+              “Needs verification” means the employer emailed a code we’re completing for you. Tap
+              an application to open it on the company site.
+            </Text>
+          ) : null}
         </ScrollView>
       )}
     </View>
