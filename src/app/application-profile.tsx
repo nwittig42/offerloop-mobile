@@ -63,7 +63,7 @@ export default function ApplicationProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const qc = useQueryClient();
-  const { showToast } = useApp();
+  const { showToast, profile } = useApp();
 
   const { data, isLoading } = useQuery({
     queryKey: ['applicationProfile'],
@@ -75,14 +75,16 @@ export default function ApplicationProfileScreen() {
   const [phone, setPhone] = useState('');
   const [linkedin, setLinkedin] = useState('');
 
-  // Hydrate the form once the stored profile loads.
+  // Hydrate from the saved application profile, falling back to what we already
+  // know from the user's Offerloop profile (LinkedIn + the phone we collected),
+  // so they don't retype it. A saved value always wins over the profile default.
   useEffect(() => {
     if (!data) return;
     setAuthorized(data.workAuthorization?.authorizedToWorkUS ?? null);
     setSponsorship(data.workAuthorization?.requiresSponsorship ?? null);
-    setPhone(data.contactInfo?.phone ?? '');
-    setLinkedin(data.contactInfo?.linkedinUrl ?? '');
-  }, [data]);
+    setPhone(data.contactInfo?.phone || profile.phone || '');
+    setLinkedin(data.contactInfo?.linkedinUrl || profile.linkedinUrl || '');
+  }, [data, profile.phone, profile.linkedinUrl]);
 
   const save = useMutation({
     mutationFn: () => {
