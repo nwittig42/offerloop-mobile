@@ -150,13 +150,52 @@ export type AutoApplyStatus =
   | 'needs_attention'   // a required field the resolver couldn't answer
   | 'needs_verification'; // ATS emailed a code; resolve via the verification flow
 
+/** A required field the filler couldn't answer — surfaced in the app so the
+ *  user can fill it, after which the backend resumes the submission. */
+export type PendingQuestion = {
+  field_id?: string;
+  question_id?: string;
+  label: string;
+  field_type?: string; // 'text' | 'textarea' | 'select'
+  options?: Array<string | { label?: string; value?: string }>;
+  required?: boolean;
+};
+
+/** Stable id for a pending question across the field_id / question_id shapes. */
+export function questionId(q: PendingQuestion): string {
+  return String(q.field_id ?? q.question_id ?? '');
+}
+
+/** Normalize an option to a display string. */
+export function optionLabel(o: string | { label?: string; value?: string }): string {
+  return typeof o === 'string' ? o : o.label ?? o.value ?? '';
+}
+
 export type AutoApplyStatusDoc = {
   status: AutoApplyStatus;
   stage?: string;
   error?: string;
   screenshot?: string;
+  job_title?: string;
+  company?: string;
+  pending_questions?: PendingQuestion[];
   [k: string]: unknown;
 };
+
+/** Answer the pending questions on a needs_attention application. The backend
+ *  saves each to the answer library (so the same question auto-fills next time),
+ *  and once all REQUIRED ones are answered it resumes the submission in the
+ *  background — no navigating back to the form, no starting over. */
+export async function resolveAutoApply(
+  autoApplyId: string,
+  answers: Record<string, string>,
+): Promise<{ status: string; pendingQuestions: PendingQuestion[] }> {
+  const r = await apiFetch<any>(
+    `/api/job-board/auto-apply/${encodeURIComponent(autoApplyId)}/resolve`,
+    { method: 'POST', body: { answers } },
+  );
+  return { status: r.status, pendingQuestions: r.pending_questions || [] };
+}
 
 export async function fetchAutoApplyStatus(autoApplyId: string): Promise<AutoApplyStatusDoc> {
   return apiFetch<AutoApplyStatusDoc>(
@@ -185,6 +224,7 @@ export type AppliedJob = {
   stage?: string;
   dry_run?: boolean;
   created_at?: string;
+  pending_questions?: PendingQuestion[];
 };
 
 /** Every auto-apply this user has run, newest first. Dry-runs are filtered out

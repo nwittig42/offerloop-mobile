@@ -501,7 +501,15 @@ export default function NetworkScreen() {
               return (
                 <Pressable
                   key={j.auto_apply_id}
-                  onPress={() => j.apply_url && Linking.openURL(j.apply_url)}>
+                  onPress={() => {
+                    // Needs-input applications open the in-app answer screen;
+                    // everything else opens the listing on the company site.
+                    if (j.status === 'needs_attention') {
+                      router.push(`/apply-questions/${j.auto_apply_id}`);
+                    } else if (j.apply_url) {
+                      Linking.openURL(j.apply_url);
+                    }
+                  }}>
                   <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <CompanyLogo name={j.company} size={38} radius={10} />
                     <View style={{ flex: 1 }}>
@@ -534,6 +542,9 @@ export default function NetworkScreen() {
                         {meta.label}
                       </Text>
                     </View>
+                    {j.status === 'needs_attention' ? (
+                      <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                    ) : null}
                   </Card>
                 </Pressable>
               );
