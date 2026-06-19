@@ -178,13 +178,28 @@ export default function ApplyQuestionsScreen() {
           <ActivityIndicator color={colors.accent} />
         </View>
       ) : pending.length === 0 ? (
-        <View style={{ padding: 24, alignItems: 'center', gap: 10 }}>
-          <Ionicons name="checkmark-circle-outline" size={40} color={colors.positive} />
-          <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, textAlign: 'center' }}>
-            Nothing left to answer — this application is back in progress.
-          </Text>
-          <Button label="Done" onPress={() => router.back()} />
-        </View>
+        (() => {
+          // No pending questions — say what's actually going on based on status,
+          // so a mid-resume doesn't read as a confusing "nothing to answer".
+          const s = data?.status;
+          const meta =
+            s === 'submitted'
+              ? { icon: 'checkmark-circle' as const, tone: colors.positive, msg: 'Submitted — you’re all set.' }
+              : s === 'needs_verification'
+                ? { icon: 'mail-unread-outline' as const, tone: colors.waiting, msg: 'The employer emailed a code — we’re completing the verification.' }
+                : s === 'failed' || s === 'submit_failed'
+                  ? { icon: 'close-circle-outline' as const, tone: colors.negative, msg: 'This application didn’t go through. Your credits were refunded.' }
+                  : { icon: 'sync-outline' as const, tone: colors.accent, msg: 'Finishing your application in the background — check back in a moment.' };
+          return (
+            <View style={{ padding: 24, alignItems: 'center', gap: 12 }}>
+              <Ionicons name={meta.icon} size={40} color={meta.tone} />
+              <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, textAlign: 'center', lineHeight: 21 }}>
+                {meta.msg}
+              </Text>
+              <Button label="Done" onPress={() => router.back()} />
+            </View>
+          );
+        })()
       ) : (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: insets.bottom + 40 }}>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>

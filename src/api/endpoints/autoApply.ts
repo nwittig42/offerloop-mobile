@@ -21,6 +21,15 @@ export type WorkAuthorization = {
 export type ApplicationProfile = {
   contactInfo?: { phone?: string | null; linkedinUrl?: string | null };
   workAuthorization?: WorkAuthorization;
+  preferences?: {
+    openToRelocation?: boolean | null;
+    openToRemote?: boolean | null;
+    earliestStartDate?: string | null;
+    expectedSalaryUsd?: number | null;
+  };
+  demographics?: { gender?: string | null; race?: string | null };
+  veteranStatus?: string | null;
+  disabilityStatus?: string | null;
   acknowledgedAt?: string | null;
 };
 
