@@ -19,6 +19,7 @@ import CooldownView from '@/components/feed/CooldownView';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import StaminaBar from '@/components/feed/StaminaBar';
+import ApplyReviewSheet from '@/components/feed/ApplyReviewSheet';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
 import { ActionCircle } from '@/components/ui/Button';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
@@ -26,6 +27,7 @@ import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import type { Job } from '@/types';
 
 /**
  * Feed: the swipe-to-draft hero. Credits on the left of the banner, full
@@ -56,6 +58,10 @@ export default function FeedScreen() {
   const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
+  // The job whose auto-apply review sheet is open (null = closed). Set when a
+  // user swipes an eligible job with auto-apply turned on.
+  const [reviewJob, setReviewJob] = useState<Job | null>(null);
+  const canAutoApply = profile.plan === 'Pro' || profile.plan === 'Elite';
 
   const top = jobs[0];
   const canDraft = swipesAvailable >= 1;
@@ -91,7 +97,7 @@ export default function FeedScreen() {
     return { transform: [{ scale: 1 + 0.22 * t }] };
   });
 
-  const handleSwiped = (direction: 'left' | 'right', job: { id: string }) => {
+  const handleSwiped = (direction: 'left' | 'right', job: Job) => {
     if (direction === 'right') {
       if (!canDraft) {
         // Out of swipes: bounce, don't spend. The card snaps back.
@@ -103,6 +109,12 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
       draftJob(job.id);
+      // Auto-apply on + this job is on a supported ATS form → open the review
+      // sheet so the user confirms one real submission. Free tier can't submit,
+      // so we don't pop the sheet for them (the backend would 403 anyway).
+      if (swipeSettings.autoApply && job.autoApplyEligible && canAutoApply) {
+        setReviewJob(job);
+      }
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       passJob(job.id);
@@ -222,6 +234,8 @@ export default function FeedScreen() {
           onAction={resetDeck}
         />
       )}
+
+      <ApplyReviewSheet job={reviewJob} onClose={() => setReviewJob(null)} />
     </View>
   );
 }

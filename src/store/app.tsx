@@ -565,7 +565,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ) => {
       const count = opts.count ?? 1;
       let action = opts.action ?? 'draft';
-      const autoApply = opts.autoApply ?? false;
       const firstIsHM = opts.firstIsHiringManager ?? true;
 
       // Off-hours guard: a swipe-to-send fired outside good sending hours
@@ -593,7 +592,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       } else {
         const verb = action === 'send' ? 'Sending to' : 'Drafted to';
-        showToast(`${verb} ${count} ${peopleWord} at ${company}${autoApply ? ', applied' : ''}`, true);
+        // Auto-apply is no longer claimed here — it's a separate, user-confirmed
+        // submission handled by the review sheet on the feed screen.
+        showToast(`${verb} ${count} ${peopleWord} at ${company}`, true);
       }
 
       const placeholderIds: string[] = [];
@@ -671,19 +672,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: qk.me });
         });
 
-      if (autoApply) {
-        idCounter.current += 1;
-        setNotifications((prev) => [
-          {
-            id: `n-apply-${idCounter.current}`,
-            kind: 'loop',
-            text: `Applied to ${jobTitle} at ${company} (mock)`,
-            timeLabel: 'Just now',
-            read: false,
-          },
-          ...prev,
-        ]);
-      }
+      // Auto-apply submission is handled on the feed screen via the review
+      // sheet (real Browserbase submit), not faked here.
     },
     [queryClient, patchProfile, showToast, spendSwipes, refundSwipe],
   );
