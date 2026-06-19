@@ -210,7 +210,7 @@ type AppStore = {
   updateProfile: (patch: Partial<Profile>) => void;
   /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
   enrichLinkedin: (url: string) => Promise<EnrichResult>;
-  addLoop: (brief: string, people?: LoopPeople) => void;
+  addLoop: (brief: string, people?: LoopPeople, autoSend?: boolean) => void;
   toggleLoop: (id: string) => void;
   addMeetingPrep: (input: { name: string; linkedinUrl: string }) => Promise<string>;
   showToast: (message: string, showInboxAction?: boolean) => void;
@@ -814,7 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addLoop = useCallback(
-    (brief: string, people?: LoopPeople) => {
+    (brief: string, people?: LoopPeople, autoSend?: boolean) => {
       idCounter.current += 1;
       // Optimistically show the new Loop, then create it server-side and
       // re-sync from the fleet (which fills in real counts + auto-start state).
@@ -830,7 +830,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         ...prev,
       ]);
-      createLoop(brief, people)
+      createLoop(brief, people, autoSend)
         .catch(() => showToast('Could not create the Loop, try again'))
         .finally(() => queryClient.invalidateQueries({ queryKey: qk.loops }));
     },

@@ -78,13 +78,22 @@ export async function runLoopNow(id: string): Promise<void> {
  *  employees (0-5), same split as the job board's Find People panel. */
 export type LoopPeople = { hmPerCycle: number; employeesPerCycle: number };
 
-/** Create + auto-start a Loop from a natural-language brief + per-cycle mix. */
-export async function createLoop(brief: string, people?: LoopPeople): Promise<void> {
+/** Create + auto-start a Loop from a natural-language brief + per-cycle mix.
+ *  When autoSend is true the Loop sends for the user (reviewBeforeSend:false →
+ *  backend derives autoSendMode "send_for_me"); otherwise it drafts for review.
+ *  An auto-send still has to clear the send gate (Gmail connected, email
+ *  verified, quiet hours, tier, daily cap) before anything actually goes out. */
+export async function createLoop(
+  brief: string,
+  people?: LoopPeople,
+  autoSend?: boolean,
+): Promise<void> {
   if (USE_MOCKS) return;
   await apiFetch('/api/agent/loops', {
     method: 'POST',
     body: {
       briefText: brief,
+      reviewBeforeSend: !autoSend,
       ...(people
         ? { hmPerCycle: people.hmPerCycle, employeesPerCycle: people.employeesPerCycle }
         : {}),

@@ -115,6 +115,9 @@ export default function LoopsScreen() {
   // Per-cycle people mix the loop aims for (caps). Defaults mirror the backend.
   const [hmPerCycle, setHmPerCycle] = useState(1);
   const [employeesPerCycle, setEmployeesPerCycle] = useState(3);
+  // Off by default — the Loop drafts for review. On flips it to send-for-me
+  // (still subject to the backend send gate: Gmail, verified email, quiet hours).
+  const [autoSend, setAutoSend] = useState(false);
 
   // Loop briefs suggested from the user's own profile, so they can tap
   // instead of writing one from scratch.
@@ -138,12 +141,17 @@ export default function LoopsScreen() {
   const create = () => {
     const trimmed = brief.trim();
     if (!trimmed) return;
-    addLoop(trimmed, { hmPerCycle, employeesPerCycle });
+    addLoop(trimmed, { hmPerCycle, employeesPerCycle }, autoSend);
     setBrief('');
     setHmPerCycle(1);
     setEmployeesPerCycle(3);
+    setAutoSend(false);
     setComposing(false);
-    showToast('Loop created — it starts working on its next cycle');
+    showToast(
+      autoSend
+        ? 'Loop created — it sends for you once contacts are verified'
+        : 'Loop created — it drafts outreach for your review',
+    );
   };
 
   return (
@@ -264,6 +272,58 @@ export default function LoopsScreen() {
                   onChange={setEmployeesPerCycle}
                 />
               </View>
+
+              {/* Send mode — off by default (drafts for review). On flips the
+                  Loop to send-for-me; the backend gate still guards every send
+                  (Gmail connected, email verified, 8a–10p, daily cap). */}
+              <Pressable
+                onPress={() => setAutoSend((v) => !v)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  borderWidth: 1,
+                  borderColor: autoSend ? colors.accent : colors.hairline,
+                  borderRadius: 10,
+                  paddingVertical: 9,
+                  paddingHorizontal: 11,
+                  backgroundColor: autoSend ? colors.accent + '12' : colors.paper2,
+                }}>
+                <Ionicons
+                  name={autoSend ? 'paper-plane' : 'create-outline'}
+                  size={18}
+                  color={colors.accent}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>
+                    {autoSend ? 'Send for me automatically' : 'Draft for my review'}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.inkTertiary }}>
+                    {autoSend
+                      ? 'Sends once a contact’s email is verified'
+                      : 'Creates Gmail drafts you send yourself'}
+                  </Text>
+                </View>
+                {/* Pill toggle */}
+                <View
+                  style={{
+                    width: 44,
+                    height: 26,
+                    borderRadius: 13,
+                    padding: 3,
+                    backgroundColor: autoSend ? colors.accent : colors.hairline,
+                    alignItems: autoSend ? 'flex-end' : 'flex-start',
+                  }}>
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      backgroundColor: colors.paper,
+                    }}
+                  />
+                </View>
+              </Pressable>
 
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button label="Create Loop" onPress={create} disabled={!brief.trim()} />
