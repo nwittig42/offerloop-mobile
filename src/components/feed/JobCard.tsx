@@ -156,6 +156,28 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         </View>
       </View>
 
+      {/* Auto-apply eligibility — only shown when the backend tagged this job as
+          a Greenhouse/Lever/Ashby form the auto-apply runner can actually fill. */}
+      {job.autoApplyEligible ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            alignSelf: 'flex-start',
+            marginTop: 14,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 8,
+            backgroundColor: colors.navy + '12',
+          }}>
+          <Ionicons name="flash" size={13} color={colors.navy} />
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.navy }}>
+            Auto-apply ready
+          </Text>
+        </View>
+      ) : null}
+
       {/* Labeled detail sections — each renders only when the data exists. */}
       <View style={{ gap: 14, marginTop: 18 }}>
         {job.compensation ? (

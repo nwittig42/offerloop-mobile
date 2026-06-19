@@ -145,6 +145,10 @@ function mapJob(raw: RawJob): Job {
     companySize: undefined,
     description,
     requiredQualifications: requirements,
+    // Auto-apply eligibility comes straight off the feed (backend jobs.py tags
+    // every job with auto_apply_eligible + ats_platform and sorts eligible first).
+    autoApplyEligible: !!raw.auto_apply_eligible,
+    atsPlatform: raw.ats_platform || undefined,
   };
 }
 

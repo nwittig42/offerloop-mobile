@@ -11,6 +11,9 @@ export type Job = {
   companySize?: string;
   description: string;
   requiredQualifications?: string[];
+  /** Backend feed flags (jobs.py): can this job be auto-applied to, and which ATS. */
+  autoApplyEligible?: boolean;
+  atsPlatform?: string;
 };
 
 export type CompanyInfo = {

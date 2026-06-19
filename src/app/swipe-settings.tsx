@@ -214,10 +214,34 @@ export default function SwipeSettingsScreen() {
             </View>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 17 }}>
               Applying is the accent, not the point. Offerloop is about networking your way
-              in, the application just gives your outreach a reason to exist. Auto-apply is
-              a mock preview for now.
+              in, the application just gives your outreach a reason to exist. We only apply to
+              jobs marked “Auto-apply ready,” and you review each one before it submits.
             </Text>
+            {autoApply ? (
+              <Pressable
+                onPress={() => router.push('/application-profile')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingTop: 10,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.hairlineLight,
+                }}>
+                <Ionicons name="person-circle-outline" size={18} color={colors.accent} />
+                <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
+                  Set up your application profile
+                </Text>
+                <Ionicons name="chevron-forward" size={15} color={colors.accent} />
+              </Pressable>
+            ) : null}
           </Card>
+          {autoApply ? (
+            <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, paddingHorizontal: 4 }}>
+              Auto-apply is a Pro/Elite feature. Work authorization is required before the
+              first submission.
+            </Text>
+          ) : null}
         </View>
 
         {/* What rides along with every swipe */}
