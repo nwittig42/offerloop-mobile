@@ -16,12 +16,14 @@ const KIND_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   draft_ready: 'document-text-outline',
   reply: 'chatbubble-ellipses-outline',
   loop: 'sync-outline',
+  auto_apply_attention: 'alert-circle-outline',
 };
 
 const kindColor = (c: Palette): Record<string, string> => ({
   draft_ready: c.accent,
   reply: c.positive,
   loop: c.navy,
+  auto_apply_attention: c.waiting,
 });
 
 export default function NotificationsScreen() {
@@ -74,7 +76,10 @@ export default function NotificationsScreen() {
             <Pressable
               key={n.id}
               onPress={() => {
-                if (n.outreachId) {
+                if (n.kind === 'auto_apply_attention' && n.autoApplyId) {
+                  router.back();
+                  router.push(`/apply-questions/${n.autoApplyId}`);
+                } else if (n.outreachId) {
                   router.back();
                   router.push(`/outreach/${n.outreachId}`);
                 }

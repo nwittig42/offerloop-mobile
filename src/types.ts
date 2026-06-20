@@ -80,11 +80,13 @@ export type OutreachItem = {
 
 export type NotificationItem = {
   id: string;
-  kind: 'draft_ready' | 'reply' | 'loop';
+  kind: 'draft_ready' | 'reply' | 'loop' | 'auto_apply_attention';
   text: string;
   timeLabel: string;
   read: boolean;
   outreachId?: string;
+  /** For auto_apply_attention: the application to open and answer. */
+  autoApplyId?: string;
 };
 
 export type Loop = {
