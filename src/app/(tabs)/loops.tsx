@@ -331,7 +331,22 @@ export default function LoopsScreen() {
               </View>
             </Card>
           ) : (
-            <Button label="New Loop" variant="accent" onPress={() => setComposing(true)} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="New Loop"
+                  variant="accent"
+                  fullWidth
+                  onPress={() => setComposing(true)}
+                />
+              </View>
+              <Button
+                label="Open on web"
+                variant="outline"
+                icon="open-outline"
+                onPress={() => Linking.openURL('https://offerloop.ai')}
+              />
+            </View>
           )}
 
           {loops.map((loop) => {

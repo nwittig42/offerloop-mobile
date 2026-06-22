@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -23,12 +23,23 @@ export default function NewMeetingPrepScreen() {
   const router = useRouter();
   const { addMeetingPrep, showToast } = useApp();
   const colors = useColors();
+  const { scanned } = useLocalSearchParams<{ scanned?: string }>();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<MeetingPrepPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const lastPreviewed = useRef('');
+
+  // A URL handed back from the QR scanner seeds the field (which kicks off the
+  // preview effect below). Guarded so editing the field afterward isn't undone.
+  const seededFromScan = useRef('');
+  useEffect(() => {
+    if (scanned && typeof scanned === 'string' && scanned !== seededFromScan.current) {
+      seededFromScan.current = scanned;
+      setUrl(scanned);
+    }
+  }, [scanned]);
 
   // Free "who is this" lookup once a real LinkedIn URL is entered, so the user
   // confirms the right person before spending 15 credits. Debounced; never
@@ -130,10 +141,11 @@ export default function NewMeetingPrepScreen() {
 
           <Pressable
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            onPress={() => {}}>
-            <Ionicons name="qr-code-outline" size={16} color={colors.inkTertiary} />
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-              QR scan for career fairs arrives with real wiring
+            onPress={() => router.push('/scan-linkedin')}
+            accessibilityRole="button">
+            <Ionicons name="qr-code-outline" size={16} color={colors.accent} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+              Scan a LinkedIn QR at a career fair
             </Text>
           </Pressable>
         </Card>

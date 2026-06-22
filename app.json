@@ -48,6 +48,12 @@
           "icon": "./assets/images/offerloop-mark.png",
           "color": "#2563EB"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Offerloop uses the camera to scan a LinkedIn QR code at career fairs and start a meeting prep."
+        }
       ]
     ],
     "experiments": {
