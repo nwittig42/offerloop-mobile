@@ -1,8 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -26,6 +34,128 @@ import { fonts } from '@/theme/tokens';
  * auto-fills on the next job.
  */
 
+/** Best-guess answer pulled from the user's profile, so questions we already
+ *  know the answer to (their school) come pre-filled instead of blank. Returns
+ *  '' when we have nothing — the field then renders empty as before. */
+function profileDefault(q: PendingQuestion, profile: { school?: string } | null | undefined): string {
+  const label = (q.label || '').toLowerCase();
+  if (/school|university|college|institution|alma mater/.test(label) && profile?.school) {
+    return profile.school;
+  }
+  return '';
+}
+
+/** Above this many options a chip wall is unusable — switch to a searchable,
+ *  typeable combobox (the SpaceX "School" field ships ~hundreds of options). */
+const SEARCHABLE_THRESHOLD = 10;
+/** How many matches to show under the search box at once. */
+const MAX_VISIBLE_MATCHES = 30;
+
+function FieldLabel({ q }: { q: PendingQuestion }) {
+  const colors = useColors();
+  return (
+    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
+      {q.label}
+      {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
+    </Text>
+  );
+}
+
+/** A long select rendered as type-to-search with a free-text fallback: the
+ *  backend often sends only the first page of a typeahead's options (e.g. the
+ *  "A" universities), so the right answer may not be in the list at all. We let
+ *  the user filter what's there AND submit whatever they typed. */
+function SearchableSelect({
+  q,
+  options,
+  value,
+  onChange,
+}: {
+  q: PendingQuestion;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const colors = useColors();
+  const [open, setOpen] = useState(false);
+
+  const typed = value.trim();
+  const lower = typed.toLowerCase();
+  const exact = options.some((o) => o.toLowerCase() === lower);
+  const matches = (
+    typed ? options.filter((o) => o.toLowerCase().includes(lower)) : options
+  ).slice(0, MAX_VISIBLE_MATCHES);
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <FieldLabel q={q} />
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Ionicons name="search-outline" size={16} color={colors.inkTertiary} />
+        <TextInput
+          value={value}
+          onChangeText={(v) => {
+            onChange(v);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Type to search…"
+          placeholderTextColor={colors.inkTertiary}
+          style={{
+            flex: 1,
+            fontFamily: fonts.sans,
+            fontSize: 15,
+            color: colors.ink,
+            borderWidth: 1,
+            borderColor: colors.hairline,
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}
+        />
+      </View>
+
+      {/* Once they've landed on an exact option we collapse the list. */}
+      {open && !exact ? (
+        <View style={{ gap: 2 }}>
+          {matches.map((o, i) => (
+            <Pressable
+              key={`${o}-${i}`}
+              onPress={() => {
+                onChange(o);
+                setOpen(false);
+                Keyboard.dismiss();
+              }}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                borderRadius: 8,
+                backgroundColor: colors.paper2,
+              }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                {o}
+              </Text>
+            </Pressable>
+          ))}
+          {typed.length > 0 && matches.length === 0 ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                color: colors.inkTertiary,
+                paddingHorizontal: 4,
+                paddingTop: 2,
+                lineHeight: 17,
+              }}>
+              Not in the list — we’ll use “{typed}”.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 function QuestionField({
   q,
   value,
@@ -36,20 +166,20 @@ function QuestionField({
   onChange: (v: string) => void;
 }) {
   const colors = useColors();
-  const options = q.options ?? [];
+  const options = (q.options ?? []).map(optionLabel).filter(Boolean);
   const isSelect = (q.field_type === 'select' || options.length > 0) && options.length > 0;
+
+  if (isSelect && options.length > SEARCHABLE_THRESHOLD) {
+    return <SearchableSelect q={q} options={options} value={value} onChange={onChange} />;
+  }
 
   return (
     <Card style={{ gap: 10 }}>
-      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
-        {q.label}
-        {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
-      </Text>
+      <FieldLabel q={q} />
 
       {isSelect ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {options.map((o, i) => {
-            const label = optionLabel(o);
+          {options.map((label, i) => {
             const selected = value === label;
             return (
               <Pressable
@@ -105,7 +235,7 @@ export default function ApplyQuestionsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const qc = useQueryClient();
-  const { showToast } = useApp();
+  const { showToast, profile } = useApp();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const { data, isLoading } = useQuery({
@@ -116,6 +246,27 @@ export default function ApplyQuestionsScreen() {
 
   const pending = data?.pending_questions ?? [];
   const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  // Seed answers we already know from the profile (e.g. a "School / University"
+  // dropdown — it's on the profile, the user shouldn't have to hunt for it). One
+  // pass per question, never clobbering anything the user has touched.
+  useEffect(() => {
+    if (!pending.length) return;
+    setAnswers((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const q of pending) {
+        const qid = questionId(q);
+        if (next[qid] != null) continue;
+        const guess = profileDefault(q, profile);
+        if (guess) {
+          next[qid] = guess;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pending, profile]);
 
   const requiredAnswered = pending
     .filter((q) => q.required)
