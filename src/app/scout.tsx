@@ -12,19 +12,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Chip from '@/components/ui/Chip';
+import { sendScoutMessage, type ScoutTurn } from '@/api/endpoints/scout';
 import Input from '@/components/ui/Input';
-import { MOCK_SCOUT_CHATS } from '@/mocks/data';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
  * Scout, the AI assistant, as a summonable sheet. A small history sidebar
- * (like Claude's) holds previous chats and a New chat button, tucked behind
- * a button so it never crowds the conversation. Phase 1 is a clearly
- * labeled mock so the interaction can be felt; real Scout wires up in
- * Phase 3 against the existing backend service.
+ * holds a New chat button, tucked behind a button so it never crowds the
+ * conversation. The chat is live against the real backend service
+ * (/api/scout-assistant/chat) — it answers with the user's resume + pipeline.
  */
 
 type Message = { from: 'user' | 'scout'; text: string };
@@ -39,51 +37,69 @@ export default function ScoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
-  const { jobs } = useApp();
+  const { jobs, profile } = useApp();
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
 
   const job = jobId ? jobs.find((j) => j.id === jobId) : undefined;
 
   const greeting = job
-    ? `You are looking at ${job.title} at ${job.company}. I am a mock preview for now, but ask me anything and you will see how this conversation will flow.`
-    : 'Hey, I am Scout. I am a mock preview for now, but ask me anything and you will see how this conversation will flow.';
+    ? `You're looking at ${job.title} at ${job.company}. Ask me how to position yourself, who to reach, or what to say — I've got your resume and pipeline.`
+    : "Hey, I'm Scout. Ask me anything about your search — who to reach at a company, what to say in a coffee chat, or which jobs fit your resume.";
 
   const [messages, setMessages] = useState<Message[]>([{ from: 'scout', text: greeting }]);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const chatId = useRef<string | null>(null);
+
+  const userInfo = {
+    name: profile.name,
+    tier: (profile.plan || 'Free').toLowerCase(),
+    credits: profile.credits,
+    max_credits: profile.maxCredits,
+  };
 
   const newChat = () => {
+    chatId.current = null;
     setMessages([{ from: 'scout', text: greeting }]);
     setHistoryOpen(false);
   };
 
-  const openChat = (title: string) => {
-    setMessages([
-      { from: 'scout', text: `Picking up "${title}". This is a mock of an archived chat.` },
-    ]);
-    setHistoryOpen(false);
-  };
-
-  const send = (text: string) => {
+  const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || thinking) return;
+
+    // History = the conversation so far, minus the synthetic greeting (index 0).
+    const history: ScoutTurn[] = messages.slice(1).map((m) => ({
+      role: m.from === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+
     setMessages((prev) => [...prev, { from: 'user', text: trimmed }]);
     setDraft('');
     setThinking(true);
-    setTimeout(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+
+    try {
+      const res = await sendScoutMessage({
+        message: trimmed,
+        history,
+        currentPage: job ? '/job-board' : '/home',
+        userInfo,
+        chatId: chatId.current,
+      });
+      if (res.chatId) chatId.current = res.chatId;
+      setMessages((prev) => [...prev, { from: 'scout', text: res.message }]);
+    } catch {
       setMessages((prev) => [
         ...prev,
-        {
-          from: 'scout',
-          text: 'Fixture reply: the real Scout answers with your resume, your pipeline, and live data once Phase 3 wires the backend. This preview is here so the feel of the chat can be tuned now.',
-        },
+        { from: 'scout', text: "I hit a snag reaching the server — give it another try in a moment." },
       ]);
+    } finally {
       setThinking(false);
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 1100);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    }
   };
 
   return (
@@ -306,23 +322,11 @@ export default function ScoutScreen() {
                 New chat
               </Text>
             </Pressable>
-            <ScrollView contentContainerStyle={{ gap: 2, paddingTop: 4 }}>
-              {MOCK_SCOUT_CHATS.map((chat) => (
-                <Pressable
-                  key={chat.id}
-                  onPress={() => openChat(chat.title)}
-                  style={{ paddingVertical: 9, paddingHorizontal: 10, borderRadius: 8 }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {chat.title}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.inkTertiary }}>
-                    {chat.timeLabel}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <View style={{ paddingTop: 16, paddingHorizontal: 4 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, lineHeight: 18 }}>
+                Saved chat history is coming soon. New chat starts a fresh thread.
+              </Text>
+            </View>
           </View>
           <Pressable
             onPress={() => setHistoryOpen(false)}
