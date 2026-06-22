@@ -145,6 +145,12 @@ const PERSISTED_QUERIES: { name: string; key: readonly unknown[] }[] = [
 ];
 const cacheStorageKey = (uid: string, name: string) =>
   `offerloop.cache.${uid}.${name}.${PERSIST_CACHE_VERSION}`;
+// First-run onboarding completion, stored per-user (separate from the query
+// cache above — it's a single flag, not a restorable blob). Bump the version to
+// re-show the flow to everyone after a redesign.
+const onboardingStorageKey = (uid: string) => `offerloop.onboarding.${uid}.v1`;
+// Dev override: always start at onboarding on launch (set in .env / eas profile).
+const FORCE_ONBOARDING = process.env.EXPO_PUBLIC_FORCE_ONBOARDING === '1';
 const REAL_COOLDOWN_HOURS: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 4, Elite: 3 };
 const MOCK_COOLDOWN_SECONDS = 60; // demo timer, stands in for REAL_COOLDOWN_HOURS
 
@@ -208,6 +214,15 @@ type AppStore = {
   markOutreachSent: (id: string) => void;
   markNotificationsRead: () => void;
   updateProfile: (patch: Partial<Profile>) => void;
+  /**
+   * First-run onboarding gate. `null` while the per-user flag is still loading
+   * from disk (the auth gate waits on this before routing); `false` → show the
+   * flow; `true` → completed. completeOnboarding() persists done; resetOnboarding()
+   * replays it (dev).
+   */
+  onboardingDone: boolean | null;
+  completeOnboarding: () => void;
+  resetOnboarding: () => void;
   /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
   enrichLinkedin: (url: string) => Promise<EnrichResult>;
   addLoop: (brief: string, people?: LoopPeople, autoSend?: boolean) => void;
@@ -263,6 +278,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDeckSeeded(true);
     }
   }, [feedQuery.data, deckSeeded, meQuery.data?.preferredLocations]);
+
+  // First-run onboarding flag, loaded per-user from disk. `null` until resolved
+  // so the auth gate doesn't flash the feed before deciding. FORCE_ONBOARDING
+  // (dev) skips the read and always starts the flow.
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!uid) {
+      setOnboardingDone(null);
+      return;
+    }
+    if (FORCE_ONBOARDING) {
+      setOnboardingDone(false);
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(onboardingStorageKey(uid))
+      .then((v) => {
+        if (!cancelled) setOnboardingDone(v === '1');
+      })
+      .catch(() => {
+        if (!cancelled) setOnboardingDone(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  const completeOnboarding = useCallback(() => {
+    setOnboardingDone(true);
+    if (uid) AsyncStorage.setItem(onboardingStorageKey(uid), '1').catch(() => {});
+  }, [uid]);
+
+  const resetOnboarding = useCallback(() => {
+    setOnboardingDone(false);
+    if (uid) AsyncStorage.removeItem(onboardingStorageKey(uid)).catch(() => {});
+  }, [uid]);
 
   // On launch, restore the persisted queries from disk so the deck/inbox/loops/
   // profile show the previous data instantly while live queries refetch. Skip
@@ -910,6 +961,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markOutreachSent,
       markNotificationsRead,
       updateProfile,
+      onboardingDone,
+      completeOnboarding,
+      resetOnboarding,
       enrichLinkedin: enrichLinkedinProfile,
       addLoop,
       toggleLoop,
@@ -952,6 +1006,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markOutreachSent,
       markNotificationsRead,
       updateProfile,
+      onboardingDone,
+      completeOnboarding,
+      resetOnboarding,
       enrichLinkedinProfile,
       addLoop,
       toggleLoop,

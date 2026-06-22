@@ -78,21 +78,39 @@ export default function RootLayout() {
   );
 }
 
-/** Redirect between the auth stack and the app based on sign-in status. */
+/** Redirect between the auth stack, the first-run onboarding, and the app based
+ *  on sign-in + onboarding status. */
 function useAuthGate() {
   const { status } = useAuth();
+  const { onboardingDone } = useApp();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (status === 'loading') return;
     const inAuthGroup = segments[0] === '(auth)';
-    if (status === 'signedOut' && !inAuthGroup) {
-      router.replace('/(auth)/welcome');
-    } else if (status === 'signedIn' && inAuthGroup) {
+    const inOnboarding = segments[0] === '(onboarding)';
+
+    if (status === 'signedOut') {
+      if (!inAuthGroup) router.replace('/(auth)/welcome');
+      return;
+    }
+
+    // Signed in. Leave the auth stack first.
+    if (inAuthGroup) {
+      router.replace('/');
+      return;
+    }
+
+    // Wait for the per-user onboarding flag to load before deciding (null), so
+    // we don't flash the feed and then yank the user into onboarding.
+    if (onboardingDone === null) return;
+    if (!onboardingDone && !inOnboarding) {
+      router.replace('/(onboarding)');
+    } else if (onboardingDone && inOnboarding) {
       router.replace('/');
     }
-  }, [status, segments, router]);
+  }, [status, onboardingDone, segments, router]);
 
   return status;
 }
@@ -128,6 +146,7 @@ function ThemedShell() {
           contentStyle: { backgroundColor: colors.surface },
         }}>
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="design" options={{ presentation: 'modal' }} />
         <Stack.Screen name="notifications" options={{ presentation: 'modal' }} />

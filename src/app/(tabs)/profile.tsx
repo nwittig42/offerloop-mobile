@@ -237,6 +237,7 @@ export default function ProfileScreen() {
     setNotificationsEnabled,
     updateProfile,
     enrichLinkedin,
+    resetOnboarding,
     showToast,
   } = useApp();
 
@@ -912,6 +913,18 @@ export default function ProfileScreen() {
                 />
               </Card>
               <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
+              {__DEV__ ? (
+                <Button
+                  label="Replay onboarding"
+                  variant="outline"
+                  onPress={() => {
+                    // Clears the per-user completion flag; the root auth gate
+                    // then routes back into (onboarding) automatically.
+                    resetOnboarding();
+                    showToast('Onboarding reset — restarting the flow');
+                  }}
+                />
+              ) : null}
             </>
           ) : null}
         </View>
