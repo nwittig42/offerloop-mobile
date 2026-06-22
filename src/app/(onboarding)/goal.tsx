@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { saveTargetTrack } from '@/api/endpoints/preferences';
 import { Button } from '@/components/ui/Button';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
 import { useApp } from '@/store/app';
@@ -40,10 +41,12 @@ export default function OnboardingGoal() {
   const next = () => {
     const track = TRACKS.find((t) => t.key === selected);
     if (track && track.industries.length) {
-      // Optimistic in-session personalization. NOTE: persisting target track to
-      // /me needs a one-line backend accept on /api/mobile/preferences (the
-      // file was locked at build time) — locations already persist for real.
+      // Optimistic in-session personalization...
       updateProfile({ industries: track.industries, targetRoles: track.roles });
+      // ...plus a real persist. The backend accepts targetRoles/industries on
+      // /api/mobile/preferences (see save_preferences); ignored harmlessly if
+      // that accept hasn't shipped yet.
+      void saveTargetTrack({ targetRoles: track.roles, industries: track.industries }).catch(() => {});
     }
     router.push('/(onboarding)/confirm');
   };

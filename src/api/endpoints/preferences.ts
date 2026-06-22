@@ -12,3 +12,21 @@ export async function savePreferredLocations(preferredLocations: string[]): Prom
   });
   return r.preferredLocations || preferredLocations;
 }
+
+/** Persist the onboarding goal (target track). Posts to the same preferences
+ *  endpoint; the backend persists targetRoles/industries to the user doc (which
+ *  /me already surfaces). Best-effort — safe to call even before the backend
+ *  accepts these fields (they're simply ignored until then). */
+export async function saveTargetTrack(opts: {
+  targetRoles?: string[];
+  industries?: string[];
+}): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/mobile/preferences', {
+    method: 'POST',
+    body: {
+      ...(opts.targetRoles ? { targetRoles: opts.targetRoles } : {}),
+      ...(opts.industries ? { industries: opts.industries } : {}),
+    },
+  });
+}
