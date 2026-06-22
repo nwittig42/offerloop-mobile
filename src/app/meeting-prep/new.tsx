@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { isInsufficientCredits } from '@/api/errors';
+import { previewMeetingPrep, type MeetingPrepPreview } from '@/api/endpoints/meetingPreps';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+
+const looksLikeLinkedIn = (u: string) => /linkedin\.com\/in\//i.test(u.trim());
 
 /**
  * New meeting prep: paste a LinkedIn URL and get a real brief on the person
@@ -23,8 +26,44 @@ export default function NewMeetingPrepScreen() {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<MeetingPrepPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const lastPreviewed = useRef('');
+
+  // Free "who is this" lookup once a real LinkedIn URL is entered, so the user
+  // confirms the right person before spending 15 credits. Debounced; never
+  // blocks — a miss just leaves the manual name field in charge.
+  useEffect(() => {
+    const u = url.trim().replace(/[?#].*$/, '').replace(/\/$/, '');
+    if (!looksLikeLinkedIn(u)) {
+      setPreview(null);
+      return;
+    }
+    if (u === lastPreviewed.current) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setPreviewing(true);
+      try {
+        const p = await previewMeetingPrep(u);
+        if (cancelled) return;
+        lastPreviewed.current = u;
+        setPreview(p);
+        // Pre-fill the name if we found one and the user hasn't typed their own.
+        if (p.found && p.name && !name.trim()) setName(p.name);
+      } catch {
+        if (!cancelled) setPreview(null);
+      } finally {
+        if (!cancelled) setPreviewing(false);
+      }
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [url, name]);
 
   const canGenerate = url.trim().length > 0 && !busy;
+  const firstName = (preview?.name || name).trim().split(/\s+/)[0] || '';
 
   const generate = async () => {
     if (!canGenerate) return;
@@ -99,8 +138,46 @@ export default function NewMeetingPrepScreen() {
           </Pressable>
         </Card>
 
+        {previewing ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 }}>
+            <ActivityIndicator size="small" color={colors.navy} />
+            <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
+              Looking up this profile…
+            </Text>
+          </View>
+        ) : preview?.found ? (
+          <Card style={{ gap: 4, borderColor: colors.positive + '44', borderWidth: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.positive} />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.heading, flex: 1 }}>
+                {preview.name}
+              </Text>
+            </View>
+            {preview.title || preview.company ? (
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.ink }}>
+                {[preview.title, preview.company].filter(Boolean).join(' · ')}
+              </Text>
+            ) : null}
+            {preview.location || preview.school ? (
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                {[preview.school, preview.location].filter(Boolean).join(' · ')}
+              </Text>
+            ) : null}
+          </Card>
+        ) : preview && !preview.found ? (
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, paddingHorizontal: 4, lineHeight: 18 }}>
+            Couldn’t pull this profile automatically — you can still prep with the name above.
+          </Text>
+        ) : null}
+
         <Button
-          label={busy ? 'Starting prep...' : 'Prep this person'}
+          label={
+            busy
+              ? 'Starting prep...'
+              : preview?.found && firstName
+                ? `Prep ${firstName}`
+                : 'Prep this person'
+          }
           size="lg"
           fullWidth
           disabled={!canGenerate}
