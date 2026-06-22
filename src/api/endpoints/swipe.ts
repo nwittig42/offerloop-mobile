@@ -67,7 +67,9 @@ async function promptSearch(
 ): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
   const res = await apiFetch<PromptSearchResponse>('/api/prompt-search', {
     method: 'POST',
-    body: { prompt, batchSize, mode },
+    // notify_draft_ready: persist a durable "draft ready" bell item + push,
+    // keyed to the real saved contact (web doesn't set this).
+    body: { prompt, batchSize, mode, notify_draft_ready: true },
   });
   return { contacts: res.contacts || [], creditsRemaining: res.credits_remaining };
 }

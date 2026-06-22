@@ -658,6 +658,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } else {
             queryClient.invalidateQueries({ queryKey: qk.me });
           }
+          // The backend just wrote a durable draft_ready bell item; pull it so
+          // the optimistic client item is replaced by the persisted one (which
+          // survives a reload and deep-links to the real conversation).
+          if (foundCount > 0) {
+            queryClient.invalidateQueries({ queryKey: qk.notifications });
+          }
         })
         .catch((err) => {
           if (isInsufficientCredits(err)) {

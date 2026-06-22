@@ -21,12 +21,27 @@ export function configureNotificationHandler(): void {
   if (handlerConfigured) return;
   handlerConfigured = true;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+      // A draft-ready push fires seconds after the user's own swipe — don't
+      // banner/sound over it while the app is foreground (this handler only runs
+      // in foreground). It still lands in the OS list + the in-app bell, and
+      // banners normally when the app is backgrounded.
+      const type = (notification?.request?.content?.data as any)?.type;
+      if (type === 'draft_ready') {
+        return {
+          shouldShowBanner: false,
+          shouldShowList: true,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+        };
+      }
+      return {
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 
