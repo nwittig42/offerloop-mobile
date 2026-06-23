@@ -188,8 +188,8 @@ export default function Onboarding() {
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Your edge</Text>
           </View>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Shared background is the strongest opener in a cold email. Offerloop leans on your school,
-            path, and resume to find people most likely to reply — and writes the intro for you.
+            Shared background is the best opener in a cold email — so we use your school, path, and
+            resume to find people likely to reply, and write the intro for you.
           </Text>
         </Card>
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, marginBottom: 4 }}>Where do you want to land?</Text>
@@ -217,7 +217,7 @@ export default function Onboarding() {
           total={TOTAL}
           canBack={false}
           title="That's the magic"
-          subtitle="We're drafting a personalized intro right now — it'll be waiting in your Inbox. That's all a swipe does."
+          subtitle="A personalized intro is drafting now — it'll be in your Inbox. That's all one swipe does."
           footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />}>
           <View style={{ alignItems: 'center', paddingTop: 12, gap: 16 }}>
             <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.positive + '18', alignItems: 'center', justifyContent: 'center' }}>
