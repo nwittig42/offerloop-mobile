@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { track } from '@/lib/analytics';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -43,6 +44,7 @@ export function OnboardingScaffold({
   // Always-available escape: mark done + drop into the app. Guarantees the user
   // can never get trapped in the flow.
   const skip = () => {
+    track('onboarding_skipped', { step, total });
     completeOnboarding();
     // Explicit /(tabs): bare '/' is ambiguous with this group's index and loops
     // back into onboarding.

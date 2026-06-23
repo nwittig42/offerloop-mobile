@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
+import { track } from '@/lib/analytics';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+
+const STEP_NAMES = ['welcome', 'goal', 'plan', 'demo', 'referral', 'notifications', 'done'];
 
 /**
  * First-run onboarding — ONE screen, internal step state (no routing between
@@ -48,7 +51,7 @@ export default function Onboarding() {
   const { profile, updateProfile, jobs, draftJob, setNotificationsEnabled, completeOnboarding } = useApp();
 
   const [step, setStep] = useState(0);
-  const [track, setTrack] = useState<string | null>(null);
+  const [trackChoice, setTrackChoice] = useState<string | null>(null);
   const [locations, setLocations] = useState<string[]>(profile.preferredLocations ?? []);
   const [drafted, setDrafted] = useState(false);
   const [referral, setReferral] = useState<string | null>(null);
@@ -58,10 +61,22 @@ export default function Onboarding() {
   const industry = (profile.industries?.[0] || 'your target roles').trim();
   const job = jobs[0];
 
+  // Funnel: one event per step view, so the CMO can see exactly where students
+  // drop off in onboarding.
+  useEffect(() => {
+    track('onboarding_step_viewed', { step: step + 1, total: TOTAL, name: STEP_NAMES[step] });
+  }, [step]);
+
   const next = () => setStep((s) => Math.min(TOTAL - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
   const finish = () => {
+    track('onboarding_completed', {
+      target_track: trackChoice,
+      referral_source: referral,
+      locations: locations.length,
+      drafted,
+    });
     completeOnboarding();
     // Explicit /(tabs) — bare '/' is ambiguous (both the feed and this screen
     // are group indexes at '/'), and from inside this group it resolves back
@@ -70,11 +85,13 @@ export default function Onboarding() {
   };
 
   const chooseTrack = () => {
-    const t = TRACKS.find((x) => x.key === track);
+    const t = TRACKS.find((x) => x.key === trackChoice);
     if (t && t.industries.length) {
       updateProfile({ industries: t.industries, targetRoles: t.roles });
       void saveTargetTrack({ targetRoles: t.roles, industries: t.industries }).catch(() => {});
     }
+    // $set makes target_track a person property — segment ALL metrics by it.
+    track('onboarding_goal_selected', { target_track: trackChoice, $set: { target_track: trackChoice } });
     next();
   };
 
@@ -90,7 +107,12 @@ export default function Onboarding() {
   };
 
   const chooseReferral = () => {
-    if (referral) void saveReferralSource(referral).catch(() => {});
+    if (referral) {
+      void saveReferralSource(referral).catch(() => {});
+      // $set referral_source as a person property — the channel attribution the
+      // CMO can break every downstream metric (activation, conversion) down by.
+      track('onboarding_referral_selected', { source: referral, $set: { referral_source: referral } });
+    }
     next();
   };
 
@@ -129,14 +151,14 @@ export default function Onboarding() {
         onBack={back}
         title="What are you recruiting for?"
         subtitle="This tunes who shows up in your feed and how your intros are written."
-        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!track} onPress={chooseTrack} />}>
+        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!trackChoice} onPress={chooseTrack} />}>
         <View style={{ gap: 12 }}>
           {TRACKS.map((t) => {
-            const on = track === t.key;
+            const on = trackChoice === t.key;
             return (
               <Pressable
                 key={t.key}
-                onPress={() => setTrack(t.key)}
+                onPress={() => setTrackChoice(t.key)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14, borderWidth: on ? 2 : 1, borderColor: on ? colors.accent : colors.hairline, backgroundColor: on ? colors.accent + '0F' : colors.paper }}>
                 <Ionicons name={t.icon} size={22} color={on ? colors.accent : colors.inkSecondary} />
                 <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>{t.label}</Text>

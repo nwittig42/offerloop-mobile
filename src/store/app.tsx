@@ -25,6 +25,7 @@ import { runSwipe } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
+import { identify, setAnalyticsUser, track } from '@/lib/analytics';
 import {
   hasNotificationPermission,
   registerForPushNotificationsAsync,
@@ -325,6 +326,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const needsOnboarding =
     onboardingDone === false &&
     (FORCE_ONBOARDING || (meQuery.isSuccess && !profile.hasServerProfile));
+
+  // PostHog identity: point analytics at the signed-in user (Firebase uid =
+  // the web's distinct_id), and set person properties once /me resolves so the
+  // CMO can segment by school/plan. Best-effort; no-op until a key is configured.
+  useEffect(() => {
+    setAnalyticsUser(uid ?? null);
+    if (uid && meQuery.isSuccess) {
+      identify(uid, { school: profile.school, plan: profile.plan, grad_year: profile.gradYear });
+    }
+  }, [uid, meQuery.isSuccess, profile.school, profile.plan, profile.gradYear]);
 
   // On launch, restore the persisted queries from disk so the deck/inbox/loops/
   // profile show the previous data instantly while live queries refetch. Skip
@@ -676,6 +687,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       runSwipe({ company, jobTitle, count, action, firstIsHiringManager: firstIsHM })
         .then(({ items, creditsRemaining }) => {
           const foundCount = items.length;
+          // Activation event — the core action. Lets the CMO measure swipe→draft
+          // and segment activation by referral_source / target_track.
+          if (foundCount > 0) track('outreach_drafted', { company, count: foundCount, action });
           setOutreach((prev) => {
             // Fill placeholders that got a real contact; DROP the rest. A swipe
             // that found no contact shouldn't leave a "No contact found" row in

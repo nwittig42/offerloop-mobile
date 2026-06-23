@@ -61,6 +61,8 @@
     },
     "extra": {
       "apiBaseUrl": "http://192.168.4.62:5001",
+      "posthogKey": "",
+      "posthogHost": "https://us.i.posthog.com",
       "eas": {
         "projectId": "c2498b56-5d1c-4d17-bea7-b319b137541e"
       },
