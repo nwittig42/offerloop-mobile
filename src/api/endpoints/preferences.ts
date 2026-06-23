@@ -30,3 +30,13 @@ export async function saveTargetTrack(opts: {
     },
   });
 }
+
+/** Acquisition attribution from onboarding ("How did you hear about us?").
+ *  Persisted on the user doc via the preferences endpoint; best-effort. */
+export async function saveReferralSource(source: string): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/mobile/preferences', {
+    method: 'POST',
+    body: { referralSource: source },
+  });
+}

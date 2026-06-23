@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { savePreferredLocations, saveTargetTrack } from '@/api/endpoints/preferences';
+import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
@@ -18,7 +18,20 @@ import { fonts } from '@/theme/tokens';
  * paywall. Reached opt-in via the dev Replay button; never force-traps.
  */
 
-const TOTAL = 6;
+const TOTAL = 7;
+
+// Acquisition channels — tuned to how students actually find Offerloop (referral,
+// social, Reddit, on-campus clubs). Drives marketing attribution.
+const REFERRAL_OPTIONS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'friend', label: 'Friend or classmate', icon: 'people-outline' },
+  { key: 'tiktok', label: 'TikTok', icon: 'logo-tiktok' },
+  { key: 'instagram', label: 'Instagram', icon: 'logo-instagram' },
+  { key: 'linkedin', label: 'LinkedIn', icon: 'logo-linkedin' },
+  { key: 'reddit', label: 'Reddit', icon: 'logo-reddit' },
+  { key: 'club', label: 'A campus club or event', icon: 'school-outline' },
+  { key: 'search', label: 'Google / search', icon: 'search-outline' },
+  { key: 'other', label: 'Somewhere else', icon: 'ellipsis-horizontal' },
+];
 
 type Track = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; industries: string[]; roles: string[] };
 const TRACKS: Track[] = [
@@ -38,6 +51,7 @@ export default function Onboarding() {
   const [track, setTrack] = useState<string | null>(null);
   const [locations, setLocations] = useState<string[]>(profile.preferredLocations ?? []);
   const [drafted, setDrafted] = useState(false);
+  const [referral, setReferral] = useState<string | null>(null);
 
   const firstName = (profile.name || '').trim().split(/\s+/)[0] || 'there';
   const school = (profile.school || '').trim();
@@ -73,6 +87,11 @@ export default function Onboarding() {
   const doDemoSwipe = () => {
     if (job) draftJob(job.id);
     setDrafted(true);
+  };
+
+  const chooseReferral = () => {
+    if (referral) void saveReferralSource(referral).catch(() => {});
+    next();
   };
 
   // ── Step 0: welcome / identity ─────────────────────────────────────────
@@ -228,15 +247,45 @@ export default function Onboarding() {
     );
   }
 
-  // ── Step 4: notification priming ───────────────────────────────────────
+  // ── Step 4: how did you hear about us? (attribution) ───────────────────
   if (step === 4) {
+    return (
+      <OnboardingScaffold
+        step={5}
+        total={TOTAL}
+        onBack={back}
+        title="How'd you find Offerloop?"
+        subtitle="Last thing — it helps us reach more students like you."
+        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!referral} onPress={chooseReferral} />}>
+        <View style={{ gap: 10 }}>
+          {REFERRAL_OPTIONS.map((o) => {
+            const on = referral === o.key;
+            return (
+              <Pressable
+                key={o.key}
+                onPress={() => setReferral(o.key)}
+                accessibilityRole="button"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: on ? 2 : 1, borderColor: on ? colors.accent : colors.hairline, backgroundColor: on ? colors.accent + '0F' : colors.paper }}>
+                <Ionicons name={o.icon} size={20} color={on ? colors.accent : colors.inkSecondary} />
+                <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink }}>{o.label}</Text>
+                {on ? <Ionicons name="checkmark-circle" size={20} color={colors.accent} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </OnboardingScaffold>
+    );
+  }
+
+  // ── Step 5: notification priming ───────────────────────────────────────
+  if (step === 5) {
     const enable = () => {
       setNotificationsEnabled(true);
       next();
     };
     return (
       <OnboardingScaffold
-        step={5}
+        step={6}
         total={TOTAL}
         onBack={back}
         title="Know the moment they reply"
@@ -265,10 +314,10 @@ export default function Onboarding() {
     );
   }
 
-  // ── Step 5: done ───────────────────────────────────────────────────────
+  // ── Step 6: done ───────────────────────────────────────────────────────
   return (
     <OnboardingScaffold
-      step={6}
+      step={7}
       total={TOTAL}
       canBack={false}
       title={firstName ? `You're set, ${firstName}` : "You're set"}
