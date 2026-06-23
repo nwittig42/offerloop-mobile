@@ -49,7 +49,10 @@ export default function Onboarding() {
 
   const finish = () => {
     completeOnboarding();
-    router.replace('/');
+    // Explicit /(tabs) — bare '/' is ambiguous (both the feed and this screen
+    // are group indexes at '/'), and from inside this group it resolves back
+    // to the onboarding start, causing the "completed → back to start" loop.
+    router.replace('/(tabs)');
   };
 
   const chooseTrack = () => {

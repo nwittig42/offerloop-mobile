@@ -98,16 +98,17 @@ function useAuthGate() {
 
     // Signed in. Leave the auth stack first.
     if (inAuthGroup) {
-      router.replace('/');
+      router.replace('/(tabs)');
       return;
     }
 
     // Onboarding is OPT-IN for now — entered explicitly via the dev "Replay
     // onboarding" button, NOT force-gated on the completion flag. Force-gating
     // was trapping existing users (whose flag loads false) in a redirect loop.
-    // We still let a finished/aborted run exit cleanly to the feed.
+    // We still let a finished/aborted run exit cleanly to the feed. Explicit
+    // /(tabs) — bare '/' is ambiguous with the onboarding group index.
     if (onboardingDone && inOnboarding) {
-      router.replace('/');
+      router.replace('/(tabs)');
     }
   }, [status, onboardingDone, segments, router]);
 

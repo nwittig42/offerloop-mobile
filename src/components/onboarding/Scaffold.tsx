@@ -44,7 +44,9 @@ export function OnboardingScaffold({
   // can never get trapped in the flow.
   const skip = () => {
     completeOnboarding();
-    router.replace('/');
+    // Explicit /(tabs): bare '/' is ambiguous with this group's index and loops
+    // back into onboarding.
+    router.replace('/(tabs)');
   };
 
   return (
