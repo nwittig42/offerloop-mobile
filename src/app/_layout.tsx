@@ -102,12 +102,11 @@ function useAuthGate() {
       return;
     }
 
-    // Wait for the per-user onboarding flag to load before deciding (null), so
-    // we don't flash the feed and then yank the user into onboarding.
-    if (onboardingDone === null) return;
-    if (!onboardingDone && !inOnboarding) {
-      router.replace('/(onboarding)');
-    } else if (onboardingDone && inOnboarding) {
+    // Onboarding is OPT-IN for now — entered explicitly via the dev "Replay
+    // onboarding" button, NOT force-gated on the completion flag. Force-gating
+    // was trapping existing users (whose flag loads false) in a redirect loop.
+    // We still let a finished/aborted run exit cleanly to the feed.
+    if (onboardingDone && inOnboarding) {
       router.replace('/');
     }
   }, [status, onboardingDone, segments, router]);

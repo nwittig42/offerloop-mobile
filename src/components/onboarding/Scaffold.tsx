@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
@@ -33,7 +34,15 @@ export function OnboardingScaffold({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { completeOnboarding } = useApp();
   const pct = Math.max(0, Math.min(1, step / total));
+
+  // Always-available escape: mark done + drop into the app. Guarantees the user
+  // can never get trapped in the flow.
+  const skip = () => {
+    completeOnboarding();
+    router.replace('/');
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -53,6 +62,9 @@ export function OnboardingScaffold({
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary, width: 30, textAlign: 'right' }}>
             {step}/{total}
           </Text>
+          <Pressable onPress={skip} hitSlop={8} accessibilityRole="button">
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>Skip</Text>
+          </Pressable>
         </View>
       </View>
 

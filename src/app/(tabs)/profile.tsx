@@ -918,10 +918,11 @@ export default function ProfileScreen() {
                   label="Replay onboarding"
                   variant="outline"
                   onPress={() => {
-                    // Clears the per-user completion flag; the root auth gate
-                    // then routes back into (onboarding) automatically.
+                    // Onboarding is opt-in now (not force-gated), so enter it
+                    // explicitly. resetOnboarding clears the completion flag so
+                    // a future new-user gate would show it again.
                     resetOnboarding();
-                    showToast('Onboarding reset — restarting the flow');
+                    router.push('/(onboarding)');
                   }}
                 />
               ) : null}
