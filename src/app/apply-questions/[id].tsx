@@ -245,6 +245,20 @@ export default function ApplyQuestionsScreen() {
   });
 
   const pending = data?.pending_questions ?? [];
+
+  // The header must match the body — don't say "Needs your input" while we're
+  // actually resuming/submitting (the screen flips to a "finishing" state once
+  // there are no pending questions). Drives the title off the real status.
+  const headerTitle =
+    pending.length > 0
+      ? 'Needs your input'
+      : data?.status === 'submitted'
+        ? 'Submitted'
+        : data?.status === 'needs_verification'
+          ? 'Verifying'
+          : data?.status === 'failed' || data?.status === 'submit_failed'
+            ? "Didn't go through"
+            : 'Finishing up';
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   // Seed answers we already know from the profile (e.g. a "School / University"
@@ -311,7 +325,7 @@ export default function ApplyQuestionsScreen() {
         }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.display, fontSize: 24, color: colors.heading }}>
-            Needs your input
+            {headerTitle}
           </Text>
           {data?.company ? (
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.inkSecondary }}>
