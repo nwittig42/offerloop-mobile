@@ -20,6 +20,7 @@ export function OnboardingScaffold({
   title,
   subtitle,
   canBack = true,
+  onBack,
   footer,
   children,
 }: {
@@ -28,6 +29,8 @@ export function OnboardingScaffold({
   title: string;
   subtitle?: string;
   canBack?: boolean;
+  /** Override the back chevron (used for internal step state instead of routing). */
+  onBack?: () => void;
   footer: ReactNode;
   children?: ReactNode;
 }) {
@@ -50,7 +53,7 @@ export function OnboardingScaffold({
       <View style={{ paddingTop: insets.top + 14, paddingHorizontal: 24 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, height: 28 }}>
           {canBack ? (
-            <Pressable onPress={() => router.back()} accessibilityLabel="Back" style={{ padding: 4, marginLeft: -4 }}>
+            <Pressable onPress={onBack ?? (() => router.back())} accessibilityLabel="Back" style={{ padding: 4, marginLeft: -4 }}>
               <Ionicons name="chevron-back" size={22} color={colors.ink} />
             </Pressable>
           ) : (
