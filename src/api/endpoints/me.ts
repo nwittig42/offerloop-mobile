@@ -43,8 +43,21 @@ export async function fetchMe(): Promise<Profile> {
 
   const me = await apiFetch<MeResponse>('/api/mobile/me');
 
+  // Genuinely-new vs established, judged on the RAW response (before the mock
+  // fallbacks below). An existing user has at least a school / resume / target
+  // — a brand-new account has none. Drives the new-user onboarding gate.
+  const hasServerProfile = !!(
+    me.school?.trim() ||
+    me.resume ||
+    me.targetRoles?.length ||
+    me.industries?.length ||
+    me.gradYear?.trim() ||
+    me.linkedinUrl?.trim()
+  );
+
   return {
     ...MOCK_PROFILE,
+    hasServerProfile,
     name: me.name,
     photoUrl: me.photoUrl || '',
     school: me.school || MOCK_PROFILE.school,

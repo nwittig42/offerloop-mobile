@@ -198,7 +198,7 @@ export default function Onboarding() {
         subtitle="Swipe right on a job and Offerloop drafts a tailored intro to someone who works there. Here's a real one from your feed."
         footer={
           job ? (
-            <Button label="Swipe right → draft my intro" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={doDemoSwipe} />
+            <Button label="Draft my first intro" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={doDemoSwipe} />
           ) : (
             <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />
           )

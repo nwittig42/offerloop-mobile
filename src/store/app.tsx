@@ -221,6 +221,9 @@ type AppStore = {
    * replays it (dev).
    */
   onboardingDone: boolean | null;
+  /** True only for a confirmed brand-new user — the auth gate force-shows
+   *  onboarding when set. Never true for an established profile. */
+  needsOnboarding: boolean;
   completeOnboarding: () => void;
   resetOnboarding: () => void;
   /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
@@ -314,6 +317,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOnboardingDone(false);
     if (uid) AsyncStorage.removeItem(onboardingStorageKey(uid)).catch(() => {});
   }, [uid]);
+
+  // Should the auth gate force this user into onboarding? Only a genuinely-new
+  // user: hasn't completed it AND the real /me has no profile data yet. Gated on
+  // meQuery.isSuccess so we never force-redirect on the mock fallback (which
+  // would trap established users). FORCE_ONBOARDING (dev) overrides for testing.
+  const needsOnboarding =
+    onboardingDone === false &&
+    (FORCE_ONBOARDING || (meQuery.isSuccess && !profile.hasServerProfile));
 
   // On launch, restore the persisted queries from disk so the deck/inbox/loops/
   // profile show the previous data instantly while live queries refetch. Skip
@@ -962,6 +973,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationsRead,
       updateProfile,
       onboardingDone,
+      needsOnboarding,
       completeOnboarding,
       resetOnboarding,
       enrichLinkedin: enrichLinkedinProfile,
@@ -1007,6 +1019,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationsRead,
       updateProfile,
       onboardingDone,
+      needsOnboarding,
       completeOnboarding,
       resetOnboarding,
       enrichLinkedinProfile,

@@ -82,7 +82,7 @@ export default function RootLayout() {
  *  on sign-in + onboarding status. */
 function useAuthGate() {
   const { status } = useAuth();
-  const { onboardingDone } = useApp();
+  const { onboardingDone, needsOnboarding } = useApp();
   const segments = useSegments();
   const router = useRouter();
 
@@ -102,15 +102,16 @@ function useAuthGate() {
       return;
     }
 
-    // Onboarding is OPT-IN for now — entered explicitly via the dev "Replay
-    // onboarding" button, NOT force-gated on the completion flag. Force-gating
-    // was trapping existing users (whose flag loads false) in a redirect loop.
-    // We still let a finished/aborted run exit cleanly to the feed. Explicit
-    // /(tabs) — bare '/' is ambiguous with the onboarding group index.
-    if (onboardingDone && inOnboarding) {
+    // Force-show onboarding ONLY for a confirmed brand-new user. needsOnboarding
+    // is false for any established profile (judged on real /me data), so existing
+    // users are never force-trapped. Exit to /(tabs) explicitly — bare '/' is
+    // ambiguous with the onboarding group index and caused the earlier loop.
+    if (needsOnboarding && !inOnboarding) {
+      router.replace('/(onboarding)');
+    } else if (onboardingDone && inOnboarding) {
       router.replace('/(tabs)');
     }
-  }, [status, onboardingDone, segments, router]);
+  }, [status, onboardingDone, needsOnboarding, segments, router]);
 
   return status;
 }

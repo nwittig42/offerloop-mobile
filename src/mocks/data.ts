@@ -425,6 +425,10 @@ export const MOCK_MEETING_PREPS: MeetingPrep[] = [
 ];
 
 export const MOCK_PROFILE = {
+  // Whether the SERVER profile (not this fixture) has real onboarding data —
+  // used to decide if a signed-in user is genuinely new. Defaults false so the
+  // loading/offline state never claims an established profile.
+  hasServerProfile: false,
   name: 'Sample Student',
   photoUrl: '',
   school: 'Sample University',
