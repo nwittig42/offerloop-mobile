@@ -133,17 +133,19 @@ export default function FeedScreen() {
           showToast('Set up your application profile to auto-apply');
         } else {
           showToast(`Auto-applying to ${job.title} — see Network › Applied`, true);
-          startAutoApply(job.id).then((r) => {
-            if (r.ok) {
-              queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
-            } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
-              showToast('Set up your application profile to auto-apply');
-            } else if (r.code === 'INSUFFICIENT_CREDITS') {
-              showToast('Not enough credits to auto-apply');
-            } else if (r.code !== 'INELIGIBLE') {
-              showToast('Could not auto-apply, try again');
-            }
-          });
+          startAutoApply(job.id)
+            .then((r) => {
+              if (r.ok) {
+                queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
+              } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+                showToast('Set up your application profile to auto-apply');
+              } else if (r.code === 'INSUFFICIENT_CREDITS') {
+                showToast('Not enough credits to auto-apply');
+              } else if (r.code !== 'INELIGIBLE') {
+                showToast('Could not auto-apply, try again');
+              }
+            })
+            .catch(() => showToast('Could not auto-apply, try again'));
         }
       }
     } else {

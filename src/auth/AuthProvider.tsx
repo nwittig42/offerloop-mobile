@@ -106,9 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Complete sign-in when the magic link opens the app (cold start + warm).
   useEffect(() => {
-    Linking.getInitialURL().then((url) => {
-      if (url) void completeSignInFromUrl(url);
-    });
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) void completeSignInFromUrl(url);
+      })
+      .catch(() => {});
     const sub = Linking.addEventListener('url', ({ url }) => {
       void completeSignInFromUrl(url);
     });
