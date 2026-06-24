@@ -34,6 +34,15 @@ import type { OutreachItem } from '@/types';
 const FILTERS = ['All', 'Needs you', 'Replied', 'Waiting'] as const;
 type Filter = (typeof FILTERS)[number];
 
+// Filter-specific empty copy, so a filter with no matches doesn't read as
+// "you've never swiped" when the user clearly has conversations elsewhere.
+const FILTER_EMPTY: Record<Filter, string> = {
+  All: '',
+  'Needs you': "You're all caught up — nothing needs you right now.",
+  Replied: 'No replies yet — they’ll show here when someone writes back.',
+  Waiting: 'Nothing waiting on a reply right now.',
+};
+
 /** Your turn: a ready draft to send, or a reply you have not opened yet. */
 export function needsAttention(item: OutreachItem) {
   if (item.status === 'replied') return !item.attended;
@@ -353,7 +362,9 @@ export default function InboxScreen() {
               }}>
               {q
                 ? `No conversations match "${query.trim()}".`
-                : 'Nothing here yet. Swipe right on a job in the Feed and the draft lands in this inbox.'}
+                : filter !== 'All' && outreach.length > 0
+                  ? FILTER_EMPTY[filter]
+                  : 'Nothing here yet. Swipe right on a job in the Feed and the draft lands in this inbox.'}
             </Text>
           ) : null
         }

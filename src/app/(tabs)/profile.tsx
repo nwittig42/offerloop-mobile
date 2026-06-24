@@ -268,7 +268,12 @@ export default function ProfileScreen() {
     if (!linkedinUrl.trim() || enriching) return;
     setEnriching(true);
     try {
-      await enrichLinkedin(linkedinUrl);
+      const res = await enrichLinkedin(linkedinUrl);
+      showToast(
+        res?.enriched
+          ? 'Pulled your details from LinkedIn'
+          : res?.error || "Couldn't read that LinkedIn — double-check the URL",
+      );
     } finally {
       setEnriching(false);
     }
@@ -783,12 +788,6 @@ export default function ProfileScreen() {
                   {file.kind === 'resume' ? <Chip label="Resume" tone="accent" /> : null}
                 </Card>
               ))}
-              <Button
-                label="Add file"
-                variant="outline"
-                icon="add"
-                onPress={() => showToast('The file picker arrives with real wiring')}
-              />
             </>
           ) : null}
 

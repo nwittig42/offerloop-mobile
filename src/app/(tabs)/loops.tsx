@@ -480,6 +480,14 @@ export default function LoopsScreen() {
             What your Loops have been doing. Drafts run on a morning regimen and show up
             here and in your Inbox.
           </Text>
+          {loopActivity.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 40, gap: 10 }}>
+              <Ionicons name="time-outline" size={32} color={colors.inkTertiary} />
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, textAlign: 'center', lineHeight: 20, maxWidth: 270 }}>
+                No activity yet. When your Loops run, the people they find and the drafts they write show up here.
+              </Text>
+            </View>
+          ) : null}
           {loopActivity.map((a) => (
             <View
               key={a.id}

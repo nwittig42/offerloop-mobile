@@ -197,12 +197,6 @@ export default function MeetingPrepDetailScreen() {
           </Card>
         ) : null}
 
-        <Button
-          label="Draft an intro to them"
-          variant="accent"
-          fullWidth
-          onPress={() => showToast('Drafting from a prep arrives in a later update')}
-        />
         <Text
           style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, textAlign: 'center' }}>
           Saved to your coffee library
