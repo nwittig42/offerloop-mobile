@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { sendScoutMessage, type ScoutTurn } from '@/api/endpoints/scout';
+import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
 import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -25,7 +25,7 @@ import { fonts } from '@/theme/tokens';
  * (/api/scout-assistant/chat) — it answers with the user's resume + pipeline.
  */
 
-type Message = { from: 'user' | 'scout'; text: string };
+type Message = { from: 'user' | 'scout'; text: string; actions?: ScoutAction[] };
 
 const SUGGESTIONS = [
   'What should I say in a coffee chat?',
@@ -90,7 +90,7 @@ export default function ScoutScreen() {
         chatId: chatId.current,
       });
       if (res.chatId) chatId.current = res.chatId;
-      setMessages((prev) => [...prev, { from: 'scout', text: res.message }]);
+      setMessages((prev) => [...prev, { from: 'scout', text: res.message, actions: res.actions }]);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -179,41 +179,70 @@ export default function ScoutScreen() {
               </Text>
             </View>
           ) : (
-            <View
-              key={i}
-              style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, alignSelf: 'flex-start' }}>
-              <View
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 13,
-                  borderWidth: 1,
-                  borderColor: colors.hairline,
-                  backgroundColor: colors.paper2,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                }}>
-                <Image
-                  source={require('../../assets/images/scout-yeti-head.png')}
-                  style={{ width: 22, height: 22, marginTop: 3 }}
-                  resizeMode="contain"
-                />
+            <View key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+                <View
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 13,
+                    borderWidth: 1,
+                    borderColor: colors.hairline,
+                    backgroundColor: colors.paper2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}>
+                  <Image
+                    source={require('../../assets/images/scout-yeti-head.png')}
+                    style={{ width: 22, height: 22, marginTop: 3 }}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View
+                  style={{
+                    flexShrink: 1,
+                    backgroundColor: colors.paper2,
+                    borderWidth: 1,
+                    borderColor: colors.hairline,
+                    borderRadius: 10,
+                    padding: 12,
+                  }}>
+                  <Text
+                    style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.ink }}>
+                    {msg.text}
+                  </Text>
+                </View>
               </View>
-              <View
-                style={{
-                  maxWidth: '78%',
-                  backgroundColor: colors.paper2,
-                  borderWidth: 1,
-                  borderColor: colors.hairline,
-                  borderRadius: 10,
-                  padding: 12,
-                }}>
-                <Text
-                  style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.ink }}>
-                  {msg.text}
-                </Text>
-              </View>
+              {msg.actions?.length ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginLeft: 34 }}>
+                  {msg.actions.map((a) => (
+                    <Pressable
+                      key={a.href}
+                      onPress={() => {
+                        // Close the Scout sheet, then go where it pointed.
+                        router.back();
+                        router.push(a.href as never);
+                      }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: colors.accent + '55',
+                        backgroundColor: colors.accent + '0F',
+                      }}>
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+                        {a.label}
+                      </Text>
+                      <Ionicons name="arrow-forward" size={13} color={colors.accent} />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ),
         )}
