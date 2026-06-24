@@ -21,6 +21,13 @@ const HOST = (process.env.EXPO_PUBLIC_POSTHOG_HOST || extra.posthogHost || 'http
 
 export const analyticsEnabled = !!KEY;
 
+// Tag every event so dev/test runs are filterable out of the shared prod project
+// (dev builds point at the prod PostHog so mobile + web unify). Filter
+// `environment = production` in PostHog to see only real users; also worth
+// excluding internal test uids as internal users in project settings.
+const ENV = __DEV__ ? 'development' : 'production';
+const BASE_PROPS = { $lib: 'offerloop-mobile', environment: ENV };
+
 let distinctId: string | null = null;
 
 function post(payload: Record<string, unknown>) {
@@ -40,7 +47,7 @@ export function identify(uid: string, personProps: Record<string, unknown> = {})
   post({
     event: '$identify',
     distinct_id: uid,
-    properties: { $set: personProps, $lib: 'offerloop-mobile' },
+    properties: { $set: personProps, ...BASE_PROPS },
     timestamp: new Date().toISOString(),
   });
 }
@@ -57,7 +64,7 @@ export function track(event: string, properties: Record<string, unknown> = {}) {
   post({
     event,
     distinct_id: distinctId,
-    properties: { ...properties, $lib: 'offerloop-mobile' },
+    properties: { ...properties, ...BASE_PROPS },
     timestamp: new Date().toISOString(),
   });
 }
