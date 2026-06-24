@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import { useAuth } from '@/auth/AuthProvider';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -240,6 +241,7 @@ export default function ProfileScreen() {
     resetOnboarding,
     showToast,
   } = useApp();
+  const { signOut } = useAuth();
 
   const [tab, setTab] = useState<TabKey>('personal');
   const [parseOpen, setParseOpen] = useState(false);
@@ -909,7 +911,12 @@ export default function ProfileScreen() {
                 <Button
                   label="Sign out"
                   variant="ghost"
-                  onPress={() => Alert.alert('Phase 3', 'Auth arrives with real wiring.')}
+                  onPress={() =>
+                    Alert.alert('Sign out', 'Sign out of Offerloop?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+                    ])
+                  }
                 />
               </Card>
               <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
