@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -112,7 +112,9 @@ export default function FeedScreen() {
     return { transform: [{ scale: 1 + 0.22 * t }] };
   });
 
-  const handleSwiped = (direction: 'left' | 'right', job: Job) => {
+  // Stable across renders so SwipeDeck (memoized) doesn't re-render on every
+  // store change / 60s poll — only when the swipe-relevant inputs change.
+  const handleSwiped = useCallback((direction: 'left' | 'right', job: Job) => {
     if (direction === 'right') {
       if (!canDraft) {
         // Out of swipes: bounce, don't spend. The card snaps back.
@@ -152,7 +154,7 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       passJob(job.id);
     }
-  };
+  }, [canDraft, draftJob, passJob, swipeSettings.autoApply, canAutoApply, profileReady, showToast, queryClient]);
 
   const creditsPill = (
     <PlanBorder plan={profile.plan} radius={9}>

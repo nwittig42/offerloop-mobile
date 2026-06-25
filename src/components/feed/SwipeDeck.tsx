@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle } from 'react';
+import { forwardRef, memo, useImperativeHandle } from 'react';
 import { Dimensions, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -76,7 +76,10 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' }) {
   );
 }
 
-export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
+// Memoized: with stable callbacks from the feed, the deck only re-renders when
+// the cards (jobs) or expand state actually change — not on every store/poll tick.
+export const SwipeDeck = memo(
+  forwardRef<SwipeDeckHandle, Props>(
   ({ jobs, expanded, onToggleExpand, onSwiped, drag }, ref) => {
     const tx = useSharedValue(0);
     const ty = useSharedValue(0);
@@ -211,6 +214,7 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, Props>(
       </View>
     );
   },
+  ),
 );
 
 SwipeDeck.displayName = 'SwipeDeck';

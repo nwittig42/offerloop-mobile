@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { memo } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
@@ -420,7 +421,7 @@ function ExpandedCard({
   );
 }
 
-export function JobCard({
+function JobCardImpl({
   job,
   expanded = false,
   onCollapse,
@@ -447,5 +448,10 @@ export function JobCard({
     <CollapsedCard job={effJob} descLoading={descLoading} />
   );
 }
+
+// The deck re-renders on every store change/poll, but a card only needs to
+// re-render when its job (or expand state) changes. Memo cuts the heavy card
+// render out of the hot swipe path.
+export const JobCard = memo(JobCardImpl);
 
 export default JobCard;
