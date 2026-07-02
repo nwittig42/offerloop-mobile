@@ -10,13 +10,22 @@
       "autoIncrement": true,
       "ios": {
         "simulator": false
-      }
+      },
+      "channel": "development"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://offerloop-staging.onrender.com"
+      },
+      "channel": "preview"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://offerloop.ai"
+      },
+      "channel": "production"
     }
   },
   "submit": {
