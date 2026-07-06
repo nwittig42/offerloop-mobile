@@ -85,6 +85,9 @@ export type OutreachItem = {
   /** When a queued/drafting placeholder was created — lets the foreground sweep
    *  fail rows whose request died while the app was backgrounded. */
   createdAtMs?: number;
+  /** Live stage from the server draft job ("Researching their background…") —
+   *  shown on the drafting row instead of the canned rotating phrases. */
+  stageLabel?: string;
 };
 
 export type NotificationItem = {

@@ -1,5 +1,6 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
+import { ApiError } from '@/api/errors';
 import type { ContactRelation, OutreachItem } from '@/types';
 
 /**
@@ -59,8 +60,67 @@ let mockSeq = 0;
 
 /** Draft calls run a 25–60s server pipeline; the staging gunicorn allows up to
  *  300s. If nothing came back in 150s the request is effectively lost — abort
- *  so the Inbox row can fail-with-retry instead of spinning forever. */
+ *  so the Inbox row can fail-with-retry instead of spinning forever. (Legacy
+ *  synchronous path only — the job path polls with short requests instead.) */
 const DRAFT_TIMEOUT_MS = 150_000;
+
+// ---------------------------------------------------------------------------
+// Server-side draft jobs (PLAN-instant-feel.md Phase 2). POST hands the swipe
+// to the server and returns a job id in <1s; the pipeline runs server-side
+// (survives app close, bounded concurrency), and we poll the job doc for REAL
+// stage progress — including the found person's name — until it completes.
+// ---------------------------------------------------------------------------
+
+export type DraftJobProgress = {
+  status: string;
+  stage: string;
+  stageLabel: string;
+  progressPct: number;
+  foundContacts?: { name: string; title: string; company: string }[];
+};
+
+type DraftJobState = DraftJobProgress & {
+  jobId: string;
+  result?: PromptSearchResponse & { error?: string };
+  statusCode?: number;
+  error?: string;
+};
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const JOB_POLL_MS = 2500;
+const JOB_DEADLINE_MS = 6 * 60_000;
+
+/** Create (or re-attach to — job id doubles as the idempotency key) a draft
+ *  job and poll it to a terminal state. Throws ApiError on failure/timeout. */
+async function runJobToCompletion(
+  body: Record<string, unknown>,
+  onProgress?: (p: DraftJobProgress) => void,
+): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
+  const created = await apiFetch<DraftJobState>('/api/mobile/draft-jobs', {
+    method: 'POST',
+    body,
+    timeoutMs: 20_000,
+  });
+  let state = created;
+  const deadline = Date.now() + JOB_DEADLINE_MS;
+  while (state.status === 'queued' || state.status === 'running') {
+    if (Date.now() > deadline) throw new ApiError(408, 'Draft timed out', null);
+    await sleep(JOB_POLL_MS);
+    state = await apiFetch<DraftJobState>(`/api/mobile/draft-jobs/${created.jobId}`, {
+      timeoutMs: 20_000,
+    });
+    onProgress?.(state);
+  }
+  if (state.status === 'failed') {
+    throw new ApiError(500, state.error || 'Draft failed', state);
+  }
+  const code = state.statusCode ?? 200;
+  const result = state.result ?? {};
+  if (code >= 400) {
+    throw new ApiError(code, (result as { error?: string }).error || 'Draft failed', result);
+  }
+  return { contacts: result.contacts || [], creditsRemaining: result.credits_remaining };
+}
 
 function contactName(c: RawContact): string {
   const full = `${c.FirstName || c.firstName || ''} ${c.LastName || c.lastName || ''}`.trim();
@@ -167,7 +227,10 @@ async function findHiringManagers(
   return { contacts, creditsRemaining: res.creditsRemaining };
 }
 
-export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
+export async function runSwipe(
+  args: SwipeArgs,
+  onProgress?: (p: DraftJobProgress) => void,
+): Promise<SwipeResult> {
   if (USE_MOCKS) {
     mockSeq += 1;
     const items: OutreachItem[] = Array.from({ length: args.count }, (_, i) =>
@@ -184,7 +247,8 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
 
   // Any hiring-manager targeting: 'mix' gets ONE verified HM then fills the rest
   // with teammates; 'hiring_manager' targets up to `count` HMs, teammates only to
-  // fill. Both always draft (the HM endpoint never sends).
+  // fill. Both always draft (the HM endpoint never sends). Still the legacy
+  // synchronous path — the job pipeline only covers /api/prompt-search.
   if (args.priority === 'mix' || args.priority === 'hiring_manager') {
     const hmTarget = args.priority === 'mix' ? 1 : args.count;
     const hm = await findHiringManagers(args, hmTarget);
@@ -214,10 +278,56 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
     return { items, creditsRemaining };
   }
 
-  // Employee mode (default): broad pass on the role, cheap + high hit rate.
-  // The primary and fallback passes get DISTINCT idempotency ids (-p / -f):
-  // sharing one id would make the fallback replay the primary's stored
-  // empty result instead of actually searching.
+  // Employee mode (default): server-side draft JOB. The server answers in
+  // <1s and cooks in the background — the draft survives the app closing,
+  // bursts queue server-side, and we poll for real stage progress. The
+  // primary and fallback passes get DISTINCT job ids (-p / -f): sharing one
+  // would make the fallback re-attach to the primary's empty result.
+  // notify_draft_ready is ON here (unlike the legacy path): the job can
+  // finish while the user is away, and the push both notifies them and
+  // triggers the app's instant inbox refresh.
+  try {
+    const baseBody = { batchSize: args.count, mode, notify_draft_ready: true };
+    const primary = await runJobToCompletion(
+      {
+        ...baseBody,
+        prompt: `${args.jobTitle} at ${args.company}`,
+        swipe_id: args.swipeId ? `${args.swipeId}-p` : undefined,
+      },
+      onProgress,
+    );
+    let contacts = primary.contacts;
+    let creditsRemaining = primary.creditsRemaining;
+
+    // Miss-proofing: if the titled search found nobody (title too specific,
+    // small co), one no-title pass so a swipe almost never comes back empty.
+    if (contacts.length === 0) {
+      const fallback = await runJobToCompletion(
+        {
+          ...baseBody,
+          prompt: `people at ${args.company}`,
+          swipe_id: args.swipeId ? `${args.swipeId}-f` : undefined,
+        },
+        onProgress,
+      );
+      contacts = fallback.contacts;
+      if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
+    }
+
+    const items = contacts.slice(0, args.count).map((c, i) => mapContact(c, i, args));
+    return { items, creditsRemaining };
+  } catch (e) {
+    // A server without /draft-jobs yet (OTA reached the phone before the
+    // backend deploy) → fall back to the legacy synchronous request.
+    if ((e as { status?: number })?.status === 404) {
+      return runSwipeLegacySync(args, mode);
+    }
+    throw e;
+  }
+}
+
+/** The pre-job synchronous employee path. Kept as a version-skew fallback. */
+async function runSwipeLegacySync(args: SwipeArgs, mode: string): Promise<SwipeResult> {
   const primary = await promptSearch(
     `${args.jobTitle} at ${args.company}`,
     args.count,
@@ -227,8 +337,6 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
   let contacts = primary.contacts;
   let creditsRemaining = primary.creditsRemaining;
 
-  // Miss-proofing: if the titled search found nobody (title too specific, small
-  // co), one no-title pass so a swipe almost never comes back empty.
   if (contacts.length === 0) {
     const fallback = await promptSearch(
       `people at ${args.company}`,

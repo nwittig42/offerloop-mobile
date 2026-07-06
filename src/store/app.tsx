@@ -27,7 +27,7 @@ import {
 } from '@/api/endpoints/autoApply';
 import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
 import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
-import { runSwipe } from '@/api/endpoints/swipe';
+import { runSwipe, type DraftJobProgress } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
@@ -938,18 +938,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       opts: { isRetry?: boolean } = {},
     ) => {
-      enqueueDraft(
-        () => runSwipe(args),
-        () => {
-          setOutreach((prev) =>
-            prev.map((o) =>
-              placeholderIds.includes(o.id) && o.status === 'queued'
-                ? { ...o, status: 'drafting' }
-                : o,
-            ),
+      // Live stage updates from the server draft job → paint the placeholders
+      // with what's ACTUALLY happening, including the found person's name the
+      // moment the search lands ("Found Sarah Kim — researching…").
+      const onProgress = (p: DraftJobProgress) => {
+        setOutreach((prev) =>
+          prev.map((o) => {
+            const k = placeholderIds.indexOf(o.id);
+            if (k === -1 || (o.status !== 'drafting' && o.status !== 'queued')) return o;
+            const found = p.foundContacts?.[k];
+            return {
+              ...o,
+              status: 'drafting',
+              stageLabel: p.stageLabel || o.stageLabel,
+              contact: found?.name
+                ? {
+                    name: found.name,
+                    title: found.title,
+                    company: found.company || o.company,
+                    relation: o.contact?.relation ?? 'Employee',
+                  }
+                : o.contact,
+            };
+          }),
+        );
+      };
+
+      // Employee swipes run as SERVER-side jobs: submit immediately (the
+      // server bounds concurrency and queues fairly — that's where "swipe 12
+      // and pocket the phone" lives). The client-side queue only remains for
+      // the hiring-manager path, which is still a synchronous request.
+      const jobBased = args.priority === 'employee';
+      const requestPromise = jobBased
+        ? runSwipe(args, onProgress)
+        : enqueueDraft(
+            () => runSwipe(args),
+            () => {
+              setOutreach((prev) =>
+                prev.map((o) =>
+                  placeholderIds.includes(o.id) && o.status === 'queued'
+                    ? { ...o, status: 'drafting' }
+                    : o,
+                ),
+              );
+            },
           );
-        },
-      )
+
+      requestPromise
         .then(({ items, creditsRemaining }) => {
           placeholderIds.forEach((pid) => failedDraftArgs.current.delete(pid));
           const foundCount = items.length;
@@ -1092,10 +1127,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showToast(`${verb} ${count} ${peopleWord} at ${company}`, true);
       }
 
-      // If another draft is already cooking, these placeholders start as
-      // 'queued' (honest: nothing is running for them yet) and flip to
-      // 'drafting' when the queue reaches them.
-      const initialStatus: OutreachItem['status'] = draftQueueDepth === 0 ? 'drafting' : 'queued';
+      // Employee swipes submit to the server job pool immediately → always
+      // start as 'drafting' (any waiting shows via the job's own stage label).
+      // The hiring-manager path still uses the client queue: if another HM
+      // request is cooking, start 'queued' and flip when its turn comes.
+      const initialStatus: OutreachItem['status'] =
+        priority === 'employee' || draftQueueDepth === 0 ? 'drafting' : 'queued';
       const placeholderIds: string[] = [];
       for (let k = 0; k < count; k++) {
         idCounter.current += 1;
@@ -1150,7 +1187,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const hour = new Date().getHours();
       if (action === 'send' && (hour < 8 || hour >= 22)) action = 'draft';
 
-      const initialStatus: OutreachItem['status'] = draftQueueDepth === 0 ? 'drafting' : 'queued';
+      const initialStatus: OutreachItem['status'] =
+        priority === 'employee' || draftQueueDepth === 0 ? 'drafting' : 'queued';
       setOutreach((prev) =>
         prev.map((o) =>
           o.id === id
@@ -1158,6 +1196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...o,
                 status: initialStatus,
                 snippet: undefined,
+                stageLabel: undefined,
                 timeLabel: 'Just now',
                 createdAtMs: Date.now(),
               }

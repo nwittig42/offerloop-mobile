@@ -157,10 +157,12 @@ function DraftingRow({ item, onPress }: { item: OutreachItem; onPress: () => voi
         gap: 12,
       }}>
       {!queued && size.w > 0 ? <SnakeBorder w={size.w} h={size.h} color={colors.marketing} /> : null}
-      <Avatar name={item.company} size={44} />
+      <Avatar name={item.contact?.name || item.company} size={44} />
       <View style={{ flex: 1, gap: 4 }}>
         <Text numberOfLines={1} style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
-          {item.company}
+          {/* The magic moment: the row becomes the PERSON as soon as the
+              server finds them, while the draft is still being written. */}
+          {item.contact?.name ? `${item.contact.name} · ${item.company}` : item.company}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {queued ? (
@@ -180,7 +182,11 @@ function DraftingRow({ item, onPress }: { item: OutreachItem; onPress: () => voi
               fontSize: 13,
               color: queued ? colors.inkSecondary : DRAFTING_GREEN,
             }}>
-            {queued ? 'In line — drafting starts in a moment…' : `${phrases[phrase]}…`}
+            {queued
+              ? 'In line — drafting starts in a moment…'
+              : item.stageLabel
+                ? `${item.stageLabel}…`
+                : `${phrases[phrase]}…`}
           </Text>
         </View>
       </View>
