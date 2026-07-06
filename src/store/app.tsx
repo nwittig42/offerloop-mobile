@@ -899,13 +899,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Original swipe args for failed placeholders, so tap-to-retry re-runs the
-  // same targeting. Session-local (placeholder rows don't survive restarts).
+  // same targeting — including the swipeId, so the server can replay the
+  // recorded outcome instead of double-drafting. Session-local (placeholder
+  // rows don't survive restarts).
   const failedDraftArgs = useRef<
     Map<
       string,
-      { company: string; jobTitle: string; action: 'draft' | 'send'; priority: SwipeSettings['priority'] }
+      {
+        company: string;
+        jobTitle: string;
+        action: 'draft' | 'send';
+        priority: SwipeSettings['priority'];
+        swipeId?: string;
+      }
     >
   >(new Map());
+
+  // Per-gesture idempotency key (safe charset for a Firestore doc id).
+  const newSwipeId = () =>
+    `swipe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
   /**
    * Run one draft request for existing placeholder rows and reconcile them with
@@ -922,6 +934,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         count: number;
         action: 'draft' | 'send';
         priority: SwipeSettings['priority'];
+        swipeId?: string;
       },
       opts: { isRetry?: boolean } = {},
     ) => {
@@ -986,18 +999,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // The Credits screen carries the single "manage on web" link.
             showToast('Not enough credits for that swipe');
           } else {
+            // Remember the args (incl. swipeId) so a retry re-runs the same
+            // gesture — the server replays a completed outcome instead of
+            // double-drafting.
             placeholderIds.forEach((pid) =>
               failedDraftArgs.current.set(pid, {
                 company: args.company,
                 jobTitle: args.jobTitle,
                 action: args.action,
                 priority: args.priority,
+                swipeId: args.swipeId,
               }),
             );
+            // 409 = the server says this exact swipe is STILL being drafted
+            // (e.g. we timed out but the pipeline lives on). Not a failure:
+            // keep the row in 'drafting' — the inbox poll picks up the result
+            // when it lands, and if it truly died the 5-minute sweep converts
+            // the row to tap-to-retry, whose replay returns the stored outcome.
+            const stillInFlight = (err as { status?: number })?.status === 409;
             setOutreach((prev) =>
               prev.map((o) =>
                 placeholderIds.includes(o.id)
-                  ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
+                  ? stillInFlight
+                    ? { ...o, status: 'drafting' }
+                    : { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
                   : o,
               ),
             );
@@ -1089,7 +1114,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
       }
 
-      executeDraft(placeholderIds, { company, jobTitle, count, action, priority });
+      executeDraft(placeholderIds, {
+        company,
+        jobTitle,
+        count,
+        action,
+        priority,
+        swipeId: newSwipeId(),
+      });
 
       // Auto-apply submission is handled on the feed screen via the review
       // sheet (real Browserbase submit), not faked here.
@@ -1134,7 +1166,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       executeDraft(
         [id],
-        { company: row.company, jobTitle: row.jobTitle, count: 1, action, priority },
+        {
+          company: row.company,
+          jobTitle: row.jobTitle,
+          count: 1,
+          action,
+          priority,
+          // Reuse the original gesture's id so the server replays a completed
+          // outcome (no duplicate drafts); sweep-failed rows get a fresh one.
+          swipeId: saved?.swipeId ?? newSwipeId(),
+        },
         { isRetry: true },
       );
     },

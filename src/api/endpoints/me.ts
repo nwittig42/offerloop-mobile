@@ -66,7 +66,7 @@ export async function fetchMe(): Promise<Profile> {
     credits: me.credits,
     maxCredits: me.maxCredits,
     resetLabel: me.resetLabel,
-    creditsPerSwipe: me.creditsPerSwipe || 10,
+    creditsPerSwipe: me.creditsPerSwipe || 5,
     gmailConnected: me.gmailConnected,
     gmailAddress: me.gmailAddress || '',
     resume: me.resume

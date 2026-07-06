@@ -47,6 +47,12 @@ type SwipeArgs = {
   action: 'draft' | 'send';
   priority: 'employee' | 'mix' | 'hiring_manager';
   jobDescription?: string;
+  /** Per-GESTURE idempotency key. The server records the outcome under this id,
+   *  so a retry of the same gesture (tap-to-retry, timeout ambiguity) replays
+   *  the recorded result instead of re-running the pipeline — no duplicate
+   *  Gmail drafts, no double credit charge. Persisted across retries by the
+   *  store (failedDraftArgs). */
+  swipeId?: string;
 };
 
 let mockSeq = 0;
@@ -87,13 +93,14 @@ async function promptSearch(
   prompt: string,
   batchSize: number,
   mode: string,
+  swipeId?: string,
 ): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
   const res = await apiFetch<PromptSearchResponse>('/api/prompt-search', {
     method: 'POST',
     // notify_draft_ready stays OFF for manual swipes: the user is in-app
     // watching the Inbox fill, so a "draft ready" bell item + push per contact
     // is just noise. The bell is reserved for async/away events (Loops, replies).
-    body: { prompt, batchSize, mode, notify_draft_ready: false },
+    body: { prompt, batchSize, mode, notify_draft_ready: false, swipe_id: swipeId },
     timeoutMs: DRAFT_TIMEOUT_MS,
   });
   return { contacts: res.contacts || [], creditsRemaining: res.credits_remaining };
@@ -188,7 +195,12 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
       const need = args.count - contacts.length;
       const seen = new Set(contacts.map(dedupeKey));
       // HM endpoint always drafts, so fill from the team as drafts too.
-      const fallback = await promptSearch(`${args.jobTitle} at ${args.company}`, need, 'draft');
+      const fallback = await promptSearch(
+        `${args.jobTitle} at ${args.company}`,
+        need,
+        'draft',
+        args.swipeId ? `${args.swipeId}-f` : undefined,
+      );
       for (const c of fallback.contacts) {
         const key = dedupeKey(c);
         if (key && seen.has(key)) continue;
@@ -203,14 +215,27 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
   }
 
   // Employee mode (default): broad pass on the role, cheap + high hit rate.
-  const primary = await promptSearch(`${args.jobTitle} at ${args.company}`, args.count, mode);
+  // The primary and fallback passes get DISTINCT idempotency ids (-p / -f):
+  // sharing one id would make the fallback replay the primary's stored
+  // empty result instead of actually searching.
+  const primary = await promptSearch(
+    `${args.jobTitle} at ${args.company}`,
+    args.count,
+    mode,
+    args.swipeId ? `${args.swipeId}-p` : undefined,
+  );
   let contacts = primary.contacts;
   let creditsRemaining = primary.creditsRemaining;
 
   // Miss-proofing: if the titled search found nobody (title too specific, small
   // co), one no-title pass so a swipe almost never comes back empty.
   if (contacts.length === 0) {
-    const fallback = await promptSearch(`people at ${args.company}`, args.count, mode);
+    const fallback = await promptSearch(
+      `people at ${args.company}`,
+      args.count,
+      mode,
+      args.swipeId ? `${args.swipeId}-f` : undefined,
+    );
     contacts = fallback.contacts;
     if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
   }
