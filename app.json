@@ -14,7 +14,10 @@
       "bundleIdentifier": "ai.offerloop.app",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "googlegmail"
+        ]
       }
     },
     "android": {
@@ -25,7 +28,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -37,8 +44,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200
         }
       ],
       "expo-secure-store",
@@ -60,7 +67,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://192.168.4.62:5001",
+      "apiBaseUrl": "https://offerloop-staging.onrender.com",
       "posthogKey": "",
       "posthogHost": "https://us.i.posthog.com",
       "eas": {
@@ -76,6 +83,9 @@
       },
       "router": {}
     },
-    "owner": "rylanbohnett"
+    "owner": "rylanbohnett",
+    "updates": {
+      "url": "https://u.expo.dev/c2498b56-5d1c-4d17-bea7-b319b137541e"
+    }
   }
 }
