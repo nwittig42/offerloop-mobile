@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -19,6 +20,11 @@ import {
   fetchNotifications,
   markNotificationsRead as apiMarkNotificationsRead,
 } from '@/api/endpoints/notifications';
+import {
+  alreadyApplied,
+  startAutoApply,
+  type AppliedJob,
+} from '@/api/endpoints/autoApply';
 import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
 import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
 import { runSwipe } from '@/api/endpoints/swipe';
@@ -34,7 +40,6 @@ import {
 import {
   MOCK_FILES,
   MOCK_JOBS,
-  MOCK_LOOP_ACTIVITY,
   MOCK_MEETING_PREPS,
   MOCK_NOTIFICATIONS_SEED,
   MOCK_OUTREACH_SEED,
@@ -54,6 +59,31 @@ import type {
 } from '@/types';
 
 /**
+ * Swipe→draft queue: at most ONE draft request in flight; the rest wait their
+ * turn (their Inbox placeholders show as queued). Each draft is a heavy
+ * 25–60s server pipeline and the backend has few workers — a burst of
+ * parallel swipes starves every other call (/me, the inbox poll) and fails
+ * the excess: the exact field-test failure mode. Serializing keeps a worker
+ * free and makes rapid swiping the intended UX. Module-level so it survives
+ * re-renders. See PLAN-instant-feel.md Phase 0.
+ */
+let draftChain: Promise<unknown> = Promise.resolve();
+let draftQueueDepth = 0;
+function enqueueDraft<T>(task: () => Promise<T>, onStart: () => void): Promise<T> {
+  draftQueueDepth += 1;
+  const start = () => {
+    onStart();
+    return task();
+  };
+  const run = draftChain.then(start, start);
+  const settle = () => {
+    draftQueueDepth -= 1;
+  };
+  draftChain = run.then(settle, settle);
+  return run;
+}
+
+/**
  * App store. Profile/credits and the job feed are server-backed via React Query
  * (GET /api/mobile/me, /api/jobs/feed); a right swipe calls the real
  * find + draft (/api/prompt-search) behind an optimistic "drafting" placeholder
@@ -65,6 +95,7 @@ const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   action: 'draft',
   contacts: 1,
   autoApply: false,
+  priority: 'employee',
 };
 
 /**
@@ -77,14 +108,14 @@ const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
 function outreachToTrackerRows(outreach: OutreachItem[]): TrackerRow[] {
   const rows: TrackerRow[] = [];
   for (const o of outreach) {
-    if (o.status === 'drafting' || o.status === 'failed') continue;
+    if (o.status === 'queued' || o.status === 'drafting' || o.status === 'failed') continue;
     const needsYou = (o.status === 'replied' && !o.attended) || o.status === 'ready';
     let preview: string;
     let statusLabel: string;
     let statusTone: TrackerRow['statusTone'];
     let bucket: TrackerRow['bucket'];
     if (o.status === 'ready') {
-      preview = 'Draft ready to review';
+      preview = o.subject ?? 'Draft ready to send';
       statusLabel = 'Draft ready';
       statusTone = 'accent';
       bucket = 'attention';
@@ -150,6 +181,18 @@ const cacheStorageKey = (uid: string, name: string) =>
 // cache above — it's a single flag, not a restorable blob). Bump the version to
 // re-show the flow to everyone after a redesign.
 const onboardingStorageKey = (uid: string) => `offerloop.onboarding.${uid}.v1`;
+// Jobs the user swiped away, cached per-user with a short TTL so they don't keep
+// reappearing in the feed mid-session / across a relaunch, but also don't pile up
+// stale forever. Half a day: long enough to cover a session, short enough that a
+// job you passed this morning can resurface tomorrow.
+const passedJobsStorageKey = (uid: string) => `offerloop.passedJobs.${uid}.v1`;
+const PASSED_JOBS_TTL_MS = 12 * 60 * 60 * 1000;
+// The exact job card the user swiped, kept per company so the company page can
+// show the real card they acted on (not a generic company blurb).
+const swipedCardsStorageKey = (uid: string) => `offerloop.swipedCards.${uid}.v1`;
+const companyKey = (name: string) => (name || '').trim().toLowerCase();
+// Jobs the user swiped UP to save for later (no TTL — saving is intentional).
+const savedJobsStorageKey = (uid: string) => `offerloop.savedJobs.${uid}.v1`;
 // Dev override: always start at onboarding on launch (set in .env / eas profile).
 const FORCE_ONBOARDING = process.env.EXPO_PUBLIC_FORCE_ONBOARDING === '1';
 const REAL_COOLDOWN_HOURS: Record<'Free' | 'Pro' | 'Elite', number> = { Free: 5, Pro: 4, Elite: 3 };
@@ -172,7 +215,9 @@ type AppStore = {
    * let the UI say so instead of passing fixtures off as real data.
    */
   connection: {
-    status: 'ok' | 'loading' | 'error';
+    /** 'reconnecting' = a refetch failed but we still have real data cached —
+     * softer banner, no "sample data" claim (which would be false). */
+    status: 'ok' | 'loading' | 'error' | 'reconnecting';
     usingSampleData: boolean;
     retry: () => void;
   };
@@ -183,6 +228,10 @@ type AppStore = {
    */
   feedState: { loading: boolean; error: boolean; retry: () => void };
   inboxState: { loading: boolean; error: boolean; retry: () => void };
+  /** Force-refetch the inbox (pull-to-refresh). Resolves when the fetch settles
+   *  so a RefreshControl can show its spinner. Also runs the optimistic->real id
+   *  reconcile, so a just-swiped draft picks up its real id immediately. */
+  refetchInbox: () => Promise<unknown>;
   loops: Loop[];
   loopActivity: LoopActivity[];
   resumeExperiences: ResumeExperience[];
@@ -190,9 +239,14 @@ type AppStore = {
   meetingPreps: MeetingPrep[];
   toast: ToastState;
   unreadCount: number;
+  // True for a couple seconds right after a swipe's draft lands, so the Inbox
+  // tab badge can flash green ("one finished").
+  draftJustCompleted: boolean;
   canUndo: boolean;
   passedCount: number;
   passedJobs: Job[];
+  savedCount: number;
+  savedJobs: Job[];
   swipeSettings: SwipeSettings;
   updateSwipeSettings: (patch: Partial<SwipeSettings>) => void;
   swipesAvailable: number;
@@ -206,10 +260,23 @@ type AppStore = {
   passJob: (id: string) => void;
   draftJob: (id: string) => void;
   draftAnotherContact: (opts: { company: string; jobTitle?: string }) => void;
+  /** Re-run the draft for a failed Inbox row (tap-to-retry). */
+  retryDraft: (id: string) => void;
+  /** Remember a job as the swiped card for its company (per-company Roles deck). */
+  rememberSwipedCard: (job: Job) => void;
+  /** Deduped auto-apply for any job — blocks a second application to the same one. */
+  autoApplyJob: (job: Job) => void;
   undoLastPass: () => void;
   restorePassedJob: (id: string) => void;
+  saveJob: (id: string) => void;
+  unsaveJob: (id: string) => void;
+  restoreSavedJob: (id: string) => void;
   resetDeck: () => void;
   updateOutreach: (id: string, patch: Partial<OutreachItem>) => void;
+  /** Map a stale optimistic outreach id to its real server id once reconciled. */
+  resolveOutreachId: (id: string) => string;
+  /** The exact job card the user swiped at this company, if we captured it. */
+  swipedCardForCompany: (company: string) => Job | undefined;
   toggleOutreachPin: (id: string) => void;
   toggleContactPin: (id: string) => void;
   markOutreachSent: (id: string) => void;
@@ -253,6 +320,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     queryKey: qk.me,
     queryFn: fetchMe,
     enabled: authStatus === 'signedIn',
+    // Self-heal: without an interval, one failed fetch (LTE blip, backend
+    // deploy) left isError sticky forever and the red banner never cleared
+    // until a manual Retry. Matches the inbox/notifications cadence.
+    refetchInterval: 60_000,
   });
   const profile: Profile = meQuery.data ?? MOCK_PROFILE;
 
@@ -267,6 +338,144 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Job feed: the ranked deck from GET /api/jobs/feed. Seed the local deck once
   // so passes/undos keep mutating it client-side as before; allJobs (used by
   // the company "other roles" view) tracks the full fetched list.
+  // Passed jobs, kept as timestamped entries so we can expire them (TTL above).
+  // passedJobs (the exposed list) is just the jobs, derived from the entries.
+  // Declared before the feed seed so the seed can filter passed ids out.
+  const [passedEntries, setPassedEntries] = useState<{ job: Job; ts: number }[]>([]);
+  const [passedLoaded, setPassedLoaded] = useState(false);
+  const passedJobs = useMemo(() => passedEntries.map((e) => e.job), [passedEntries]);
+  const passedIds = useMemo(() => new Set(passedEntries.map((e) => e.job.id)), [passedEntries]);
+  // Load the cached passes on sign-in, dropping anything past the TTL.
+  useEffect(() => {
+    if (!uid) {
+      // No user (mock/dev/signed-out): nothing to load, but mark loaded so the
+      // feed seed (gated on this) still runs.
+      setPassedEntries([]);
+      setPassedLoaded(true);
+      return;
+    }
+    setPassedLoaded(false);
+    let cancelled = false;
+    AsyncStorage.getItem(passedJobsStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        const cutoff = Date.now() - PASSED_JOBS_TTL_MS;
+        let entries: { job: Job; ts: number }[] = [];
+        try {
+          const parsed = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(parsed)) {
+            entries = parsed.filter((e) => e && e.job && typeof e.ts === 'number' && e.ts >= cutoff);
+          }
+        } catch {
+          /* ignore a corrupt blob */
+        }
+        setPassedEntries(entries);
+        setPassedLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPassedEntries([]);
+          setPassedLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  // Persist on every change (after the initial load), keyed per-user.
+  useEffect(() => {
+    if (!uid || !passedLoaded) return;
+    AsyncStorage.setItem(passedJobsStorageKey(uid), JSON.stringify(passedEntries)).catch(() => {});
+  }, [uid, passedEntries, passedLoaded]);
+
+  // The real job card the user swiped, per company (see key above). Persisted so
+  // the company page shows the exact card even after a relaunch.
+  const [swipedCards, setSwipedCards] = useState<Record<string, Job>>({});
+  const swipedLoadedRef = useRef(false);
+  useEffect(() => {
+    swipedLoadedRef.current = false;
+    if (!uid) {
+      setSwipedCards({});
+      swipedLoadedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(swipedCardsStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        try {
+          const parsed = raw ? JSON.parse(raw) : {};
+          const stored = parsed && typeof parsed === 'object' ? parsed : {};
+          // Merge, preferring anything captured in-session — otherwise a swipe
+          // made before this async load resolves would get clobbered by the
+          // (older) on-disk value.
+          setSwipedCards((cur) => ({ ...stored, ...cur }));
+        } catch {
+          /* keep whatever's in memory */
+        }
+        swipedLoadedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSwipedCards({});
+          swipedLoadedRef.current = true;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  useEffect(() => {
+    if (!uid || !swipedLoadedRef.current) return;
+    AsyncStorage.setItem(swipedCardsStorageKey(uid), JSON.stringify(swipedCards)).catch(() => {});
+  }, [uid, swipedCards]);
+  const recordSwipedCard = useCallback((job: Job) => {
+    const k = companyKey(job.company);
+    if (!k) return;
+    setSwipedCards((prev) => ({ ...prev, [k]: job }));
+  }, []);
+  const swipedCardForCompany = useCallback(
+    (company: string): Job | undefined => swipedCards[companyKey(company)],
+    [swipedCards],
+  );
+
+  // Saved jobs (swipe up to save for later). Persisted per-user, no TTL.
+  const [savedJobs, setSavedJobs] = useState<Job[]>([]);
+  const savedLoadedRef = useRef(false);
+  useEffect(() => {
+    savedLoadedRef.current = false;
+    if (!uid) {
+      setSavedJobs([]);
+      savedLoadedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(savedJobsStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        try {
+          const parsed = raw ? JSON.parse(raw) : [];
+          setSavedJobs(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          setSavedJobs([]);
+        }
+        savedLoadedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSavedJobs([]);
+          savedLoadedRef.current = true;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  useEffect(() => {
+    if (!uid || !savedLoadedRef.current) return;
+    AsyncStorage.setItem(savedJobsStorageKey(uid), JSON.stringify(savedJobs)).catch(() => {});
+  }, [uid, savedJobs]);
+
   const feedQuery = useQuery({
     queryKey: qk.feed,
     queryFn: fetchFeed,
@@ -274,14 +483,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const allJobs = feedQuery.data ?? MOCK_JOBS;
   useEffect(() => {
-    if (feedQuery.data && !deckSeeded) {
+    // Wait for the passed cache so a just-relaunched deck doesn't briefly show
+    // jobs the user already swiped away this session.
+    if (feedQuery.data && passedLoaded && !deckSeeded) {
       // Lean the freshly-seeded deck toward the user's preferred locations
-      // (with wildcards for volume). Done once at seed so the order doesn't
-      // reshuffle mid-swipe.
-      setJobs(rankJobsByLocation(feedQuery.data, meQuery.data?.preferredLocations ?? []));
+      // (with wildcards for volume), and drop anything passed within the TTL.
+      // Done once at seed so the order doesn't reshuffle mid-swipe.
+      const fresh = feedQuery.data.filter((j) => !passedIds.has(j.id));
+      setJobs(rankJobsByLocation(fresh, meQuery.data?.preferredLocations ?? []));
       setDeckSeeded(true);
     }
-  }, [feedQuery.data, deckSeeded, meQuery.data?.preferredLocations]);
+  }, [feedQuery.data, passedLoaded, passedIds, deckSeeded, meQuery.data?.preferredLocations]);
 
   // First-run onboarding flag, loaded per-user from disk. `null` until resolved
   // so the auth gate doesn't flash the feed before deciding. FORCE_ONBOARDING
@@ -391,10 +603,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const server = inboxQuery.data;
     if (!server) return;
+    // Match optimistic items to the server by contact+company (the optimistic id
+    // is a placeholder; the server assigns a real Firestore id). Keep an
+    // optimistic item until the server actually has it; when it does, record the
+    // id swap so an open detail screen can follow it, and let the server copy win.
+    const keyOf = (o: OutreachItem) =>
+      `${(o.contact?.name || '').toLowerCase().trim()}|${(o.company || '').toLowerCase().trim()}`;
     setOutreach((prev) => {
-      const serverIds = new Set(server.map((o) => o.id));
-      const inFlight = prev.filter((o) => o.status === 'drafting' && !serverIds.has(o.id));
-      return [...inFlight, ...server];
+      const serverByKey = new Map(server.map((s) => [keyOf(s), s] as const));
+      const keptOptimistic: OutreachItem[] = [];
+      for (const o of prev) {
+        if (!o.id.startsWith('out-new-')) continue; // stale server rows are replaced by the fresh list
+        const match = serverByKey.get(keyOf(o));
+        if (match && o.status !== 'drafting' && o.status !== 'queued') {
+          reconciledIds.current[o.id] = match.id; // remember the swap; drop the optimistic
+        } else {
+          keptOptimistic.push(o); // still drafting, or the server doesn't have it yet
+        }
+      }
+      return [...keptOptimistic, ...server];
     });
   }, [inboxQuery.data]);
 
@@ -418,9 +645,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const connection = useMemo<AppStore['connection']>(() => {
     const signedIn = authStatus === 'signedIn';
     const usingSampleData = signedIn && meQuery.data === undefined;
-    let status: 'ok' | 'loading' | 'error' = 'ok';
+    let status: 'ok' | 'loading' | 'error' | 'reconnecting' = 'ok';
     if (signedIn) {
-      if (meQuery.isError) status = 'error';
+      // 'error' (red, "sample data") only when we truly have nothing real to
+      // show. A failed refetch with real data still cached is 'reconnecting'.
+      if (meQuery.isError) status = meQuery.data === undefined ? 'error' : 'reconnecting';
       else if (meQuery.data === undefined) status = 'loading';
     }
     return {
@@ -453,6 +682,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [signedIn, inboxQuery.isLoading, inboxQuery.isError, inboxQuery.data, queryClient],
   );
+  const refetchInbox = useCallback(() => inboxQuery.refetch(), [inboxQuery]);
+
+  // Foreground sweep: a draft request fired before the app was backgrounded may
+  // have died with it (iOS suspends JS, so its .then/.catch never ran). On
+  // return to foreground, refetch the inbox (a draft that actually completed
+  // server-side reconciles to a real row) and fail anything still
+  // queued/drafting after 5 minutes so it offers tap-to-retry instead of
+  // spinning forever.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      refetchInbox();
+      const cutoff = Date.now() - 5 * 60_000;
+      setOutreach((prev) =>
+        prev.map((o) =>
+          (o.status === 'drafting' || o.status === 'queued') &&
+          typeof o.createdAtMs === 'number' &&
+          o.createdAtMs < cutoff
+            ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
+            : o,
+        ),
+      );
+    });
+    return () => sub.remove();
+  }, [refetchInbox]);
 
   const [loops, setLoops] = useState<Loop[]>(MOCK_PROFILE.loops);
   // Loops fleet from GET /api/agent/loops; re-sync the local list to the server
@@ -475,7 +729,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (meetingPrepsQuery.data) setMeetingPreps(meetingPrepsQuery.data);
   }, [meetingPrepsQuery.data]);
-  const [passedJobs, setPassedJobs] = useState<Job[]>([]);
   // Derived from the real outreach list (no separate fetch): same contacts as
   // the Inbox, shaped for the Network Contacts list.
   const trackerRows = useMemo(() => outreachToTrackerRows(outreach), [outreach]);
@@ -494,6 +747,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const idCounter = useRef(0);
   const contactCounter = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Maps an optimistic swipe id (out-new-N) to the real server contact id once
+  // the inbox poll surfaces it, so a detail screen opened on the optimistic id
+  // can follow the swap instead of showing "no longer exists".
+  const reconciledIds = useRef<Record<string, string>>({});
 
   const showToast = useCallback((message: string, showInboxAction = false) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -569,30 +826,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const passJob = useCallback((id: string) => {
     setJobs((prev) => {
       const job = prev.find((j) => j.id === id);
-      if (job) setPassedJobs((p) => [...p, job]);
+      if (job) setPassedEntries((p) => [...p, { job, ts: Date.now() }]);
       return prev.filter((j) => j.id !== id);
     });
   }, []);
 
   const undoLastPass = useCallback(() => {
-    setPassedJobs((prev) => {
+    setPassedEntries((prev) => {
       if (prev.length === 0) return prev;
-      const job = prev[prev.length - 1];
-      setJobs((js) => [job, ...js]);
+      const last = prev[prev.length - 1];
+      setJobs((js) => [last.job, ...js]);
       return prev.slice(0, -1);
     });
   }, []);
 
-  const restorePassedJob = useCallback((id: string) => {
-    setPassedJobs((prev) => {
+  // Swipe up to save a job for later; it leaves the deck and lands in Saved.
+  const saveJob = useCallback((id: string) => {
+    setJobs((prev) => {
       const job = prev.find((j) => j.id === id);
-      if (job) setJobs((js) => [job, ...js]);
+      if (job) setSavedJobs((s) => (s.some((j) => j.id === id) ? s : [job, ...s]));
+      return prev.filter((j) => j.id !== id);
+    });
+  }, []);
+  const unsaveJob = useCallback((id: string) => {
+    setSavedJobs((prev) => prev.filter((j) => j.id !== id));
+  }, []);
+  // Put a saved job back at the top of the deck (to review / apply / reach out).
+  const restoreSavedJob = useCallback((id: string) => {
+    setSavedJobs((prev) => {
+      const job = prev.find((j) => j.id === id);
+      if (job) setJobs((js) => [job, ...js.filter((j) => j.id !== id)]);
       return prev.filter((j) => j.id !== id);
     });
   }, []);
 
+  const restorePassedJob = useCallback((id: string) => {
+    setPassedEntries((prev) => {
+      const entry = prev.find((e) => e.job.id === id);
+      if (entry) setJobs((js) => [entry.job, ...js]);
+      return prev.filter((e) => e.job.id !== id);
+    });
+  }, []);
+
   const resetDeck = useCallback(() => {
-    setPassedJobs([]);
+    setPassedEntries([]);
     setJobs(feedQuery.data ?? MOCK_JOBS);
   }, [feedQuery.data]);
 
@@ -604,6 +881,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const resolveOutreachId = useCallback((id: string) => reconciledIds.current[id] ?? id, []);
 
   const toggleOutreachPin = useCallback((id: string) => {
     setOutreach((prev) =>
@@ -618,6 +897,116 @@ export function AppProvider({ children }: { children: ReactNode }) {
       prev.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)),
     );
   }, []);
+
+  // Original swipe args for failed placeholders, so tap-to-retry re-runs the
+  // same targeting. Session-local (placeholder rows don't survive restarts).
+  const failedDraftArgs = useRef<
+    Map<
+      string,
+      { company: string; jobTitle: string; action: 'draft' | 'send'; priority: SwipeSettings['priority'] }
+    >
+  >(new Map());
+
+  /**
+   * Run one draft request for existing placeholder rows and reconcile them with
+   * the result. Shared by the initial swipe and tap-to-retry. Requests go
+   * through the module-level queue (one in flight; queued rows flip to
+   * 'drafting' when their turn starts).
+   */
+  const executeDraft = useCallback(
+    (
+      placeholderIds: string[],
+      args: {
+        company: string;
+        jobTitle: string;
+        count: number;
+        action: 'draft' | 'send';
+        priority: SwipeSettings['priority'];
+      },
+      opts: { isRetry?: boolean } = {},
+    ) => {
+      enqueueDraft(
+        () => runSwipe(args),
+        () => {
+          setOutreach((prev) =>
+            prev.map((o) =>
+              placeholderIds.includes(o.id) && o.status === 'queued'
+                ? { ...o, status: 'drafting' }
+                : o,
+            ),
+          );
+        },
+      )
+        .then(({ items, creditsRemaining }) => {
+          placeholderIds.forEach((pid) => failedDraftArgs.current.delete(pid));
+          const foundCount = items.length;
+          // Activation event — the core action. Lets the CMO measure swipe→draft
+          // and segment activation by referral_source / target_track.
+          if (foundCount > 0) {
+            track('outreach_drafted', { company: args.company, count: foundCount, action: args.action });
+            // Flash the Inbox tab badge green ("one finished") for a beat.
+            setDraftJustCompleted(true);
+            setTimeout(() => setDraftJustCompleted(false), 2500);
+          }
+          setOutreach((prev) => {
+            // Fill placeholders that got a real contact; DROP the rest. A swipe
+            // that found no contact shouldn't leave a "No contact found" row in
+            // the Inbox — nothing was reached.
+            const next = [...prev];
+            placeholderIds.forEach((pid, k) => {
+              const idx = next.findIndex((o) => o.id === pid);
+              if (idx === -1) return;
+              const item = items[k];
+              if (item) next[idx] = { ...item, id: pid };
+              else next.splice(idx, 1);
+            });
+            return next;
+          });
+          // No per-swipe "draft ready" bell item: the user is in-app watching
+          // the Inbox fill, so a notification per contact is just noise. The
+          // bell is reserved for things that happen while they're away (replies,
+          // Loop runs), which the backend writes on its own.
+          if (foundCount === 0) {
+            // No one found — give the swipe-token back and reconcile credits
+            // from the server (which charges per contact, so a miss costs 0).
+            // A retry never spent a fresh token, so nothing to refund there.
+            if (!opts.isRetry) refundSwipe();
+            showToast(`No contact found at ${args.company} — no credits used`);
+          }
+          if (typeof creditsRemaining === 'number') {
+            patchProfile({ credits: creditsRemaining });
+          } else {
+            queryClient.invalidateQueries({ queryKey: qk.me });
+          }
+        })
+        .catch((err) => {
+          if (isInsufficientCredits(err)) {
+            setOutreach((prev) => prev.filter((o) => !placeholderIds.includes(o.id)));
+            // Neutral, no web-purchase steering in the toast (Apple anti-steering).
+            // The Credits screen carries the single "manage on web" link.
+            showToast('Not enough credits for that swipe');
+          } else {
+            placeholderIds.forEach((pid) =>
+              failedDraftArgs.current.set(pid, {
+                company: args.company,
+                jobTitle: args.jobTitle,
+                action: args.action,
+                priority: args.priority,
+              }),
+            );
+            setOutreach((prev) =>
+              prev.map((o) =>
+                placeholderIds.includes(o.id)
+                  ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
+                  : o,
+              ),
+            );
+          }
+          queryClient.invalidateQueries({ queryKey: qk.me });
+        });
+    },
+    [queryClient, patchProfile, showToast, refundSwipe],
+  );
 
   /**
    * The hero. Optimistically spend a swipe + drop "drafting" placeholders in
@@ -636,12 +1025,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         count?: number;
         action?: SwipeSettings['action'];
         autoApply?: boolean;
-        firstIsHiringManager?: boolean;
+        priority?: SwipeSettings['priority'];
       } = {},
     ) => {
       const count = opts.count ?? 1;
       let action = opts.action ?? 'draft';
-      const firstIsHM = opts.firstIsHiringManager ?? true;
+      const priority = opts.priority ?? 'employee';
+
+      // Any hiring-manager targeting (mix or hiring_manager) reuses
+      // /find-hiring-manager, which only ever drafts (cold outreach to
+      // decision-makers should be reviewed before it sends).
+      if (priority !== 'employee') action = 'draft';
 
       // Off-hours guard: a swipe-to-send fired outside good sending hours
       // (8am–10pm device-local) would land an email with a late-night
@@ -673,109 +1067,139 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showToast(`${verb} ${count} ${peopleWord} at ${company}`, true);
       }
 
+      // If another draft is already cooking, these placeholders start as
+      // 'queued' (honest: nothing is running for them yet) and flip to
+      // 'drafting' when the queue reaches them.
+      const initialStatus: OutreachItem['status'] = draftQueueDepth === 0 ? 'drafting' : 'queued';
       const placeholderIds: string[] = [];
       for (let k = 0; k < count; k++) {
         idCounter.current += 1;
         const outreachId = `out-new-${idCounter.current}`;
         placeholderIds.push(outreachId);
         setOutreach((prev) => [
-          { id: outreachId, jobTitle, company, status: 'drafting', timeLabel: 'Just now' },
+          {
+            id: outreachId,
+            jobTitle,
+            company,
+            status: initialStatus,
+            timeLabel: 'Just now',
+            createdAtMs: Date.now(),
+          },
           ...prev,
         ]);
       }
 
-      runSwipe({ company, jobTitle, count, action, firstIsHiringManager: firstIsHM })
-        .then(({ items, creditsRemaining }) => {
-          const foundCount = items.length;
-          // Activation event — the core action. Lets the CMO measure swipe→draft
-          // and segment activation by referral_source / target_track.
-          if (foundCount > 0) track('outreach_drafted', { company, count: foundCount, action });
-          setOutreach((prev) => {
-            // Fill placeholders that got a real contact; DROP the rest. A swipe
-            // that found no contact shouldn't leave a "No contact found" row in
-            // the Inbox — nothing was reached.
-            const next = [...prev];
-            placeholderIds.forEach((pid, k) => {
-              const idx = next.findIndex((o) => o.id === pid);
-              if (idx === -1) return;
-              const item = items[k];
-              if (item) next[idx] = { ...item, id: pid };
-              else next.splice(idx, 1);
-            });
-            return next;
-          });
-          items.forEach((item, k) => {
-            const pid = placeholderIds[k];
-            if (!pid) return;
-            const who = item.contact?.name ?? 'a contact';
-            setNotifications((prev) => [
-              {
-                id: `n-new-${pid}`,
-                kind: 'draft_ready',
-                text:
-                  action === 'send'
-                    ? `Sent to ${who} at ${company}`
-                    : `Outreach to ${who} at ${company} is ready to review`,
-                timeLabel: 'Just now',
-                read: false,
-                outreachId: pid,
-              },
-              ...prev,
-            ]);
-          });
-          if (foundCount === 0) {
-            // No one found — give the swipe-token back and reconcile credits
-            // from the server (which charges per contact, so a miss costs 0).
-            refundSwipe();
-            showToast(`No contact found at ${company} — no credits used`);
-          }
-          if (typeof creditsRemaining === 'number') {
-            patchProfile({ credits: creditsRemaining });
-          } else {
-            queryClient.invalidateQueries({ queryKey: qk.me });
-          }
-          // The backend just wrote a durable draft_ready bell item; pull it so
-          // the optimistic client item is replaced by the persisted one (which
-          // survives a reload and deep-links to the real conversation).
-          if (foundCount > 0) {
-            queryClient.invalidateQueries({ queryKey: qk.notifications });
-          }
-        })
-        .catch((err) => {
-          if (isInsufficientCredits(err)) {
-            setOutreach((prev) => prev.filter((o) => !placeholderIds.includes(o.id)));
-            showToast('Not enough credits. Top up on offerloop.ai');
-          } else {
-            setOutreach((prev) =>
-              prev.map((o) =>
-                placeholderIds.includes(o.id)
-                  ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
-                  : o,
-              ),
-            );
-          }
-          queryClient.invalidateQueries({ queryKey: qk.me });
-        });
+      executeDraft(placeholderIds, { company, jobTitle, count, action, priority });
 
       // Auto-apply submission is handled on the feed screen via the review
       // sheet (real Browserbase submit), not faked here.
     },
-    [queryClient, patchProfile, showToast, spendSwipes, refundSwipe],
+    [queryClient, showToast, spendSwipes, executeDraft],
+  );
+
+  /**
+   * Tap-to-retry for a failed Inbox row: flips it back to queued/drafting and
+   * re-runs a single-contact draft through the same queue. Uses the original
+   * swipe's action/priority when we recorded the failure ourselves; rows
+   * failed by the staleness sweep fall back to a plain employee draft. No
+   * fresh optimistic credit spend — the server charges per contact found and
+   * we reconcile from its authoritative count.
+   */
+  const retryDraft = useCallback(
+    (id: string) => {
+      const row = outreach.find((o) => o.id === id);
+      if (!row || row.status !== 'failed') return;
+      const saved = failedDraftArgs.current.get(id);
+      const priority = saved?.priority ?? 'employee';
+      let action: 'draft' | 'send' = saved?.action ?? 'draft';
+      if (priority !== 'employee') action = 'draft';
+      // Same off-hours guard as beginDraft: a retried "send" late at night
+      // quietly becomes a draft.
+      const hour = new Date().getHours();
+      if (action === 'send' && (hour < 8 || hour >= 22)) action = 'draft';
+
+      const initialStatus: OutreachItem['status'] = draftQueueDepth === 0 ? 'drafting' : 'queued';
+      setOutreach((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                status: initialStatus,
+                snippet: undefined,
+                timeLabel: 'Just now',
+                createdAtMs: Date.now(),
+              }
+            : o,
+        ),
+      );
+      executeDraft(
+        [id],
+        { company: row.company, jobTitle: row.jobTitle, count: 1, action, priority },
+        { isRetry: true },
+      );
+    },
+    [outreach, executeDraft],
   );
 
   const draftJob = useCallback(
     (id: string) => {
       const job = jobs.find((j) => j.id === id);
       if (!job) return;
+      recordSwipedCard(job); // remember the exact card for the company page
       setJobs((prev) => prev.filter((j) => j.id !== id));
       beginDraft(job.company, job.title, {
         count: swipeSettings.contacts,
         action: swipeSettings.action,
         autoApply: swipeSettings.autoApply,
-        firstIsHiringManager: true,
+        priority: swipeSettings.priority,
       });
     },
-    [jobs, beginDraft, swipeSettings],
+    [jobs, beginDraft, swipeSettings, recordSwipedCard],
+  );
+
+  // Remember a job as the "card you swiped" for its company (used by the
+  // per-company Roles deck, which auto-applies rather than drafting outreach).
+  const rememberSwipedCard = useCallback((job: Job) => recordSwipedCard(job), [recordSwipedCard]);
+
+  // Single, deduped entry point for auto-applying to a job — used by every apply
+  // surface (feed swipe, ⚡ toggle, card button, company Roles/Applied lists,
+  // Saved). Blocks a second application to the same job: in-flight guard (rapid
+  // double-tap) + a session set of successes + the applied-jobs cache. (The
+  // backend should ALSO dedupe for cross-device safety — client guard only.)
+  const applyingRef = useRef<Set<string>>(new Set());
+  const appliedIdsRef = useRef<Set<string>>(new Set());
+  const autoApplyJob = useCallback(
+    (job: Job): void => {
+      const id = job.id;
+      const cache = queryClient.getQueryData<AppliedJob[]>(['appliedJobs']);
+      if (applyingRef.current.has(id) || appliedIdsRef.current.has(id) || alreadyApplied(cache, id)) {
+        showToast('You already applied to this role');
+        return;
+      }
+      if (!job.autoApplyEligible) {
+        showToast(`${job.title} can't be auto-applied yet`);
+        return;
+      }
+      applyingRef.current.add(id);
+      recordSwipedCard(job);
+      showToast(`Auto-applying to ${job.title}`, true);
+      startAutoApply(id)
+        .then((r) => {
+          if (r.ok) {
+            appliedIdsRef.current.add(id);
+            queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
+          } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+            showToast('Set up your application profile to auto-apply');
+          } else if (r.code === 'INSUFFICIENT_CREDITS') {
+            showToast('Not enough credits to auto-apply');
+          } else if (r.code !== 'INELIGIBLE') {
+            showToast('Could not auto-apply, try again');
+          }
+        })
+        .catch(() => showToast('Could not auto-apply, try again'))
+        .finally(() => applyingRef.current.delete(id));
+    },
+    [queryClient, showToast, recordSwipedCard],
   );
 
   const draftAnotherContact = useCallback(
@@ -783,7 +1207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       beginDraft(opts.company, opts.jobTitle ?? `a role at ${opts.company}`, {
         count: 1,
         action: swipeSettings.action,
-        firstIsHiringManager: false,
+        priority: 'employee',
       });
     },
     [beginDraft, swipeSettings.action],
@@ -839,7 +1263,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       updateOutreach(id, {
         status: 'sent',
-        snippet: 'Sent from your connected Gmail (mock)',
+        snippet: 'Sent from your connected Gmail',
         timeLabel: 'Just now',
       });
     },
@@ -942,6 +1366,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const [draftJustCompleted, setDraftJustCompleted] = useState(false);
 
   const value = useMemo<AppStore>(
     () => ({
@@ -954,16 +1379,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       connection,
       feedState,
       inboxState,
+      refetchInbox,
       loops,
-      loopActivity: MOCK_LOOP_ACTIVITY,
+      // No global Loop-activity feed endpoint yet — empty (honest empty state in
+      // the Activity tab) instead of seeding fixture activity.
+      loopActivity: [] as LoopActivity[],
       resumeExperiences: profile.resumeExperiences,
       files: MOCK_FILES,
       meetingPreps,
       toast,
       unreadCount,
+      draftJustCompleted,
       canUndo: passedJobs.length > 0,
       passedCount: passedJobs.length,
       passedJobs,
+      savedCount: savedJobs.length,
+      savedJobs,
       swipeSettings,
       updateSwipeSettings,
       swipesAvailable,
@@ -975,12 +1406,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNotificationsEnabled,
       dismissNotifPrompt,
       passJob,
+      saveJob,
+      unsaveJob,
+      restoreSavedJob,
       draftJob,
       draftAnotherContact,
+      retryDraft,
+      rememberSwipedCard,
+      autoApplyJob,
       undoLastPass,
       restorePassedJob,
       resetDeck,
       updateOutreach,
+      resolveOutreachId,
+      swipedCardForCompany,
       toggleOutreachPin,
       toggleContactPin,
       markOutreachSent,
@@ -1005,9 +1444,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       connection,
       feedState,
       inboxState,
+      refetchInbox,
       loops,
       meetingPreps,
       passedJobs,
+      savedJobs,
       swipeSettings,
       swipesAvailable,
       swipeBatchSize,
@@ -1016,9 +1457,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notifPromptDismissed,
       toast,
       unreadCount,
+      draftJustCompleted,
       passJob,
+      saveJob,
+      unsaveJob,
+      restoreSavedJob,
       draftJob,
       draftAnotherContact,
+      retryDraft,
+      rememberSwipedCard,
+      autoApplyJob,
       updateSwipeSettings,
       rechargeNow,
       setNotificationsEnabled,
@@ -1027,6 +1475,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restorePassedJob,
       resetDeck,
       updateOutreach,
+      resolveOutreachId,
+      swipedCardForCompany,
       toggleOutreachPin,
       toggleContactPin,
       markOutreachSent,

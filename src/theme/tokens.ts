@@ -28,6 +28,7 @@ export const lightColors = {
   marketing: '#3B82F6',
   coffee: '#8B5A2B',
   bolt: '#FACC15',
+  feedBg: '#E8F1FF', // light baby-blue screen wash (Feed, Loops)
 } as const;
 
 export type Palette = { [K in keyof typeof lightColors]: string };
@@ -58,6 +59,7 @@ export const darkColors: Palette = {
   marketing: '#5B9BF4',
   coffee: '#C08552',
   bolt: '#FACC15',
+  feedBg: '#0E1320', // keep the dark screen background in dark mode
 };
 
 /** Default export stays the light palette (module-scope/back-compat reads). */

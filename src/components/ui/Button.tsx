@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, Text, View, type ViewStyle } from 'react-native';
 
@@ -9,7 +10,7 @@ import { fonts, type Palette } from '@/theme/tokens';
  * Web Button recipe: radius 8, 14px medium text, 8px gap, 16px icons.
  * Heights: default 36 (16px pad), sm 32 (12px pad, 13px text),
  * lg 44 (24px pad, 15px text), xs 28, icon 36x36.
- * The signature primary action is the ink-black fill, not a colored button.
+ * The signature primary action is a vibrant blue fill (marketing blue).
  */
 
 export type ButtonVariant =
@@ -48,7 +49,7 @@ function variantStyles(variant: ButtonVariant, pressed: boolean, colors: Palette
     case 'primary':
       return {
         container: {
-          backgroundColor: pressed ? '#000205' : colors.ink,
+          backgroundColor: pressed ? '#2563EB' : colors.marketing,
           borderColor: 'transparent',
         },
         text: colors.paper,
@@ -104,6 +105,14 @@ export function Button({
   const s = SIZES[size];
   const v = variantStyles(variant, pressed, colors);
 
+  // A light tap so every button feels tactile.
+  const handlePress = onPress
+    ? () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        onPress();
+      }
+    : undefined;
+
   const containerStyle: ViewStyle = {
     height: s.height,
     paddingHorizontal: size === 'icon' ? 0 : s.paddingX,
@@ -121,7 +130,7 @@ export function Button({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}

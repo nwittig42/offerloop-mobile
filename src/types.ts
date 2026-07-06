@@ -24,7 +24,7 @@ export type CompanyInfo = {
   news: { source: string; timeLabel: string; headline: string }[];
 };
 
-export type OutreachStatus = 'drafting' | 'ready' | 'sent' | 'replied' | 'failed';
+export type OutreachStatus = 'queued' | 'drafting' | 'ready' | 'sent' | 'replied' | 'failed';
 
 /** Who, in the company, this contact is to you. The clarity on the swipe. */
 export type ContactRelation = 'Hiring manager' | 'Recruiter' | 'Employee';
@@ -45,6 +45,12 @@ export type SwipeSettings = {
   action: 'draft' | 'send';
   contacts: 1 | 2 | 3;
   autoApply: boolean;
+  // Who a swipe targets, on a teammates -> hiring-managers dial.
+  //  'employee'      = teammates only (broadest, cheapest, lands most often)
+  //  'mix'           = one hiring manager + the rest teammates
+  //  'hiring_manager'= hiring managers first (verified), teammates only to fill
+  // 'mix'/'hiring_manager' always draft (the HM endpoint never auto-sends).
+  priority: 'employee' | 'mix' | 'hiring_manager';
 };
 
 export type ScoutChat = {
@@ -76,6 +82,9 @@ export type OutreachItem = {
   pinned?: boolean;
   /** Deep link to the Gmail draft, for the cold-open send (no in-app send-draft endpoint). */
   gmailDraftUrl?: string;
+  /** When a queued/drafting placeholder was created — lets the foreground sweep
+   *  fail rows whose request died while the app was backgrounded. */
+  createdAtMs?: number;
 };
 
 export type NotificationItem = {
@@ -158,4 +167,14 @@ export type MeetingPrep = {
   status?: 'processing' | 'completed' | 'failed';
   /** Link to the generated full prep PDF, when done. */
   pdfUrl?: string;
+  // Richer sections from the coffee-chat-prep backend, surfaced in the detail.
+  commonGround?: string; // similaritySummary — why you two connect
+  conversationStrategy?: string; // how to steer the chat
+  companyCheatSheet?: string; // quick company brief
+  research?: {
+    companyNews: string[];
+    companyOverview: string[];
+    personMentions: string[];
+    industryTrends: string[];
+  };
 };

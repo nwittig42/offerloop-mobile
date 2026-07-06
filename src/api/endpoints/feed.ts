@@ -153,6 +153,31 @@ function mapJob(raw: RawJob): Job {
 }
 
 /**
+ * Open roles at ONE company, for the per-company Roles deck. Reuses the existing
+ * backend search (GET /api/jobs/search?company=X), which returns jobs through the
+ * SAME serializer as the feed (auto_apply_eligible + ats_platform included), so
+ * mapJob works unchanged. Companies are stored lowercase-canonical on the backend
+ * and the match is case-sensitive, so we lowercase the input to line them up.
+ */
+export async function fetchRolesByCompany(company: string): Promise<Job[]> {
+  if (USE_MOCKS) return [];
+  const c = (company || '').trim().toLowerCase();
+  if (!c) return [];
+  const res = await apiFetch<{ results?: RawJob[] }>(
+    `/api/jobs/search?company=${encodeURIComponent(c)}&limit=100`,
+  );
+  const seen = new Set<string>();
+  const jobs: Job[] = [];
+  for (const r of res.results || []) {
+    const j = mapJob(r);
+    if (seen.has(j.id)) continue;
+    seen.add(j.id);
+    jobs.push(j);
+  }
+  return jobs;
+}
+
+/**
  * Lazy per-job description. The feed strips description_raw to stay lean, so the
  * card pulls the prose on demand. Returns '' when the job has no stored text so
  * the card can show an honest empty state rather than placeholder filler.

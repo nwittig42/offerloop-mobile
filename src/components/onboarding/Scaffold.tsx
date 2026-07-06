@@ -52,7 +52,7 @@ export function OnboardingScaffold({
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
       {/* Progress bar */}
       <View style={{ paddingTop: insets.top + 14, paddingHorizontal: 24 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, height: 28 }}>
@@ -64,7 +64,7 @@ export function OnboardingScaffold({
             <View style={{ width: 22 }} />
           )}
           <View style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.hairline, overflow: 'hidden' }}>
-            <View style={{ width: `${pct * 100}%`, height: 5, borderRadius: 3, backgroundColor: colors.accent }} />
+            <View style={{ width: `${pct * 100}%`, height: 5, borderRadius: 3, backgroundColor: colors.marketing }} />
           </View>
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary, width: 30, textAlign: 'right' }}>
             {step}/{total}

@@ -17,7 +17,9 @@ function guessDomain(name: string): string | null {
  * (employer_logo), then Clearbit's logo CDN by guessed domain, then Google's
  * favicon service, and finally a clean initial tile. Each image that fails to
  * load advances to the next source, so a missing/blocked logo degrades quietly
- * to the letter rather than a broken image.
+ * to the letter rather than a broken image. We keep the favicon source because
+ * it carries logo coverage for the long tail of companies Clearbit misses;
+ * recognizable icons on every card matter more than the rare generic-globe miss.
  */
 export function CompanyLogo({
   name,

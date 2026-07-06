@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useState } from 'react';
 import { Image, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +23,9 @@ export default function SignInScreen() {
   const [phase, setPhase] = useState<'enter' | 'sending' | 'sent'>('enter');
   const [error, setError] = useState<string | null>(null);
 
-  // Dev-only test sign-in (stripped from release builds). Prefilled from
+  // Password sign-in for dev + internal (preview-channel) field builds, since the
+  // magic-link universal-link hand-back isn't built yet. Hidden on the production
+  // channel so store builds stay passwordless. Prefilled from
   // EXPO_PUBLIC_DEV_EMAIL / EXPO_PUBLIC_DEV_PASSWORD if set.
   const [devEmail, setDevEmail] = useState(process.env.EXPO_PUBLIC_DEV_EMAIL || '');
   const [devPassword, setDevPassword] = useState(process.env.EXPO_PUBLIC_DEV_PASSWORD || '');
@@ -155,7 +158,7 @@ export default function SignInScreen() {
         </View>
       )}
 
-      {__DEV__ && phase !== 'sent' ? (
+      {(__DEV__ || Updates.channel === 'preview') && phase !== 'sent' ? (
         <View
           style={{
             marginTop: 28,

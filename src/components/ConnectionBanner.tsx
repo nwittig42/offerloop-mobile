@@ -21,11 +21,17 @@ export function ConnectionBanner() {
 
   if (connection.status === 'ok') return null;
 
+  // Red only for the true nothing-real-to-show case. A failed refetch while
+  // real data is still on screen ('reconnecting') gets the softer amber and
+  // never claims "sample data" (it would be false — the data shown is real).
   const isError = connection.status === 'error';
   const bg = isError ? colors.negative : colors.waiting;
   const label = isError
     ? 'Can’t reach Offerloop — showing sample data'
-    : 'Connecting to Offerloop…';
+    : connection.status === 'reconnecting'
+      ? 'Reconnecting to Offerloop…'
+      : 'Connecting to Offerloop…';
+  const showRetry = isError || connection.status === 'reconnecting';
 
   return (
     <Animated.View
@@ -57,7 +63,7 @@ export function ConnectionBanner() {
           }}>
           {label}
         </Text>
-        {isError ? (
+        {showRetry ? (
           <Pressable onPress={connection.retry} accessibilityRole="button" hitSlop={8}>
             <Text
               style={{

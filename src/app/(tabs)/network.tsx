@@ -1,39 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import {
   AUTO_APPLY_TERMINAL,
+  appliedRelativeTime,
   appliedStatusMeta,
   listAppliedJobs,
   type AppliedJob,
 } from '@/api/endpoints/autoApply';
 
-import Avatar from '@/components/Avatar';
 import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
-import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import SearchBar from '@/components/ui/SearchBar';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
-import type { TrackerRow } from '@/types';
 
 /**
- * Network: who you have reached out to, plus your coffee library. Two tabs
- * (Contacts, Meeting prep) like Profile and Loops. Each contact row carries
- * two quick actions: a coffee button (prep a meeting with them) and a plus
- * button (find another contact at the same company, the widen-your-reach
- * move surfaced right on the row). Deep pipeline work stays on the web.
+ * Network: applications and meeting prep. The Inbox owns the people and
+ * conversations (it shows the same contacts), so Network is the outbound /
+ * prep surface: a slim stats header, the companies you've reached into, the
+ * jobs you applied to, and your coffee library. Deep pipeline work stays on web.
  */
 
-const TABS = ['Contacts', 'Meeting prep', 'Applied'] as const;
+const TABS = ['Companies', 'Applications', 'Meeting prep'] as const;
 type TabKey = (typeof TABS)[number];
 
 function BigNumber({ value, label }: { value: number; label: string }) {
@@ -50,126 +44,41 @@ function BigNumber({ value, label }: { value: number; label: string }) {
   );
 }
 
-/**
- * A contact row in the iMessage style: gradient avatar, bold name with a
- * timestamp, a gray preview line, an unread dot when they're waiting on you,
- * and swipe-left actions (prep a meeting, reach another contact).
- */
-function ContactRow({
-  row,
-  onOpen,
-  onCoffee,
-  onTogglePin,
-}: {
-  row: TrackerRow;
-  onOpen: () => void;
-  onCoffee: () => void;
-  onTogglePin: () => void;
-}) {
-  const colors = useColors();
-  return (
-    <ReanimatedSwipeable
-      friction={1.6}
-      rightThreshold={40}
-      renderRightActions={() => (
-        <Pressable
-          onPress={onCoffee}
-          style={{
-            width: 88,
-            backgroundColor: colors.coffee,
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 3,
-          }}>
-          <Ionicons name="cafe" size={20} color={colors.paper} />
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.paper }}>Prep</Text>
-        </Pressable>
-      )}>
-      <Pressable
-        onPress={onOpen}
-        onLongPress={onTogglePin}
-        delayLongPress={280}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          paddingLeft: 16,
-          paddingRight: 16,
-          paddingVertical: 9,
-          backgroundColor: row.pinned ? colors.paper2 : colors.paper,
-        }}>
-        <View style={{ width: 8, alignItems: 'center' }}>
-          {row.unread ? (
-            <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.marketing }} />
-          ) : null}
-        </View>
-        <Avatar name={row.contactName} size={48} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
-              {row.contactName}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              {row.pinned ? (
-                <Ionicons name="pin" size={12} color={colors.accent} style={{ marginRight: 1 }} />
-              ) : null}
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-                {row.timeShort}
-              </Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
-            </View>
-          </View>
-          <Text
-            numberOfLines={2}
-            style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 18 }}>
-            {row.preview}
-          </Text>
-        </View>
-      </Pressable>
-    </ReanimatedSwipeable>
-  );
-}
-
 export default function NetworkScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { outreach, trackerRows, meetingPreps, unreadCount, passedCount, toggleContactPin, showToast } =
-    useApp();
-  const [tab, setTab] = useState<TabKey>('Contacts');
-  const [companiesOpen, setCompaniesOpen] = useState(false);
+  const { outreach, trackerRows, meetingPreps, unreadCount, passedCount, savedCount } = useApp();
+  const [tab, setTab] = useState<TabKey>('Companies');
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [appQuery, setAppQuery] = useState('');
+  const [gridCols, setGridCols] = useState(3); // density toggle: 2 / 3 / 4 up
+  const [sortMode, setSortMode] = useState<'recent' | 'active'>('recent');
+  const { width: windowWidth } = useWindowDimensions();
 
-  // Applications submitted via auto-apply. Fetched only when the Applied tab is
-  // open; polls every 8s while any application is still in flight (queued /
-  // running) so a submit lands without a manual refresh.
+  // Applications submitted via auto-apply. Fetched on Applications (the list) and
+  // Companies (the grid uses per-company applied counts); polls every 8s while any
+  // application is still in flight (queued / running) so a submit lands without a
+  // manual refresh.
   const appliedQuery = useQuery({
     queryKey: ['appliedJobs'],
     queryFn: listAppliedJobs,
-    enabled: tab === 'Applied',
+    enabled: tab === 'Applications' || tab === 'Companies',
     refetchInterval: (q) => {
       const items = q.state.data as AppliedJob[] | undefined;
       return items?.some((j) => !AUTO_APPLY_TERMINAL.includes(j.status)) ? 8000 : false;
     },
   });
   const appliedJobs = appliedQuery.data ?? [];
-  const [query, setQuery] = useState('');
-
-  const q = query.trim().toLowerCase();
-  const filteredContacts = useMemo(() => {
-    const rows =
-      q === ''
-        ? trackerRows
-        : trackerRows.filter((r) =>
-            [r.contactName, r.company, r.preview].some((s) => s?.toLowerCase().includes(q)),
-          );
-    // Pinned float to the top, otherwise keep the existing order.
-    return [...rows].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
-  }, [trackerRows, q]);
-
-  const onTogglePin = (row: TrackerRow) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    toggleContactPin(row.id);
-    showToast(row.pinned ? 'Unpinned' : 'Pinned to top');
-  };
+  // Filter the applications list by company / role when the user searches.
+  const filteredApplied = useMemo(() => {
+    const q = appQuery.trim().toLowerCase();
+    if (!q) return appliedJobs;
+    return appliedJobs.filter(
+      (j) =>
+        (j.job_title || '').toLowerCase().includes(q) ||
+        (j.company || '').toLowerCase().includes(q),
+    );
+  }, [appliedJobs, appQuery]);
 
   const sentCount = outreach.filter((o) => o.status === 'sent' || o.status === 'replied').length;
   const repliedCount = outreach.filter((o) => o.status === 'replied').length;
@@ -180,7 +89,7 @@ export default function NetworkScreen() {
     const order: string[] = [];
     const map = new Map<string, { company: string; contacts: number; replies: number }>();
     for (const o of outreach) {
-      if (o.status === 'drafting') continue;
+      if (o.status === 'drafting' || o.status === 'queued') continue;
       let e = map.get(o.company);
       if (!e) {
         e = { company: o.company, contacts: 0, replies: 0 };
@@ -192,6 +101,133 @@ export default function NetworkScreen() {
     }
     return order.map((c) => map.get(c)!);
   }, [outreach]);
+
+  // One tile per company you've engaged with — applications submitted AND people
+  // reached, merged so the Applications tab centers on companies (not scattered
+  // lists). Tapping a tile opens that company's roles-applied + people-reached.
+  const companyTiles = useMemo(() => {
+    const keyOf = (c: string) => (c || '').trim().toLowerCase();
+    // `recency` = position in the newest-first source lists (outreach + applied);
+    // lower means more recently engaged, so the one you just did floats to top.
+    const map = new Map<
+      string,
+      {
+        company: string;
+        applied: number;
+        reached: number;
+        replies: number;
+        needsAttention: boolean;
+        recency: number;
+      }
+    >();
+    companies.forEach((c, i) => {
+      const k = keyOf(c.company);
+      if (!k) return;
+      map.set(k, {
+        company: c.company,
+        applied: 0,
+        reached: c.contacts,
+        replies: c.replies,
+        needsAttention: false,
+        recency: i,
+      });
+    });
+    appliedJobs.forEach((j, i) => {
+      const k = keyOf(j.company);
+      if (!k) return;
+      let e = map.get(k);
+      if (!e) {
+        e = { company: j.company, applied: 0, reached: 0, replies: 0, needsAttention: false, recency: i };
+        map.set(k, e);
+      } else {
+        e.recency = Math.min(e.recency, i);
+      }
+      e.applied += 1;
+      if (j.status === 'needs_attention' || j.status === 'needs_verification') e.needsAttention = true;
+    });
+    return Array.from(map.values());
+  }, [companies, appliedJobs]);
+
+  const visibleTiles = useMemo(() => {
+    const q = companyQuery.trim().toLowerCase();
+    const base = q ? companyTiles.filter((t) => t.company.toLowerCase().includes(q)) : companyTiles;
+    const sorted = [...base];
+    if (sortMode === 'recent') {
+      sorted.sort((a, b) => a.recency - b.recency || b.applied - a.applied);
+    } else {
+      sorted.sort(
+        (a, b) => b.applied - a.applied || b.reached - a.reached || a.company.localeCompare(b.company),
+      );
+    }
+    return sorted;
+  }, [companyTiles, companyQuery, sortMode]);
+
+  // Density-adjustable grid; compute the exact tile width for the column count so
+  // logos aren't stretched, and scale the logo down as the grid gets denser.
+  const GRID_GAP = 12;
+  const tileW = (windowWidth - 40 - GRID_GAP * (gridCols - 1)) / gridCols;
+  const logoSize = gridCols <= 2 ? 66 : gridCols === 3 ? 52 : 40;
+
+  const renderCompanyTile = (t: {
+    company: string;
+    applied: number;
+    reached: number;
+    replies: number;
+    needsAttention: boolean;
+  }) => (
+    <Pressable
+      key={t.company}
+      onPress={() => router.push(`/company/${encodeURIComponent(t.company)}`)}
+      style={{ width: tileW, alignItems: 'center', gap: 6, paddingVertical: 8 }}>
+      <View>
+        <CompanyLogo name={t.company} size={logoSize} radius={Math.round(logoSize * 0.25)} />
+        {t.needsAttention ? (
+          <View
+            style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              width: 13,
+              height: 13,
+              borderRadius: 7,
+              backgroundColor: colors.negative,
+              borderWidth: 2,
+              borderColor: colors.surface,
+            }}
+          />
+        ) : null}
+      </View>
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: fonts.sansMedium,
+          fontSize: 12,
+          color: colors.ink,
+          textAlign: 'center',
+          maxWidth: tileW,
+        }}>
+        {t.company}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+        {t.applied > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="briefcase" size={11} color={colors.inkTertiary} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
+              {t.applied}
+            </Text>
+          </View>
+        ) : null}
+        {t.reached > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="person" size={11} color={colors.inkTertiary} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: colors.inkTertiary }}>
+              {t.reached}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -226,25 +262,42 @@ export default function NetworkScreen() {
               <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
               <BigNumber value={repliedCount} label="Replies" />
               <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.22)' }} />
-              <BigNumber value={trackerRows.length} label="Contacts" />
+              <BigNumber value={trackerRows.length} label="Reached" />
             </View>
           </LinearGradient>
         </Pressable>
       </View>
 
       <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 12 }}>
-        <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 22 }}>
+        <View
+          style={{ flexDirection: 'row', paddingHorizontal: 20, justifyContent: 'space-between' }}>
           {TABS.map((t) => {
             const selected = t === tab;
+            const icon =
+              t === 'Applications'
+                ? selected
+                  ? 'briefcase'
+                  : 'briefcase-outline'
+                : t === 'Companies'
+                  ? selected
+                    ? 'business'
+                    : 'business-outline'
+                  : selected
+                    ? 'cafe'
+                    : 'cafe-outline';
             return (
               <Pressable
                 key={t}
                 onPress={() => setTab(t)}
                 style={{
-                  paddingVertical: 10,
-                  borderBottomWidth: 2,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingVertical: 12,
+                  borderBottomWidth: 2.5,
                   borderBottomColor: selected ? colors.navy : 'transparent',
                 }}>
+                <Ionicons name={icon} size={16} color={selected ? colors.navy : colors.inkTertiary} />
                 <Text
                   style={{
                     fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
@@ -259,215 +312,46 @@ export default function NetworkScreen() {
         </View>
       </View>
 
-      {tab === 'Contacts' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          <View style={{ paddingHorizontal: 20, paddingTop: 16, gap: 8 }}>
-            {companies.length ? (
-              <>
-                <Pressable
-                  onPress={() => setCompaniesOpen((v) => !v)}
-                  disabled={companies.length <= 1}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingBottom: 2,
-                  }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-                    Companies you've reached out to
-                  </Text>
-                  {companies.length > 1 ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary }}>
-                        {companiesOpen ? 'Show less' : `All ${companies.length}`}
-                      </Text>
-                      <Ionicons
-                        name={companiesOpen ? 'chevron-up' : 'chevron-down'}
-                        size={15}
-                        color={colors.inkTertiary}
-                      />
-                    </View>
-                  ) : null}
-                </Pressable>
-                {(companiesOpen ? companies : companies.slice(0, 1)).map((c) => (
-                  <Pressable
-                    key={c.company}
-                    onPress={() => router.push(`/company/${encodeURIComponent(c.company)}`)}>
-                    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                      <CompanyLogo name={c.company} size={38} radius={10} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                          {c.company}
-                        </Text>
-                        <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
-                          {c.contacts} {c.contacts === 1 ? 'contact' : 'contacts'}
-                          {c.replies > 0 ? ` · ${c.replies} replied` : ''}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                    </Card>
-                  </Pressable>
-                ))}
-              </>
-            ) : null}
-
-            <Pressable onPress={() => router.push('/passed-jobs')}>
-              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: colors.surface,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                  <Ionicons name="arrow-undo-outline" size={17} color={colors.inkSecondary} />
-                </View>
-                <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                  Jobs you passed on
-                </Text>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.inkSecondary }}>
-                  {passedCount}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-              </Card>
-            </Pressable>
-          </View>
-
+      {tab === 'Applications' ? (
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
           <Text
             style={{
               fontFamily: fonts.sansSemibold,
               fontSize: 13,
               color: colors.ink,
-              paddingHorizontal: 20,
-              paddingTop: 18,
-              paddingBottom: 8,
             }}>
-            Your contacts
+            Your applications
           </Text>
 
-          <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
-            <SearchBar value={query} onChangeText={setQuery} placeholder="Search contacts or companies" />
-          </View>
+          {appliedJobs.length > 5 ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                backgroundColor: colors.surface,
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                height: 40,
+              }}>
+              <Ionicons name="search" size={16} color={colors.inkTertiary} />
+              <TextInput
+                value={appQuery}
+                onChangeText={setAppQuery}
+                placeholder="Search applications"
+                placeholderTextColor={colors.inkTertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{ flex: 1, fontFamily: fonts.sans, fontSize: 14, color: colors.ink }}
+              />
+              {appQuery ? (
+                <Pressable onPress={() => setAppQuery('')} accessibilityRole="button">
+                  <Ionicons name="close-circle" size={16} color={colors.inkTertiary} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
-          <View style={{ backgroundColor: colors.paper }}>
-            {filteredContacts.length === 0 ? (
-              <Text
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 13.5,
-                  color: colors.inkSecondary,
-                  textAlign: 'center',
-                  paddingVertical: 24,
-                  paddingHorizontal: 20,
-                }}>
-                No contacts match "{query.trim()}".
-              </Text>
-            ) : (
-              filteredContacts.map((row, i) => (
-                <View key={row.id}>
-                  <ContactRow
-                    row={row}
-                    onOpen={() => router.push(`/outreach/${row.outreachId}`)}
-                    onCoffee={() => router.push('/meeting-prep/new')}
-                    onTogglePin={() => onTogglePin(row)}
-                  />
-                  {i < filteredContacts.length - 1 ? (
-                    <View
-                      style={{
-                        height: StyleSheet.hairlineWidth,
-                        backgroundColor: colors.hairline,
-                        marginLeft: 84,
-                      }}
-                    />
-                  ) : null}
-                </View>
-              ))
-            )}
-          </View>
-
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 12,
-              color: colors.inkTertiary,
-              textAlign: 'center',
-              paddingHorizontal: 20,
-              paddingTop: 16,
-              lineHeight: 18,
-            }}>
-            Tap a contact to open the conversation, swipe to prep a meeting, long-press to
-            pin. The full pipeline lives on offerloop.ai
-          </Text>
-        </ScrollView>
-      ) : tab === 'Meeting prep' ? (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
-              Coffee library
-            </Text>
-            <Button
-              label="New prep"
-              size="sm"
-              icon="cafe-outline"
-              onPress={() => router.push('/meeting-prep/new')}
-            />
-          </View>
-
-          {meetingPreps.length === 0 ? (
-            <Card>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
-                No preps yet. Before a coffee chat or career fair, prep someone from their
-                LinkedIn and it lands here.
-              </Text>
-            </Card>
-          ) : (
-            meetingPreps.map((prep) => (
-              <Pressable key={prep.id} onPress={() => router.push(`/meeting-prep/${prep.id}`)}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: colors.navy + '12',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="cafe" size={18} color={colors.navy} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                      {prep.name}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-                      {prep.title} at {prep.company}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                      {prep.createdLabel}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-            ))
-          )}
-
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 12,
-              color: colors.inkTertiary,
-              textAlign: 'center',
-              paddingTop: 6,
-            }}>
-            Coffee chat prep costs 15 credits and runs the same research as the web
-          </Text>
-        </ScrollView>
-      ) : (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
           {appliedQuery.isLoading ? (
             <Text
               style={{
@@ -483,13 +367,24 @@ export default function NetworkScreen() {
             <Card>
               <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
                 No applications yet. Turn on Auto-apply in swipe settings, then swipe right on a
-                job tagged “Auto-apply ready.” Every application you submit shows up here with its
-                status.
+                job to submit. Every application you send shows up here with its status.
               </Text>
             </Card>
+          ) : filteredApplied.length === 0 ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 13,
+                color: colors.inkSecondary,
+                textAlign: 'center',
+                paddingVertical: 16,
+              }}>
+              No applications match that search.
+            </Text>
           ) : (
-            appliedJobs.map((j) => {
+            filteredApplied.map((j) => {
               const meta = appliedStatusMeta(j.status);
+              const when = appliedRelativeTime(j);
               const toneColor =
                 meta.tone === 'positive'
                   ? colors.positive
@@ -523,6 +418,7 @@ export default function NetworkScreen() {
                         style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
                         {j.company}
                         {j.ats_platform ? ` · ${j.ats_platform}` : ''}
+                        {when ? ` · ${when}` : ''}
                       </Text>
                     </View>
                     <View
@@ -565,6 +461,240 @@ export default function NetworkScreen() {
               an application to open it on the company site.
             </Text>
           ) : null}
+        </ScrollView>
+      ) : tab === 'Companies' ? (
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+                Companies
+              </Text>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary }}>
+                {companyTiles.length}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Pressable
+                onPress={() => setGridCols((c) => (c >= 4 ? 2 : c + 1))}
+                accessibilityRole="button"
+                accessibilityLabel="Change grid density"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: colors.paper,
+                  borderRadius: 999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}>
+                <Ionicons name="grid-outline" size={13} color={colors.inkSecondary} />
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
+                  {gridCols}×
+                </Text>
+              </Pressable>
+              {savedCount > 0 ? (
+                <Pressable
+                  onPress={() => router.push('/saved-jobs')}
+                  accessibilityRole="button"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    backgroundColor: colors.paper,
+                    borderRadius: 999,
+                    paddingLeft: 10,
+                    paddingRight: 12,
+                    paddingVertical: 6,
+                  }}>
+                  <Ionicons name="bookmark" size={12} color={colors.accent} />
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
+                    {savedCount} saved
+                  </Text>
+                </Pressable>
+              ) : null}
+              {passedCount > 0 ? (
+                <Pressable
+                  onPress={() => router.push('/passed-jobs')}
+                  accessibilityRole="button"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    backgroundColor: colors.paper,
+                    borderRadius: 999,
+                    paddingLeft: 10,
+                    paddingRight: 12,
+                    paddingVertical: 6,
+                  }}>
+                  <Ionicons name="trash-outline" size={13} color={colors.inkSecondary} />
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
+                    {passedCount} passed
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          {companyTiles.length > 1 ? (
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {(['recent', 'active'] as const).map((m) => {
+                const on = sortMode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setSortMode(m)}
+                    accessibilityRole="button"
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      backgroundColor: on ? colors.navy : colors.paper,
+                    }}>
+                    <Text
+                      style={{
+                        fontFamily: on ? fonts.sansSemibold : fonts.sansMedium,
+                        fontSize: 12,
+                        color: on ? colors.paper : colors.inkSecondary,
+                      }}>
+                      {m === 'recent' ? 'Recent' : 'Most active'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {companyTiles.length === 0 ? (
+            <Card>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+                No companies yet. Swipe right on a job to apply or reach out, and every company you
+                engage lands here.
+              </Text>
+            </Card>
+          ) : (
+            <>
+              {companyTiles.length > 9 ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    backgroundColor: colors.paper,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    height: 40,
+                  }}>
+                  <Ionicons name="search" size={16} color={colors.inkTertiary} />
+                  <TextInput
+                    value={companyQuery}
+                    onChangeText={setCompanyQuery}
+                    placeholder="Search companies"
+                    placeholderTextColor={colors.inkTertiary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={{ flex: 1, fontFamily: fonts.sans, fontSize: 14, color: colors.ink }}
+                  />
+                  {companyQuery ? (
+                    <Pressable onPress={() => setCompanyQuery('')} accessibilityRole="button">
+                      <Ionicons name="close-circle" size={16} color={colors.inkTertiary} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
+                {visibleTiles.map(renderCompanyTile)}
+              </View>
+              {visibleTiles.length === 0 ? (
+                <Text
+                  style={{
+                    fontFamily: fonts.sans,
+                    fontSize: 13,
+                    color: colors.inkSecondary,
+                    textAlign: 'center',
+                    paddingVertical: 16,
+                  }}>
+                  No companies match that search.
+                </Text>
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+              Coffee library
+            </Text>
+            <Pressable
+              onPress={() => router.push('/meeting-prep/new')}
+              accessibilityRole="button"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: '#FACC15',
+                borderRadius: 8,
+                paddingHorizontal: 13,
+                height: 34,
+              }}>
+              <Ionicons name="cafe" size={15} color={colors.coffee} />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.coffee }}>
+                New prep
+              </Text>
+            </Pressable>
+          </View>
+
+          {meetingPreps.length === 0 ? (
+            <Card>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+                No preps yet. Before a coffee chat or career fair, prep someone from their
+                LinkedIn and it lands here.
+              </Text>
+            </Card>
+          ) : (
+            meetingPreps.map((prep) => (
+              <Pressable key={prep.id} onPress={() => router.push(`/meeting-prep/${prep.id}`)}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: colors.coffee + '18',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="cafe" size={18} color={colors.coffee} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
+                      {prep.name}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
+                      {prep.title} at {prep.company}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                      {prep.createdLabel}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+            ))
+          )}
+
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              color: colors.inkTertiary,
+              textAlign: 'center',
+              paddingTop: 6,
+            }}>
+            Coffee chat prep costs 15 credits and runs the same research as the web
+          </Text>
         </ScrollView>
       )}
     </View>

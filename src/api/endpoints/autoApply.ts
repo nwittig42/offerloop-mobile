@@ -233,15 +233,73 @@ export type AppliedJob = {
   stage?: string;
   dry_run?: boolean;
   created_at?: string;
+  updated_at?: string;
+  inspect_completed_at?: string;
+  completed_at?: string;
   pending_questions?: PendingQuestion[];
 };
 
-/** Every auto-apply this user has run, newest first. Dry-runs are filtered out
- *  here — they're previews, not real applications, so they don't belong in a
- *  "jobs I applied to" view. */
+/** The backend stamps `updated_at` on every state change, so it's the best
+ *  signal for "most recent activity" (newer than created_at). Fall back through
+ *  the other timestamps. */
+export function lastActivityAt(j: AppliedJob): string | undefined {
+  return j.updated_at || j.inspect_completed_at || j.completed_at || j.created_at;
+}
+
+/** Parse a backend timestamp as UTC. The backend writes naive ISO
+ *  (`datetime.utcnow().isoformat()`, no 'Z'); JS would treat a tz-less string as
+ *  LOCAL time and be off by the device's offset, so append 'Z' when absent. */
+function parseServerTs(iso?: string): number {
+  if (!iso) return NaN;
+  const hasTz = /[zZ]$|[+-]\d\d:?\d\d$/.test(iso);
+  return Date.parse(hasTz ? iso : iso + 'Z');
+}
+
+/** Short, seconds-precise "just now / 30s ago / 5m ago / 3h ago / 2d ago" for an
+ *  application's last activity — fine-grained so a just-submitted app is visibly
+ *  fresher than one from a minute ago. */
+export function appliedRelativeTime(j: AppliedJob): string {
+  const t = parseServerTs(lastActivityAt(j));
+  if (Number.isNaN(t)) return '';
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 5) return 'just now';
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return days < 7 ? `${days}d ago` : `${Math.round(days / 7)}w ago`;
+}
+
+/** Every auto-apply this user has run, most-recently-active first. Dry-runs are
+ *  filtered out here — they're previews, not real applications, so they don't
+ *  belong in a "jobs I applied to" view. */
 export async function listAppliedJobs(): Promise<AppliedJob[]> {
   const r = await apiFetch<{ items?: AppliedJob[] }>('/api/job-board/auto-apply/list');
-  return (r.items || []).filter((j) => !j.dry_run);
+  const sorted = (r.items || [])
+    .filter((j) => !j.dry_run)
+    .sort((a, b) => parseServerTs(lastActivityAt(b)) - parseServerTs(lastActivityAt(a)));
+  // Collapse duplicate applications to the same job (keep the most recent) — a
+  // safety net so accidental double-applies don't show as separate rows.
+  const seen = new Set<string>();
+  const deduped: AppliedJob[] = [];
+  for (const j of sorted) {
+    const key = j.job_id || j.auto_apply_id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(j);
+  }
+  return deduped;
+}
+
+/** Has this user already applied to (or is mid-applying to) this job? Reads the
+ *  applied-jobs cache; used to block duplicate applications before we fire one.
+ *  Failed/submit_failed don't count — those can be retried. */
+export function alreadyApplied(applied: AppliedJob[] | undefined, jobId: string): boolean {
+  return (applied ?? []).some(
+    (a) => a.job_id === jobId && a.status !== 'failed' && a.status !== 'submit_failed',
+  );
 }
 
 /** Human-facing label + tone for an application status. */

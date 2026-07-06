@@ -103,7 +103,7 @@ export function NotificationPrompt() {
                 <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.inkTertiary }}>now</Text>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary, lineHeight: 16 }}>
-                Taylor Test replied to your outreach. Tap to write back.
+                A contact replied to your outreach. Tap to write back.
               </Text>
             </View>
           </View>

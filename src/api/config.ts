@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 
 /**
  * API base URL resolution. The host root only (no trailing /api); endpoint
@@ -9,8 +10,39 @@ import Constants from 'expo-constants';
  */
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string; useMocks?: boolean };
 
+/**
+ * In dev, derive the backend host from Metro's own host (the "debuggerHost" /
+ * hostUri that the app already connected to for the JS bundle) and just swap in
+ * the Flask port. This makes the app auto-follow your Mac's LAN IP every time
+ * you change WiFi — no more editing app.json per network. Returns null when the
+ * host can't be determined (falls back to app.json / localhost).
+ */
+function devApiBaseFromMetro(): string | null {
+  const hostUri =
+    (Constants.expoConfig as any)?.hostUri ||
+    (Constants as any)?.expoGoConfig?.debuggerHost ||
+    (Constants as any)?.manifest2?.extra?.expoClient?.hostUri ||
+    '';
+  const host = String(hostUri).split(':')[0];
+  // Only trust an actual LAN/host address, not a tunnel domain.
+  return host && host !== 'localhost' && /[.\d]/.test(host) ? `http://${host}:5001` : null;
+}
+
+/**
+ * Internal field builds (preview channel) always talk to the staging backend.
+ * Hardcoded — NOT via EXPO_PUBLIC_API_BASE_URL — because env inlining applies
+ * to `eas build` but proved unreliable for `eas update` bundles, which then
+ * fell through to the stale LAN IP in extra.apiBaseUrl. The channel check
+ * keeps dev (Metro-derived) and production (env/extra) resolution unchanged.
+ */
+const PREVIEW_API_BASE_URL = 'https://offerloop-staging.onrender.com';
+
 export const API_BASE_URL: string =
-  process.env.EXPO_PUBLIC_API_BASE_URL || extra.apiBaseUrl || 'http://localhost:5001';
+  (!__DEV__ && Updates.channel === 'preview' ? PREVIEW_API_BASE_URL : null) ||
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (__DEV__ ? devApiBaseFromMetro() : null) ||
+  extra.apiBaseUrl ||
+  'http://localhost:5001';
 
 export const IS_DEV: boolean = __DEV__;
 

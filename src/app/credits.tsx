@@ -99,7 +99,7 @@ export default function CreditsScreen() {
           </Text>
 
           <Pressable
-            onPress={() => Linking.openURL('https://offerloop.ai/pricing')}
+            onPress={() => Linking.openURL('https://offerloop.ai/account-settings')}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -123,8 +123,8 @@ export default function CreditsScreen() {
             More credits, more reach
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Credits power your swipes, drafts, and meeting preps. Upgrade your plan or top up
-            on offerloop.ai and it updates here right away.
+            Credits power your swipes, drafts, and meeting preps. Manage your plan and credits on
+            offerloop.ai and it updates here right away.
           </Text>
         </Card>
 

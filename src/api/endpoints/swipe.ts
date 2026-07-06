@@ -3,12 +3,23 @@ import { USE_MOCKS } from '@/api/config';
 import type { ContactRelation, OutreachItem } from '@/types';
 
 /**
- * The swipe = one call to the existing /api/prompt-search with mode 'draft'
- * (or 'send'), which finds the contact(s), generates the email, creates the
- * Gmail draft, and saves the contact server-side. We force batchSize = the
- * number of people the swipe should reach and map the returned contacts onto
- * the inbox's OutreachItem shape. First contact is treated as the hiring
- * manager, the rest as employees (the app's "apply, then warm the team" web).
+ * The swipe finds real people at the company, drafts (or sends) tailored
+ * outreach, and saves the contact server-side. Two targeting modes:
+ *
+ *  - 'employee' (DEFAULT): one /api/prompt-search pass on the role at the
+ *    company. Teammates/alumni vastly outnumber recruiters in the index, so
+ *    this lands far more often and is the cheapest path. Warmth scoring floats
+ *    alumni/shared-school people to the top, so it's "best-matched teammate,"
+ *    not random. A no-title fallback pass makes an empty swipe rare.
+ *
+ *  - 'hiring_manager': the intent upgrade. Routes targeting through the
+ *    production /api/job-board/find-hiring-manager (recruiter_finder's curated
+ *    titles + tier scoring + verification), then fills any remainder from the
+ *    team via prompt-search. Always drafts (that endpoint doesn't send) so cold
+ *    outreach to decision-makers is reviewed first.
+ *
+ * Both charge 5 credits per contact. Relation is derived from each contact's
+ * real title (no fabricated "Hiring manager" label).
  */
 type RawContact = Record<string, any>;
 
@@ -16,6 +27,12 @@ type PromptSearchResponse = {
   contacts?: RawContact[];
   credits_remaining?: number;
   mode?: string;
+};
+
+type HiringManagerResponse = {
+  hiringManagers?: RawContact[];
+  emails?: { to_email?: string; subject?: string; plain_body?: string; body?: string }[];
+  creditsRemaining?: number;
 };
 
 export type SwipeResult = {
@@ -28,10 +45,16 @@ type SwipeArgs = {
   jobTitle: string;
   count: number;
   action: 'draft' | 'send';
-  firstIsHiringManager?: boolean;
+  priority: 'employee' | 'mix' | 'hiring_manager';
+  jobDescription?: string;
 };
 
 let mockSeq = 0;
+
+/** Draft calls run a 25–60s server pipeline; the staging gunicorn allows up to
+ *  300s. If nothing came back in 150s the request is effectively lost — abort
+ *  so the Inbox row can fail-with-retry instead of spinning forever. */
+const DRAFT_TIMEOUT_MS = 150_000;
 
 function contactName(c: RawContact): string {
   const full = `${c.FirstName || c.firstName || ''} ${c.LastName || c.lastName || ''}`.trim();
@@ -67,9 +90,11 @@ async function promptSearch(
 ): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
   const res = await apiFetch<PromptSearchResponse>('/api/prompt-search', {
     method: 'POST',
-    // notify_draft_ready: persist a durable "draft ready" bell item + push,
-    // keyed to the real saved contact (web doesn't set this).
-    body: { prompt, batchSize, mode, notify_draft_ready: true },
+    // notify_draft_ready stays OFF for manual swipes: the user is in-app
+    // watching the Inbox fill, so a "draft ready" bell item + push per contact
+    // is just noise. The bell is reserved for async/away events (Loops, replies).
+    body: { prompt, batchSize, mode, notify_draft_ready: false },
+    timeoutMs: DRAFT_TIMEOUT_MS,
   });
   return { contacts: res.contacts || [], creditsRemaining: res.credits_remaining };
 }
@@ -103,6 +128,38 @@ function mapContact(
   };
 }
 
+/** HM mode: reuse the production hiring-manager endpoint (recruiter_finder's
+ *  curated targeting + verification + draft + charge + save), then attach the
+ *  generated email text onto each manager so mapContact can render it. */
+async function findHiringManagers(
+  args: SwipeArgs,
+  count: number,
+): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
+  const res = await apiFetch<HiringManagerResponse>('/api/job-board/find-hiring-manager', {
+    method: 'POST',
+    body: {
+      company: args.company,
+      jobTitle: args.jobTitle,
+      jobDescription: args.jobDescription || '',
+      maxResults: count,
+      generateEmails: true,
+      createDrafts: true,
+    },
+    timeoutMs: DRAFT_TIMEOUT_MS,
+  });
+  const byEmail = new Map<string, { subject?: string; plain_body?: string }>();
+  for (const e of res.emails || []) {
+    const k = (e.to_email || '').toLowerCase();
+    if (k) byEmail.set(k, e);
+  }
+  const contacts = (res.hiringManagers || []).map((m) => {
+    const k = (m.Email || m.email || m.WorkEmail || '').toLowerCase();
+    const e = byEmail.get(k);
+    return { ...m, emailSubject: e?.subject, emailBody: e?.plain_body };
+  });
+  return { contacts, creditsRemaining: res.creditsRemaining };
+}
+
 export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
   if (USE_MOCKS) {
     mockSeq += 1;
@@ -118,25 +175,43 @@ export async function runSwipe(args: SwipeArgs): Promise<SwipeResult> {
 
   const mode = args.action === 'send' ? 'send' : 'draft';
 
-  // Prefer a recruiter / hiring manager at the company (the highest-value cold
-  // outreach target). Each prompt-search call finds + drafts + saves + charges
-  // per contact, so a miss costs nothing.
-  const primary = await promptSearch(`recruiter or hiring manager at ${args.company}`, args.count, mode);
+  // Any hiring-manager targeting: 'mix' gets ONE verified HM then fills the rest
+  // with teammates; 'hiring_manager' targets up to `count` HMs, teammates only to
+  // fill. Both always draft (the HM endpoint never sends).
+  if (args.priority === 'mix' || args.priority === 'hiring_manager') {
+    const hmTarget = args.priority === 'mix' ? 1 : args.count;
+    const hm = await findHiringManagers(args, hmTarget);
+    const contacts = hm.contacts;
+    let creditsRemaining = hm.creditsRemaining;
+
+    if (contacts.length < args.count) {
+      const need = args.count - contacts.length;
+      const seen = new Set(contacts.map(dedupeKey));
+      // HM endpoint always drafts, so fill from the team as drafts too.
+      const fallback = await promptSearch(`${args.jobTitle} at ${args.company}`, need, 'draft');
+      for (const c of fallback.contacts) {
+        const key = dedupeKey(c);
+        if (key && seen.has(key)) continue;
+        seen.add(key);
+        contacts.push(c);
+      }
+      if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
+    }
+
+    const items = contacts.slice(0, args.count).map((c, i) => mapContact(c, i, args));
+    return { items, creditsRemaining };
+  }
+
+  // Employee mode (default): broad pass on the role, cheap + high hit rate.
+  const primary = await promptSearch(`${args.jobTitle} at ${args.company}`, args.count, mode);
   let contacts = primary.contacts;
   let creditsRemaining = primary.creditsRemaining;
 
-  // Fallback: fill the rest of the batch from the role's team (employees), so a
-  // swipe rarely comes back empty even when no recruiter is indexed.
-  if (contacts.length < args.count) {
-    const need = args.count - contacts.length;
-    const seen = new Set(contacts.map(dedupeKey));
-    const fallback = await promptSearch(`${args.jobTitle} at ${args.company}`, need, mode);
-    for (const c of fallback.contacts) {
-      const key = dedupeKey(c);
-      if (key && seen.has(key)) continue;
-      seen.add(key);
-      contacts.push(c);
-    }
+  // Miss-proofing: if the titled search found nobody (title too specific, small
+  // co), one no-title pass so a swipe almost never comes back empty.
+  if (contacts.length === 0) {
+    const fallback = await promptSearch(`people at ${args.company}`, args.count, mode);
+    contacts = fallback.contacts;
     if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
   }
 

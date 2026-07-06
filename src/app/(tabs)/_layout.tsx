@@ -19,6 +19,8 @@ export default function TabsLayout() {
   const { outreach } = useApp();
   const colors = useColors();
   const attentionCount = outreach.filter(needsAttention).length;
+  // Cap the displayed count so a big number (200+) doesn't clip the badge.
+  const badgeValue = attentionCount > 99 ? '99+' : attentionCount;
 
   return (
     <Tabs
@@ -51,8 +53,8 @@ export default function TabsLayout() {
         name="inbox"
         options={{
           title: 'Inbox',
-          tabBarBadge: attentionCount > 0 ? attentionCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: colors.negative, fontFamily: fonts.sansSemibold },
+          tabBarBadge: attentionCount > 0 ? badgeValue : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.negative, fontFamily: fonts.sansSemibold, fontSize: 10 },
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'mail' : 'mail-outline'} size={size} color={color} />
           ),

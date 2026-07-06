@@ -22,12 +22,33 @@ const ACTIONS: { key: SwipeSettings['action']; label: string; sub: string }[] = 
   { key: 'send', label: 'Draft and auto-send', sub: 'Sends from your Gmail without review.' },
 ];
 
+// The teammates -> hiring-managers dial, rendered as a 3-stop slider.
+const PRIORITY_STOPS: {
+  key: SwipeSettings['priority'];
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  { key: 'employee', label: 'Teammates', icon: 'people-outline' },
+  { key: 'hiring_manager', label: 'Hiring mgrs', icon: 'briefcase-outline' },
+  { key: 'mix', label: 'Mix', icon: 'git-merge-outline' },
+];
+
+/** The split a swipe will produce, given the dial + how many people it reaches. */
+function targetingTally(priority: SwipeSettings['priority'], contacts: number): string {
+  const team = (n: number) => `${n} ${n === 1 ? 'teammate' : 'teammates'}`;
+  if (priority === 'employee') return team(contacts);
+  if (priority === 'mix') {
+    return contacts <= 1 ? '1 hiring manager' : `1 hiring manager · ${team(contacts - 1)}`;
+  }
+  return contacts <= 1 ? '1 hiring manager' : `up to ${contacts} hiring managers`;
+}
+
 export default function SwipeSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { swipeSettings, updateSwipeSettings, profile } = useApp();
-  const { action, contacts, autoApply } = swipeSettings;
+  const { action, contacts, autoApply, priority } = swipeSettings;
 
   const totalCredits = contacts * profile.creditsPerSwipe;
 
@@ -113,6 +134,66 @@ export default function SwipeSettingsScreen() {
           ) : null}
         </View>
 
+        {/* Who we reach — a teammates -> hiring-managers dial */}
+        <View style={{ gap: 10 }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+            Who we reach out to
+          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              backgroundColor: colors.surface,
+              borderRadius: 13,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              padding: 4,
+              gap: 4,
+            }}>
+            {PRIORITY_STOPS.map((s) => {
+              const selected = priority === s.key;
+              return (
+                <Pressable
+                  key={s.key}
+                  onPress={() => updateSwipeSettings({ priority: s.key })}
+                  style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    paddingVertical: 11,
+                    borderRadius: 10,
+                    backgroundColor: selected ? colors.marketing : 'transparent',
+                  }}>
+                  <Ionicons name={s.icon} size={19} color={selected ? colors.paper : colors.inkSecondary} />
+                  <Text
+                    style={{
+                      fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
+                      fontSize: 12,
+                      color: selected ? colors.paper : colors.inkSecondary,
+                    }}>
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 4 }}>
+            <Ionicons name="checkmark-circle" size={15} color={colors.marketing} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.ink }}>
+              Each swipe reaches {targetingTally(priority, contacts)}.
+            </Text>
+          </View>
+          {priority !== 'employee' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
+              <Ionicons name="information-circle-outline" size={14} color={colors.inkSecondary} />
+              <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkSecondary, lineHeight: 16 }}>
+                We verify hiring managers, so this can take a little longer, and it always comes
+                back as a draft to review, never auto-sent.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
         {/* How many people */}
         <View style={{ gap: 8 }}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
@@ -165,9 +246,13 @@ export default function SwipeSettingsScreen() {
             </View>
             <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
-              {contacts === 1
-                ? 'We find the hiring manager for the role.'
-                : `We start with the hiring manager, then ${contacts - 1} ${contacts - 1 === 1 ? 'person' : 'people'} on the team.`}
+              {priority === 'employee'
+                ? contacts === 1
+                  ? 'We find a strong teammate at the company, alumni first.'
+                  : `We find ${contacts} people on the team, alumni first.`
+                : contacts === 1
+                  ? 'We find the hiring manager for the role.'
+                  : 'We start with the hiring manager, then fill the rest with the team.'}
             </Text>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.accent }}>
               1 swipe · {totalCredits} credits ({contacts} {contacts === 1 ? 'person' : 'people'} ×{' '}
@@ -180,10 +265,10 @@ export default function SwipeSettingsScreen() {
           </Card>
         </View>
 
-        {/* Auto-apply accent */}
+        {/* Auto-apply */}
         <View style={{ gap: 8 }}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            Add-on
+            Auto-apply
           </Text>
           <Card style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -213,9 +298,10 @@ export default function SwipeSettingsScreen() {
               />
             </View>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 17 }}>
-              Applying is the accent, not the point. Offerloop is about networking your way
-              in, the application just gives your outreach a reason to exist. We only apply to
-              jobs marked “Auto-apply ready,” and you review each one before it submits.
+              Applying is the accent, not the point. Offerloop is about networking your way in,
+              and the application just gives your outreach a reason to exist. The first few may
+              ask you for a detail or two to get started, and every answer you give trains your
+              auto-apply so it needs you less each time.
             </Text>
             {autoApply ? (
               <Pressable

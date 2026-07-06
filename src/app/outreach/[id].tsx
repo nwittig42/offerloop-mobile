@@ -1,14 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useQueryClient } from '@tanstack/react-query';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isGmailDisconnected } from '@/api/errors';
-import { sendDraft, sendReply } from '@/api/endpoints/outreach';
+import { fetchThreadMessages, sendDraft, sendReply } from '@/api/endpoints/outreach';
 import { qk } from '@/api/queryKeys';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -17,6 +17,39 @@ import Input from '@/components/ui/Input';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+
+/** "View in Gmail": green button, the Gmail mark in its brand red on a white
+ *  chip (so the red logo reads on green). Opens the Gmail app. */
+function GmailButton({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 9,
+        height: 44,
+        borderRadius: 8,
+        backgroundColor: colors.positive,
+      }}>
+      <View
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 6,
+          backgroundColor: '#FFFFFF',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <MaterialCommunityIcons name="gmail" size={16} color="#EA4335" />
+      </View>
+      <Text style={{ color: '#FFFFFF', fontFamily: fonts.sansMedium, fontSize: 15 }}>View in Gmail</Text>
+    </Pressable>
+  );
+}
 
 /**
  * Outreach detail. Three states:
@@ -30,17 +63,52 @@ export default function OutreachDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { outreach, meetingPreps, updateOutreach, showToast } = useApp();
+  const { outreach, meetingPreps, profile, updateOutreach, resolveOutreachId, showToast } = useApp();
   const queryClient = useQueryClient();
 
   const item = outreach.find((o) => o.id === id);
+  // A just-swiped draft is shown on an optimistic id; once the inbox poll swaps
+  // it for the real server id, follow it here instead of dying with "no longer
+  // exists." willRedirect = the id reconciled to a different (real) one.
+  const mappedId = id ? resolveOutreachId(id) : id;
+  const willRedirect = !item && !!mappedId && mappedId !== id;
   const [subject, setSubject] = useState(item?.subject ?? '');
   const [body, setBody] = useState(item?.body ?? item?.snippet ?? '');
   const [followupOpen, setFollowupOpen] = useState(false);
   const firstName = item?.contact?.name.split(' ')[0] ?? 'there';
   const [followup, setFollowup] = useState(
-    `Hi ${firstName},\n\nThanks so much for getting back to me. Thursday afternoon works great on my end. Anytime after 1pm, whatever is easiest for you.\n\nLooking forward to it,\nSample Student`,
+    `Hi ${firstName},\n\nThanks so much for getting back to me, I really appreciate it. Would you have 15 minutes sometime in the next week or two for a quick chat? Happy to work around whatever is easiest for you.\n\nBest,\n${profile.name || ''}`,
   );
+
+  // The inbox list payload carries only a short snippet, so the real draft/sent
+  // body lives in the thread-messages endpoint. Fetch it for any synced item
+  // (a fresh swipe still has its body locally on the optimistic item).
+  const isRealId = !!id && !id.startsWith('out-new-');
+  const messagesQuery = useQuery({
+    queryKey: ['threadMessages', id],
+    queryFn: () => fetchThreadMessages(id as string),
+    enabled: isRealId && !!item && item.status !== 'drafting' && item.status !== 'queued',
+  });
+  const sentMessage = (messagesQuery.data ?? []).find((m) => m.isFromUser);
+
+  // Backfill the body/subject from the fetched thread when the list payload had none.
+  useEffect(() => {
+    if (!sentMessage) return;
+    setBody((prev) => prev || sentMessage.body || '');
+    setSubject((prev) => prev || sentMessage.subject || '');
+  }, [sentMessage]);
+
+  // Scroll-down affordance: shown only while there's more content below.
+  const scrollRef = useRef<ScrollView>(null);
+  const [viewportH, setViewportH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  const [atBottom, setAtBottom] = useState(true);
+  const showScrollDown = contentH > viewportH + 12 && !atBottom;
+
+  // Follow the optimistic -> real id swap so the draft doesn't vanish.
+  useEffect(() => {
+    if (willRedirect && mappedId) router.replace(`/outreach/${mappedId}`);
+  }, [willRedirect, mappedId, router]);
 
   // Opening a reply clears it from "needs attention" (the red badge).
   useEffect(() => {
@@ -49,11 +117,32 @@ export default function OutreachDetailScreen() {
     }
   }, [item, updateOutreach]);
 
+  // Open the Gmail app (not Safari). Requires googlegmail in the app's
+  // LSApplicationQueriesSchemes; falls back to the web draft URL.
+  const openGmail = async () => {
+    // Open the Gmail app directly. canOpenURL needs the scheme whitelisted (a
+    // native rebuild), but openURL does not, so try it straight and fall back to
+    // the web draft only if the app isn't installed.
+    try {
+      await Linking.openURL('googlegmail://');
+      showToast('Opening Gmail');
+      return;
+    } catch {
+      // Gmail app not installed — fall back to the web draft.
+    }
+    if (item?.gmailDraftUrl) {
+      Linking.openURL(item.gmailDraftUrl);
+      showToast('Opening your draft in Gmail');
+    } else {
+      showToast('Install the Gmail app to open it here');
+    }
+  };
+
   if (!item) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary }}>
-          This outreach no longer exists.
+          {willRedirect ? 'Opening your draft…' : 'This outreach no longer exists.'}
         </Text>
       </View>
     );
@@ -126,16 +215,30 @@ export default function OutreachDetailScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={16}
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_w, h) => {
+          setContentH(h);
+          setAtBottom(h <= viewportH + 12);
+        }}
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          setAtBottom(layoutMeasurement.height + contentOffset.y >= contentSize.height - 24);
+        }}
         contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32, gap: 14 }}>
-        {item.status === 'drafting' ? (
+        {item.status === 'drafting' || item.status === 'queued' ? (
           <Card style={{ gap: 10, alignItems: 'flex-start' }}>
-            <Chip label="Drafting" tone="waiting" dot />
+            <Chip label={item.status === 'queued' ? 'In line' : 'Drafting'} tone="waiting" dot />
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
-              Finding a contact at {item.company}
+              {item.status === 'queued'
+                ? `Waiting to draft for ${item.company}`
+                : `Finding a contact at ${item.company}`}
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-              We’re finding the right person for the {item.jobTitle} role and writing your
-              outreach. This fills in automatically, usually within a few seconds.
+              {item.status === 'queued'
+                ? 'An earlier swipe is still drafting — this one starts automatically right after it.'
+                : `We’re finding the right person for the ${item.jobTitle} role and writing your outreach. This fills in automatically, usually within a few seconds.`}
             </Text>
           </Card>
         ) : (
@@ -175,9 +278,14 @@ export default function OutreachDetailScreen() {
                     />
                   ) : null}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                   {item.contact.linkedinUrl ? (
-                    <Ionicons name="logo-linkedin" size={18} color={colors.accent} />
+                    <Pressable
+                      onPress={() => Linking.openURL(item.contact!.linkedinUrl!)}
+                      accessibilityLabel="Open LinkedIn"
+                      hitSlop={8}>
+                      <Ionicons name="logo-linkedin" size={26} color={colors.accent} />
+                    </Pressable>
                   ) : null}
                   {(() => {
                     const prep = meetingPreps.find((p) => p.name === item.contact?.name);
@@ -186,13 +294,18 @@ export default function OutreachDetailScreen() {
                         onPress={() =>
                           prep
                             ? router.push(`/meeting-prep/${prep.id}`)
-                            : router.push('/meeting-prep/new')
+                            : router.push({
+                                pathname: '/meeting-prep/new',
+                                params: item.contact?.linkedinUrl
+                                  ? { scanned: item.contact.linkedinUrl }
+                                  : {},
+                              })
                         }
                         accessibilityLabel={prep ? 'View meeting prep' : 'Prep a meeting'}
                         hitSlop={8}>
                         <Ionicons
                           name="cafe"
-                          size={18}
+                          size={26}
                           color={colors.coffee}
                           style={{ opacity: prep ? 1 : 0.35 }}
                         />
@@ -277,6 +390,43 @@ export default function OutreachDetailScreen() {
                   />
                 )}
               </View>
+            ) : item.status === 'sent' ? (
+              // Sent rundown: a plain-text view of what actually went out, shown
+              // as a sent bubble so it reads like the conversation it started.
+              <View style={{ gap: 10 }}>
+                {subject ? (
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 11.5,
+                      color: colors.inkTertiary,
+                      textAlign: 'center',
+                    }}>
+                    Email · {subject}
+                  </Text>
+                ) : null}
+                <View
+                  style={{
+                    alignSelf: 'flex-end',
+                    maxWidth: '94%',
+                    backgroundColor: colors.marketing,
+                    borderRadius: 20,
+                    borderBottomRightRadius: 6,
+                    paddingHorizontal: 14,
+                    paddingVertical: 11,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 14, lineHeight: 21, color: colors.paper }}>
+                    {body || (messagesQuery.isLoading ? 'Loading what you sent…' : 'Sent from your connected Gmail.')}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end' }}>
+                  <Ionicons name="checkmark-done" size={14} color={colors.positive} />
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                    Sent · waiting on a reply
+                  </Text>
+                </View>
+                <GmailButton onPress={openGmail} />
+              </View>
             ) : (
               <Card style={{ gap: 12 }}>
                 <View style={{ gap: 6 }}>
@@ -290,28 +440,49 @@ export default function OutreachDetailScreen() {
                     Email
                   </Text>
                   <Input
-                    value={body}
+                    value={body || (messagesQuery.isLoading ? 'Loading your draft…' : '')}
                     onChangeText={setBody}
                     multiline
                     editable={false}
                     style={{ minHeight: 200 }}
                   />
                 </View>
-                {item.status === 'ready' ? (
-                  <View style={{ gap: 8 }}>
-                    <Button label="Send" fullWidth size="lg" onPress={send} />
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
-                      Sends from your connected Gmail, no need to leave the app.
-                    </Text>
-                  </View>
-                ) : (
-                  <Chip label="Sent" />
-                )}
+                <View style={{ gap: 8 }}>
+                  <Button label="Send" fullWidth size="lg" onPress={send} />
+                  <GmailButton onPress={openGmail} />
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
+                    Sends from your connected Gmail, no need to leave the app.
+                  </Text>
+                </View>
               </Card>
             )}
           </>
         )}
       </ScrollView>
+
+      {showScrollDown ? (
+        <Pressable
+          onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          accessibilityLabel="Scroll down"
+          style={{
+            position: 'absolute',
+            alignSelf: 'center',
+            bottom: insets.bottom + 18,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.marketing,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.18,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+          }}>
+          <Ionicons name="chevron-down" size={22} color={colors.paper} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

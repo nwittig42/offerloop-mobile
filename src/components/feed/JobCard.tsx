@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { memo } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
 import { cardArt } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
+import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
@@ -157,28 +159,6 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         </View>
       </View>
 
-      {/* Auto-apply eligibility — only shown when the backend tagged this job as
-          a Greenhouse/Lever/Ashby form the auto-apply runner can actually fill. */}
-      {job.autoApplyEligible ? (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 5,
-            alignSelf: 'flex-start',
-            marginTop: 14,
-            paddingHorizontal: 10,
-            paddingVertical: 5,
-            borderRadius: 8,
-            backgroundColor: colors.navy + '12',
-          }}>
-          <Ionicons name="flash" size={13} color={colors.navy} />
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.navy }}>
-            Auto-apply ready
-          </Text>
-        </View>
-      ) : null}
-
       {/* Labeled detail sections — each renders only when the data exists. */}
       <View style={{ gap: 14, marginTop: 18 }}>
         {job.compensation ? (
@@ -209,15 +189,19 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         ) : null}
       </View>
 
-      {/* Job description fills whatever space is left and clips at the card edge
-          (overflow hidden) so a long description can never bleed past the bottom,
-          however tall the fields above it are. The tap cue stays pinned below. */}
+      {/* Job description fills whatever space is left. It's a nested ScrollView so
+          a long description can be read in place (scroll down) instead of clipping;
+          the horizontal swipe still wins sideways drags (pan uses activeOffsetX). */}
       <View style={{ flex: 1, minHeight: 0, marginTop: 14, gap: 6 }}>
         <Text
           style={{ fontFamily: fonts.sansMedium, fontSize: 12, letterSpacing: 0.3, color: colors.inkTertiary }}>
           Job description
         </Text>
-        <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <ScrollView
+          style={{ flex: 1, minHeight: 0 }}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+          contentContainerStyle={{ paddingBottom: 4 }}>
           <Text
             style={{
               fontFamily: fonts.sans,
@@ -227,7 +211,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
             }}>
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
-        </View>
+        </ScrollView>
         {/* Lifted clear of the floating action bar that overlaps the card's
             lower edge, so the cue is never hidden behind the buttons. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 36 }}>
@@ -285,7 +269,7 @@ function DetailTile({
  * grid, the full description, and required qualifications. Scrolls under
  * the floating action bar, so swipe and draft stay available while reading.
  */
-function ExpandedCard({
+export function ExpandedCard({
   job,
   descLoading,
   onCollapse,
@@ -296,8 +280,16 @@ function ExpandedCard({
 }) {
   const colors = useColors();
   const router = useRouter();
+  const { autoApplyJob } = useApp();
   const quals = job.requiredQualifications ?? [];
   const openCompany = () => router.push(`/company/${encodeURIComponent(job.company)}`);
+  // One-tap auto-apply to THIS job, straight from the (expanded) card. Applying
+  // is separate from swiping: swipe = network, this = apply. Only shown when the
+  // role is on a supported ATS. Deduped via the store (no double applications).
+  const onApply = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    autoApplyJob(job);
+  };
 
   const tiles: { icon: keyof typeof Ionicons.glyphMap; label: string; tone: string; full?: boolean }[] = [];
   if (job.compensation)
@@ -378,6 +370,26 @@ function ExpandedCard({
             Find a contact at {job.company}
           </Text>
         </Pressable>
+
+        {job.autoApplyEligible ? (
+          <Pressable
+            onPress={onApply}
+            accessibilityRole="button"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              backgroundColor: colors.accent,
+              borderRadius: 8,
+              paddingVertical: 12,
+            }}>
+            <Ionicons name="flash" size={16} color={colors.paper} />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+              Auto-apply to this role
+            </Text>
+          </Pressable>
+        ) : null}
 
         {tiles.length ? (
           <View style={{ gap: 10 }}>

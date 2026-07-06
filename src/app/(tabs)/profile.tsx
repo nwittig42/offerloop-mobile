@@ -28,7 +28,6 @@ import {
 import { useApp } from '@/store/app';
 import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
-import type { ProfileFile } from '@/types';
 
 const splitList = (s: string) =>
   s
@@ -200,7 +199,7 @@ function AppearanceSelector() {
 
 /**
  * Profile, Sorce-style: credits banner, identity, then a horizontal tab
- * strip. Tab order: Personal, Resume, Files, Settings. Personal is the
+ * strip. Tab order: Personal, Resume, Settings. Personal is the
  * personalization that steers email writing (LinkedIn to parse, target
  * roles with suggestions, an About box). Resume shows what we parsed out of
  * the uploaded resume, collapsed by default so it does not crowd the view,
@@ -210,17 +209,10 @@ function AppearanceSelector() {
 const TABS = [
   { key: 'personal', label: 'Personal', icon: 'person-outline' },
   { key: 'resume', label: 'Resume', icon: 'document-text-outline' },
-  { key: 'files', label: 'Files', icon: 'folder-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings-outline' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
-
-const FILE_ICON: Record<ProfileFile['kind'], keyof typeof Ionicons.glyphMap> = {
-  resume: 'document-text-outline',
-  transcript: 'school-outline',
-  other: 'document-outline',
-};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -229,7 +221,6 @@ export default function ProfileScreen() {
     profile,
     connection,
     resumeExperiences,
-    files,
     unreadCount,
     swipesAvailable,
     swipeBatchSize,
@@ -299,7 +290,7 @@ export default function ProfileScreen() {
       gradYear,
       about,
     });
-    showToast('Personalization saved (mock)');
+    showToast('Saved');
   };
 
   return (
@@ -753,41 +744,6 @@ export default function ProfileScreen() {
                 Rebuild your resume or update your LinkedIn on offerloop.ai and the parse
                 updates here.
               </Text>
-            </>
-          ) : null}
-
-          {tab === 'files' ? (
-            <>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
-                Transcripts, writing samples, and other documents to have on hand. Your
-                resume and its parse live in the Resume tab.
-              </Text>
-              {files.map((file) => (
-                <Card key={file.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 10,
-                      backgroundColor: colors.paper2,
-                      borderWidth: 1,
-                      borderColor: colors.hairline,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name={FILE_ICON[file.kind]} size={18} color={colors.inkSecondary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      {file.name}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      {file.updatedLabel}
-                    </Text>
-                  </View>
-                  {file.kind === 'resume' ? <Chip label="Resume" tone="accent" /> : null}
-                </Card>
-              ))}
             </>
           ) : null}
 

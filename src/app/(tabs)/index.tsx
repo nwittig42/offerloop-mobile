@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Share, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
   Extrapolation,
@@ -21,11 +22,7 @@ import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import StaminaBar from '@/components/feed/StaminaBar';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
-import {
-  getApplicationProfile,
-  isProfileReady,
-  startAutoApply,
-} from '@/api/endpoints/autoApply';
+import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
 import { ActionCircle } from '@/components/ui/Button';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
@@ -49,12 +46,15 @@ export default function FeedScreen() {
     unreadCount,
     canUndo,
     swipeSettings,
+    updateSwipeSettings,
     swipesAvailable,
     swipeBatchSize,
     cooldownSecondsLeft,
     rechargeNow,
     passJob,
+    saveJob,
     draftJob,
+    autoApplyJob,
     undoLastPass,
     resetDeck,
     showToast,
@@ -62,7 +62,6 @@ export default function FeedScreen() {
   } = useApp();
   const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
-  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const canAutoApply = profile.plan === 'Pro' || profile.plan === 'Elite';
 
@@ -114,7 +113,13 @@ export default function FeedScreen() {
 
   // Stable across renders so SwipeDeck (memoized) doesn't re-render on every
   // store change / 60s poll — only when the swipe-relevant inputs change.
-  const handleSwiped = useCallback((direction: 'left' | 'right', job: Job) => {
+  const handleSwiped = useCallback((direction: 'left' | 'right' | 'up', job: Job) => {
+    if (direction === 'up') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      saveJob(job.id);
+      showToast('Saved for later');
+      return;
+    }
     if (direction === 'right') {
       if (!canDraft) {
         // Out of swipes: bounce, don't spend. The card snaps back.
@@ -126,35 +131,25 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
       draftJob(job.id);
-      // Auto-apply on + eligible job → fire the real submission in the
-      // BACKGROUND so swiping never blocks (Sorce-style). It surfaces in the
-      // Applied tab with live status. If the application profile isn't set up
-      // yet, we don't apply — the banner + toast point them to set it up.
+      // Auto-apply on + eligible → deduped background submission (surfaces in
+      // Network › Applied). autoApplyJob blocks a second apply to the same job.
       if (swipeSettings.autoApply && job.autoApplyEligible && canAutoApply) {
-        if (!profileReady) {
-          showToast('Set up your application profile to auto-apply');
-        } else {
-          showToast(`Auto-applying to ${job.title} — see Network › Applied`, true);
-          startAutoApply(job.id)
-            .then((r) => {
-              if (r.ok) {
-                queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
-              } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
-                showToast('Set up your application profile to auto-apply');
-              } else if (r.code === 'INSUFFICIENT_CREDITS') {
-                showToast('Not enough credits to auto-apply');
-              } else if (r.code !== 'INELIGIBLE') {
-                showToast('Could not auto-apply, try again');
-              }
-            })
-            .catch(() => showToast('Could not auto-apply, try again'));
-        }
+        autoApplyJob(job);
       }
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       passJob(job.id);
     }
-  }, [canDraft, draftJob, passJob, swipeSettings.autoApply, canAutoApply, profileReady, showToast, queryClient]);
+  }, [canDraft, draftJob, passJob, saveJob, autoApplyJob, swipeSettings.autoApply, canAutoApply, showToast]);
+
+  // Share the top card (native share sheet).
+  const shareTopJob = useCallback(() => {
+    const job = jobs[0];
+    if (!job) return;
+    Share.share({
+      message: `${job.title} at ${job.company}${job.location ? ` — ${job.location}` : ''} (found on Offerloop)`,
+    }).catch(() => {});
+  }, [jobs]);
 
   const creditsPill = (
     <PlanBorder plan={profile.plan} radius={9}>
@@ -175,7 +170,7 @@ export default function FeedScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
       <Header
         title="Offerloop"
         logo
@@ -244,6 +239,28 @@ export default function FeedScreen() {
               onSwiped={handleSwiped}
               drag={dragX}
             />
+            {/* Undo, top-right over the card (Sorce-style). Outside the deck's
+                gesture so tapping it never swipes or expands. */}
+            {canUndo && !expanded ? (
+              <Pressable
+                onPress={undoLastPass}
+                accessibilityLabel="Undo last swipe"
+                style={{
+                  position: 'absolute',
+                  top: 20,
+                  right: 18,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  backgroundColor: colors.paper,
+                  borderWidth: 1,
+                  borderColor: colors.hairline,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="arrow-undo" size={17} color={colors.inkSecondary} />
+              </Pressable>
+            ) : null}
           </View>
 
           {outOfSwipes ? (
@@ -261,12 +278,12 @@ export default function FeedScreen() {
                 },
                 barStyle,
               ]}>
-              <GlassBar style={{ gap: 16 }}>
+              <GlassBar style={{ gap: 8 }}>
+                <ActionCircle icon="share-outline" size={42} onPress={shareTopJob} />
                 <ActionCircle
-                  icon="arrow-undo-outline"
-                  size={50}
-                  disabled={!canUndo}
-                  onPress={undoLastPass}
+                  icon="bookmark-outline"
+                  size={46}
+                  onPress={() => deckRef.current?.save()}
                 />
                 <Animated.View style={passStyle}>
                   <PlayfulPass size={64} onPress={() => deckRef.current?.swipe('left')} />
@@ -278,9 +295,44 @@ export default function FeedScreen() {
                     onPress={() => deckRef.current?.swipe('right')}
                   />
                 </Animated.View>
+                {/* Auto-apply MODE toggle: lit purple gradient when ON (a right
+                    swipe also auto-applies), muted when OFF (swipe just networks). */}
+                <Pressable
+                  onPress={() => updateSwipeSettings({ autoApply: !swipeSettings.autoApply })}
+                  accessibilityLabel="Toggle auto-apply on swipe">
+                  {swipeSettings.autoApply ? (
+                    <LinearGradient
+                      colors={['#2563EB', '#4F46E5', '#7C3AED']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 23,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                      <Ionicons name="flash" size={20} color="#FFFFFF" />
+                    </LinearGradient>
+                  ) : (
+                    <View
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 23,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.paper2,
+                        borderWidth: 1,
+                        borderColor: colors.hairline,
+                      }}>
+                      <Ionicons name="flash-outline" size={20} color={colors.inkTertiary} />
+                    </View>
+                  )}
+                </Pressable>
                 <ActionCircle
                   icon="options-outline"
-                  size={50}
+                  size={42}
                   onPress={() => router.push('/swipe-settings')}
                 />
               </GlassBar>

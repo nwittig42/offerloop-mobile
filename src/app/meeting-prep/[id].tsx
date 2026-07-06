@@ -1,16 +1,132 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchMeetingPrep } from '@/api/endpoints/meetingPreps';
 import { qk } from '@/api/queryKeys';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import SnakeBorder from '@/components/ui/SnakeBorder';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+
+/** The prep-in-progress card: same treatment as a drafting email — a snake
+ *  border (bright yellow to contrast the brown coffee theme) chasing the edge
+ *  with rotating "what we're doing" phrases. */
+function PrepLoadingCard({ company }: { company?: string }) {
+  const colors = useColors();
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const phrases = useMemo(() => {
+    const base = [
+      'Reading their LinkedIn',
+      'Finding your common ground',
+      company ? `Pulling recent ${company} news` : 'Pulling recent company news',
+      'Mapping their career path',
+      'Writing your talking points',
+      company ? `Scanning ${company} for shared ground` : 'Scanning for shared experience',
+    ];
+    for (let i = base.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [base[i], base[j]] = [base[j], base[i]];
+    }
+    return base;
+  }, [company]);
+  const [pi, setPi] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setPi((p) => (p + 1) % phrases.length), 1700);
+    return () => clearInterval(t);
+  }, [phrases.length]);
+  return (
+    <View
+      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      style={{
+        width: '100%',
+        borderRadius: 16,
+        backgroundColor: colors.paper,
+        paddingVertical: 28,
+        paddingHorizontal: 24,
+        alignItems: 'center',
+        gap: 14,
+      }}>
+      {size.w > 0 ? <SnakeBorder w={size.w} h={size.h} color="#FACC15" radius={16} strokeWidth={3} /> : null}
+      <Image
+        source={require('../../../assets/images/scout-prep.png')}
+        style={{ width: 120, height: 96 }}
+        resizeMode="contain"
+      />
+      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
+        Prepping your brief
+      </Text>
+      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.coffee, textAlign: 'center' }}>
+        {phrases[pi]}…
+      </Text>
+    </View>
+  );
+}
+
+/** A titled prose section (icon + heading + body), only rendered when it has text. */
+function PrepText({
+  title,
+  icon,
+  color,
+  body,
+}: {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  body?: string;
+}) {
+  const colors = useColors();
+  if (!body) return null;
+  return (
+    <Card style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+        <Ionicons name={icon} size={16} color={color} />
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>{title}</Text>
+      </View>
+      <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 21 }}>
+        {body}
+      </Text>
+    </Card>
+  );
+}
+
+/** A titled bullet list, only rendered when it has items. */
+function PrepBullets({
+  title,
+  icon,
+  color,
+  items,
+}: {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  items: string[];
+}) {
+  const colors = useColors();
+  if (!items.length) return null;
+  return (
+    <Card style={{ gap: 9 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+        <Ionicons name={icon} size={16} color={color} />
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>{title}</Text>
+      </View>
+      {items.map((it, i) => (
+        <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
+          <Text style={{ color, fontSize: 13.5, lineHeight: 20 }}>•</Text>
+          <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+            {it}
+          </Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
 
 /**
  * A meeting prep brief. The prep runs as a background job, so this screen polls
@@ -49,7 +165,7 @@ export default function MeetingPrepDetailScreen() {
         alignItems: 'center',
         gap: 10,
       }}>
-      <Ionicons name="cafe" size={20} color={colors.navy} />
+      <Ionicons name="cafe" size={20} color={colors.coffee} />
       <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.heading, flex: 1 }}>
         Meeting prep
       </Text>
@@ -59,41 +175,19 @@ export default function MeetingPrepDetailScreen() {
     </View>
   );
 
-  // Still working (or first load): show a calm preparing state.
+  // Still working (or first load): show the snake-bordered preparing card.
   if (!prep || prep.status === 'processing') {
     const failedToLoad = prepQuery.isError;
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface }}>
         {Header}
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
-          <Image
-            source={require('../../../assets/images/scout-prep.png')}
-            style={{ width: 120, height: 96 }}
-            resizeMode="contain"
-          />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 }}>
           {failedToLoad ? (
             <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, textAlign: 'center' }}>
               Could not load this prep. Pull back and try again.
             </Text>
           ) : (
-            <>
-              <ActivityIndicator color={colors.navy} />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink, textAlign: 'center' }}>
-                Prepping your brief
-              </Text>
-              <Text
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 13,
-                  color: colors.inkSecondary,
-                  textAlign: 'center',
-                  lineHeight: 20,
-                  maxWidth: 280,
-                }}>
-                Scout is reading their LinkedIn and writing your talking points. This usually
-                takes a moment.
-              </Text>
-            </>
+            <PrepLoadingCard company={prep?.company} />
           )}
         </View>
       </View>
@@ -156,22 +250,21 @@ export default function MeetingPrepDetailScreen() {
           ) : null}
         </Card>
 
-        {prep.summary ? (
-          <Card style={{ gap: 8 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
-              The brief
-            </Text>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 21 }}>
-              {prep.summary}
-            </Text>
-          </Card>
-        ) : null}
+        <PrepText
+          title="Why you two connect"
+          icon="sparkles-outline"
+          color={colors.positive}
+          body={prep.commonGround}
+        />
 
         {prep.talkingPoints.length > 0 ? (
           <Card style={{ gap: 10 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
-              Questions to ask
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              <Ionicons name="chatbubbles-outline" size={16} color={colors.accent} />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+                Questions to ask
+              </Text>
+            </View>
             {prep.talkingPoints.map((point, i) => (
               <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
                 <View
@@ -195,6 +288,53 @@ export default function MeetingPrepDetailScreen() {
               </View>
             ))}
           </Card>
+        ) : null}
+
+        <PrepText
+          title="How to steer the chat"
+          icon="navigate-outline"
+          color={colors.navy}
+          body={prep.conversationStrategy}
+        />
+        <PrepText
+          title="Company cheat sheet"
+          icon="business-outline"
+          color={colors.navy}
+          body={prep.companyCheatSheet}
+        />
+        <PrepBullets
+          title={`In the news`}
+          icon="newspaper-outline"
+          color={colors.marketing}
+          items={prep.research?.companyNews ?? []}
+        />
+        <PrepBullets
+          title="About the company"
+          icon="information-circle-outline"
+          color={colors.marketing}
+          items={prep.research?.companyOverview ?? []}
+        />
+        <PrepBullets
+          title="About them"
+          icon="person-outline"
+          color={colors.marketing}
+          items={prep.research?.personMentions ?? []}
+        />
+        <PrepBullets
+          title="Industry context"
+          icon="trending-up-outline"
+          color={colors.marketing}
+          items={prep.research?.industryTrends ?? []}
+        />
+
+        {prep.pdfUrl ? (
+          <Button
+            label="Open the full prep"
+            icon="document-text-outline"
+            variant="outline"
+            fullWidth
+            onPress={() => Linking.openURL(prep.pdfUrl!)}
+          />
         ) : null}
 
         <Text

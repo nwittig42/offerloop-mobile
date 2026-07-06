@@ -26,6 +26,15 @@ const kindColor = (c: Palette): Record<string, string> => ({
   auto_apply_attention: c.waiting,
 });
 
+// Short kind label above each message, colored by kind, so the bell reads with
+// hierarchy instead of a flat wall of rows.
+const KIND_LABEL: Record<string, string> = {
+  draft_ready: 'DRAFT READY',
+  reply: 'REPLY',
+  loop: 'LOOP',
+  auto_apply_attention: 'NEEDS YOU',
+};
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const colors = useColors();
@@ -76,44 +85,61 @@ export default function NotificationsScreen() {
             <Pressable
               key={n.id}
               onPress={() => {
+                router.back();
                 if (n.kind === 'auto_apply_attention' && n.autoApplyId) {
-                  router.back();
                   router.push(`/apply-questions/${n.autoApplyId}`);
-                } else if (n.outreachId) {
-                  router.back();
-                  router.push(`/outreach/${n.outreachId}`);
+                  return;
                 }
+                if (n.kind === 'reply' && n.outreachId) {
+                  router.push(`/outreach/${n.outreachId}`);
+                  return;
+                }
+                // loop -> Loops, draft_ready / anything else -> Inbox. The tab
+                // switch has to wait for the modal dismiss to settle, or it's
+                // dropped (the "View does nothing" bug).
+                const tab = n.kind === 'loop' ? '/(tabs)/loops' : '/(tabs)/inbox';
+                setTimeout(() => router.navigate(tab as never), 80);
               }}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 12,
+                gap: 13,
                 paddingHorizontal: 20,
-                paddingVertical: 14,
+                paddingVertical: 15,
                 borderBottomWidth: 1,
                 borderBottomColor: colors.hairlineLight,
                 backgroundColor: n.read ? colors.paper : colors.paper2,
               }}>
               <View
                 style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 17,
-                  backgroundColor: (KIND_COLOR[n.kind] ?? colors.ink) + '14',
+                  width: 42,
+                  height: 42,
+                  borderRadius: 21,
+                  backgroundColor: (KIND_COLOR[n.kind] ?? colors.ink) + '1A',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
                 <Ionicons
                   name={KIND_ICON[n.kind] ?? 'notifications-outline'}
-                  size={16}
+                  size={19}
                   color={KIND_COLOR[n.kind] ?? colors.ink}
                 />
               </View>
-              <View style={{ flex: 1, gap: 2 }}>
+              <View style={{ flex: 1, gap: 3 }}>
                 <Text
                   style={{
+                    fontFamily: fonts.sansSemibold,
+                    fontSize: 10.5,
+                    letterSpacing: 0.6,
+                    color: KIND_COLOR[n.kind] ?? colors.inkTertiary,
+                  }}>
+                  {KIND_LABEL[n.kind] ?? 'UPDATE'}
+                </Text>
+                <Text
+                  numberOfLines={2}
+                  style={{
                     fontFamily: n.read ? fonts.sans : fonts.sansMedium,
-                    fontSize: 13.5,
+                    fontSize: 14,
                     color: colors.ink,
                     lineHeight: 19,
                   }}>
@@ -123,9 +149,13 @@ export default function NotificationsScreen() {
                   {n.timeLabel}
                 </Text>
               </View>
-              {n.outreachId ? (
+              {!n.read ? (
+                <View
+                  style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: KIND_COLOR[n.kind] ?? colors.marketing }}
+                />
+              ) : (
                 <Ionicons name="chevron-forward" size={15} color={colors.inkTertiary} />
-              ) : null}
+              )}
             </Pressable>
           ))
         )}

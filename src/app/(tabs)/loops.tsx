@@ -155,7 +155,7 @@ export default function LoopsScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
       <Header
         title="Loops"
         mark

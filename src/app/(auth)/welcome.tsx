@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/Button';
@@ -31,7 +31,7 @@ export default function WelcomeScreen() {
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.feedBg,
         paddingTop: insets.top + 36,
         paddingHorizontal: 28,
         paddingBottom: insets.bottom + 20,
@@ -64,11 +64,11 @@ export default function WelcomeScreen() {
                 width: 44,
                 height: 44,
                 borderRadius: 22,
-                backgroundColor: colors.accent + '14',
+                backgroundColor: colors.marketing + '14',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-              <Ionicons name={f.icon} size={21} color={colors.accent} />
+              <Ionicons name={f.icon} size={21} color={colors.marketing} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
@@ -83,15 +83,31 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={{ gap: 12 }}>
-        <Button label="Sign in" variant="brand" fullWidth onPress={() => router.push('/(auth)/sign-in')} />
-        <Pressable
+        <Button
+          label="Sign in"
+          variant="primary"
+          size="lg"
+          fullWidth
+          onPress={() => router.push('/(auth)/sign-in')}
+        />
+        <Button
+          label="Create your account"
+          variant="outline"
+          size="lg"
+          icon="open-outline"
+          fullWidth
           onPress={() => Linking.openURL(SIGNUP_URL)}
-          accessibilityRole="button"
-          style={{ alignItems: 'center', paddingVertical: 8 }}>
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.inkSecondary }}>
-            New to Offerloop? <Text style={{ color: colors.accent }}>Get started at offerloop.ai</Text>
-          </Text>
-        </Pressable>
+        />
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 12.5,
+            color: colors.inkTertiary,
+            textAlign: 'center',
+            lineHeight: 18,
+          }}>
+          New here? You’ll set up your account on offerloop.ai, then sign in.
+        </Text>
       </View>
     </View>
   );

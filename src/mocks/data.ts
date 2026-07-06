@@ -428,40 +428,39 @@ export const MOCK_PROFILE = {
   // Whether the SERVER profile (not this fixture) has real onboarding data —
   // used to decide if a signed-in user is genuinely new. Defaults false so the
   // loading/offline state never claims an established profile.
+  // This is the loading / server-unreachable fallback (shown behind the honest
+  // "Sample data" chip), so identity fields are EMPTY rather than fake names.
   hasServerProfile: false,
-  name: 'Sample Student',
+  name: '',
   photoUrl: '',
-  school: 'Sample University',
-  tier: 'Pro (mock)',
-  plan: 'Pro' as 'Free' | 'Pro' | 'Elite',
-  credits: 480,
-  maxCredits: 3000,
-  resetLabel: 'Resets July 1 (mock)',
-  dailyDraftsUsed: 2,
+  school: '',
+  tier: '',
+  plan: 'Free' as 'Free' | 'Pro' | 'Elite',
+  credits: 0,
+  maxCredits: 500,
+  resetLabel: '',
+  dailyDraftsUsed: 0,
   dailyDraftCap: 10,
   creditsPerSwipe: 10,
-  gmailConnected: true,
-  gmailAddress: 'sample.student@gmail.com',
-  resume: { name: 'Sample_Resume.pdf', updatedLabel: 'Updated May 2026 (mock)' },
-  linkedinUrl: 'linkedin.com/in/sample-student',
-  phone: '(555) 010-2027',
-  preferredLocations: ['New York, NY', 'San Francisco, CA'],
-  targetRoles: ['Investment Banking Analyst', 'Equity Research Associate'],
-  industries: ['Investment Banking', 'Management Consulting'],
-  gradYear: '2027',
-  about:
-    'Fixture bio. Junior at a fixture university, treasurer of the investment club, recruiting for banking and research. This box is where a student adds the color a resume misses.',
-  resumeExperiences: MOCK_RESUME_EXPERIENCES,
-  linkedinHighlights: MOCK_LINKEDIN_HIGHLIGHTS,
-  loops: [
-    {
-      id: 'loop-1',
-      brief: 'Find 5 consultants at Acme Test Co a week (mock)',
-      status: 'Active' as const,
-      contactsFound: 12,
-      draftsCreated: 8,
-      weeklyTarget: 5,
-      weeklyDone: 3,
-    },
-  ],
+  gmailConnected: false,
+  gmailAddress: '',
+  resume: { name: '', updatedLabel: '' },
+  linkedinUrl: '',
+  phone: '',
+  preferredLocations: [] as string[],
+  targetRoles: [] as string[],
+  industries: [] as string[],
+  gradYear: '',
+  about: '',
+  resumeExperiences: [] as ResumeExperience[],
+  linkedinHighlights: [] as string[],
+  loops: [] as {
+    id: string;
+    brief: string;
+    status: 'Active' | 'Paused';
+    contactsFound: number;
+    draftsCreated: number;
+    weeklyTarget: number;
+    weeklyDone: number;
+  }[],
 };

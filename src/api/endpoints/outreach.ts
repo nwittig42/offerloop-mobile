@@ -17,6 +17,24 @@ export async function sendDraft(contactId: string): Promise<void> {
   await apiFetch(`/api/mobile/outreach/${encodeURIComponent(contactId)}/send`, { method: 'POST' });
 }
 
+/** Full thread for a contact (GET /api/outbox/threads/{id}/messages). The inbox
+ *  list payload only carries a short snippet, so the detail view fetches this to
+ *  show the real draft/sent body and any replies. */
+export type ThreadMsg = { isFromUser: boolean; body: string; subject?: string; sentAt?: string };
+
+export async function fetchThreadMessages(contactId: string): Promise<ThreadMsg[]> {
+  if (USE_MOCKS) return [];
+  const res = await apiFetch<{ messages?: any[] }>(
+    `/api/outbox/threads/${encodeURIComponent(contactId)}/messages`,
+  );
+  return (res.messages || []).map((m) => ({
+    isFromUser: !!m.isFromUser,
+    body: String(m.body || ''),
+    subject: m.subject || undefined,
+    sentAt: m.sentAt || undefined,
+  }));
+}
+
 export async function sendReply(contactId: string, body: string): Promise<ThreadMessage> {
   if (USE_MOCKS) {
     return { from: 'me', text: body, timeLabel: 'Just now' };

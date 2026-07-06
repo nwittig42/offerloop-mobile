@@ -29,22 +29,40 @@ function mapListPrep(p: RawPrep): MeetingPrep {
   };
 }
 
-/** From GET /{id} (full doc): conversationStrategy -> summary, questions -> talking points. */
+/** Coerce a research section (list of strings or objects) into clean strings. */
+function strList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => (typeof x === 'string' ? x : x?.text || x?.title || x?.headline || x?.summary || ''))
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+}
+
+/** From GET /{id} (full doc). Backend fields: similaritySummary, coffeeQuestions,
+ *  conversationStrategy, companyCheatSheet, research{company_news/overview/...}. */
 function mapDetailPrep(id: string, p: RawPrep): MeetingPrep {
   const c = p.contactData || {};
   const name =
     `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.fullName || p.contactName || 'Contact';
-  const questions: string[] = Array.isArray(p.questions)
-    ? p.questions.map((q: any) => (typeof q === 'string' ? q : q?.question || q?.text || '')).filter(Boolean)
-    : [];
+  const questions = strList(p.coffeeQuestions ?? p.questions);
+  const r = p.research || {};
   return {
     id,
     name,
     title: c.jobTitle || p.jobTitle || '',
     company: c.company || p.company || '',
     linkedinUrl: p.linkedinUrl || undefined,
-    summary: p.conversationStrategy || '',
+    summary: p.similaritySummary || p.conversationStrategy || '',
     talkingPoints: questions,
+    commonGround: p.similaritySummary || '',
+    conversationStrategy: p.conversationStrategy || '',
+    companyCheatSheet: p.companyCheatSheet || '',
+    research: {
+      companyNews: strList(r.company_news),
+      companyOverview: strList(r.company_overview),
+      personMentions: strList(r.person_mentions),
+      industryTrends: strList(r.industry_trends),
+    },
     createdLabel: 'Prepped',
     status: normStatus(p.status),
     pdfUrl: p.pdfUrl || undefined,

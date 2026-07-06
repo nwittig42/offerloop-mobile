@@ -55,9 +55,20 @@ function mapThread(t: Thread): OutreachItem {
   };
 }
 
+/** Sort key: most recent activity first. The backend /threads (no-limit path)
+ *  streams in Firestore doc-id order, NOT by recency, so a fresh draft lands
+ *  wherever its id falls and gets buried. Sort here so newest is always on top. */
+function recencyOf(t: Thread): number {
+  const v = Date.parse(t.lastActivityAt || t.updatedAt || t.draftCreatedAt || t.createdAt || '');
+  return Number.isNaN(v) ? 0 : v;
+}
+
 /** The Inbox: real threads (drafts + sent + replies) from the outbox service. */
 export async function fetchInbox(): Promise<OutreachItem[]> {
   if (USE_MOCKS) return MOCK_OUTREACH_SEED;
   const res = await apiFetch<ThreadsResponse>('/api/outbox/threads');
-  return (res.threads || []).map(mapThread);
+  return (res.threads || [])
+    .slice()
+    .sort((a, b) => recencyOf(b) - recencyOf(a))
+    .map(mapThread);
 }
