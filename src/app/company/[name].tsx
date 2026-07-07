@@ -14,6 +14,7 @@ import {
   listAppliedJobs,
 } from '@/api/endpoints/autoApply';
 import { fetchCompany } from '@/api/endpoints/company';
+import type { CompanyInfo } from '@/types';
 import { fetchRolesByCompany } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
@@ -49,12 +50,20 @@ export default function CompanyScreen() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tab, setTab] = useState<'overview' | 'reached' | 'applied' | 'roles'>('overview');
 
-  const { data: info, isLoading: companyLoading } = useQuery({
+  const { data: infoData, isLoading: companyInfoLoading } = useQuery({
     queryKey: qk.company(company),
     queryFn: () => fetchCompany(company),
     enabled: !!company,
     staleTime: 30 * 60 * 1000,
+    // First visit to an uncached company: the server answers instantly with
+    // "pending" and researches in the background — poll until the profile
+    // lands (or the server reports an honest empty).
+    refetchInterval: (q) => (q.state.data === 'pending' ? 2500 : false),
   });
+  // Downstream code keeps the old contract: `info` is data-or-null, and the
+  // background research window counts as loading.
+  const info: CompanyInfo | null = infoData && infoData !== 'pending' ? infoData : null;
+  const companyLoading = companyInfoLoading || infoData === 'pending';
   // Open roles at this company. Fetched from the backend (search-by-company) so
   // the Roles deck + Overview have content for ANY company, not just ones that
   // happen to be in the feed. Lazy: only fetched on the Overview/Roles tabs. Feed
