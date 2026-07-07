@@ -173,7 +173,11 @@ function mapContact(
 ): OutreachItem {
   const title = c.Title || c.JobTitle || c.title || '';
   const relation: ContactRelation = relationFor(title);
-  const sent = args.action === 'send';
+  // Trust what ACTUALLY happened, not the requested action: a swipe-to-send
+  // can be downgraded to a draft by the server's quality gate or the daily
+  // send cap (contact then carries gmailDraftId, no emailSent). Showing
+  // "Sent" for a draft was a real field-test bug.
+  const sent = c.emailSent === true;
   const subject = c.emailSubject || c.email_subject || `Reaching out about ${args.jobTitle}`;
   const body = c.emailBody || c.email_body || '';
   return {
@@ -190,7 +194,11 @@ function mapContact(
     },
     subject,
     body,
-    snippet: sent ? 'Sent from your connected Gmail' : 'Draft is ready for your review',
+    snippet: sent
+      ? 'Sent from your connected Gmail'
+      : args.action === 'send' && (c._sendBlockedByQuality || c._sendBlockedByDailyCap)
+        ? 'Held as a draft — review before sending'
+        : 'Draft is ready for your review',
     timeLabel: 'Just now',
   };
 }
