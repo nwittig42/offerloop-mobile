@@ -66,7 +66,11 @@ function recencyOf(t: Thread): number {
 /** The Inbox: real threads (drafts + sent + replies) from the outbox service. */
 export async function fetchInbox(): Promise<OutreachItem[]> {
   if (USE_MOCKS) return MOCK_OUTREACH_SEED;
-  const res = await apiFetch<ThreadsResponse>('/api/outbox/threads');
+  // fields=list → the server returns only what mapThread reads (~1/3 the
+  // bytes at a few hundred contacts). Older servers ignore the param.
+  const res = await apiFetch<ThreadsResponse>('/api/outbox/threads', {
+    query: { fields: 'list' },
+  });
   return (res.threads || [])
     .slice()
     .sort((a, b) => recencyOf(b) - recencyOf(a))
