@@ -17,6 +17,7 @@ const KIND_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   reply: 'chatbubble-ellipses-outline',
   loop: 'sync-outline',
   auto_apply_attention: 'alert-circle-outline',
+  auto_apply_result: 'paper-plane-outline',
 };
 
 const kindColor = (c: Palette): Record<string, string> => ({
@@ -24,6 +25,7 @@ const kindColor = (c: Palette): Record<string, string> => ({
   reply: c.positive,
   loop: c.navy,
   auto_apply_attention: c.waiting,
+  auto_apply_result: c.positive,
 });
 
 // Short kind label above each message, colored by kind, so the bell reads with
@@ -33,6 +35,7 @@ const KIND_LABEL: Record<string, string> = {
   reply: 'REPLY',
   loop: 'LOOP',
   auto_apply_attention: 'NEEDS YOU',
+  auto_apply_result: 'APPLICATION',
 };
 
 export default function NotificationsScreen() {
@@ -88,6 +91,17 @@ export default function NotificationsScreen() {
                 router.back();
                 if (n.kind === 'auto_apply_attention' && n.autoApplyId) {
                   router.push(`/apply-questions/${n.autoApplyId}`);
+                  return;
+                }
+                // A verification outcome is one human tap from done — go
+                // straight to the answer screen; other outcomes land on the
+                // applications list.
+                if (n.kind === 'auto_apply_result') {
+                  if (n.outcome === 'needs_verification' && n.autoApplyId) {
+                    router.push(`/apply-questions/${n.autoApplyId}`);
+                    return;
+                  }
+                  setTimeout(() => router.navigate('/(tabs)/network' as never), 80);
                   return;
                 }
                 if (n.kind === 'reply' && n.outreachId) {

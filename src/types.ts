@@ -92,13 +92,15 @@ export type OutreachItem = {
 
 export type NotificationItem = {
   id: string;
-  kind: 'draft_ready' | 'reply' | 'loop' | 'auto_apply_attention';
+  kind: 'draft_ready' | 'reply' | 'loop' | 'auto_apply_attention' | 'auto_apply_result';
   text: string;
   timeLabel: string;
   read: boolean;
   outreachId?: string;
-  /** For auto_apply_attention: the application to open and answer. */
+  /** For auto_apply_attention / auto_apply_result: the application to open. */
   autoApplyId?: string;
+  /** For auto_apply_result: submitted | needs_verification | failed. */
+  outcome?: string;
 };
 
 export type Loop = {
