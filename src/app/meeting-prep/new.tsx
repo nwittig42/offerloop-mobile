@@ -196,7 +196,7 @@ export default function NewMeetingPrepScreen() {
           onPress={generate}
         />
         <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
-          Reads their LinkedIn and writes a brief. Costs 15 credits and takes a few moments.
+          Reads their LinkedIn and writes a brief. Free — takes a few moments.
         </Text>
       </ScrollView>
     </View>

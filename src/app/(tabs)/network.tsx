@@ -699,7 +699,7 @@ export default function NetworkScreen() {
               textAlign: 'center',
               paddingTop: 6,
             }}>
-            Coffee chat prep costs 15 credits and runs the same research as the web
+            Coffee chat prep is free and runs the same research as the web
           </Text>
         </ScrollView>
       )}
