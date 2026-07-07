@@ -23,6 +23,20 @@
 > added by this: gzip responses (flask-compress — nothing compresses
 > today), quiet flask-limiter "Skipping limit" log spam on exempted polls,
 > web tracker can adopt ?fields=list.
+>
+> **PHASE 3 SPEED PASS (2026-07-07, all live-verified):** gzip ON
+> (215KB→40KB); limiter spam gone; stage + per-pass research timings on
+> every job doc; prompt-parse cache now Firestore-shared 14d (2.69s→0.11s
+> warm; keep the LLM parse — its company-specific titles are quality);
+> LinkedIn-posts negative cache 48h (no-post profiles re-scraped every
+> swipe before; scraper paces research at 4.5-17s); quality-gate detector
+> calibration — 88% of emails were regenerated because the ask-regex
+> didn't know "15-min"/"open to a call" and subjects >8 words were
+> "weak"; bar unchanged, verified regenerated=False live; gate logging
+> off the hot path. Cold draft ~27s / warm preview ~8s. NOTE for future
+> verification: consecutive identical swipes find DIFFERENT people (dedup
+> by design) — verify per-profile caches with fixed-contact local
+> roundtrips, not consecutive swipes.
 
 **Owner:** Rylan (product) / whoever implements (this doc is the handoff)
 **Written:** 2026-07-06, after the Nick field-test pile-up (4 swipes → 4 "Couldn't draft")
