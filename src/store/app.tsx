@@ -721,6 +721,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     queryKey: qk.loops,
     queryFn: fetchLoops,
     enabled: authStatus === 'signedIn',
+    // Loops run server-side on their own schedule — without a poll the screen
+    // showed stale counters until a force-quit. Same cadence as me/inbox;
+    // pushes (loop cycle done → draft_ready) also invalidate this for the
+    // instant version.
+    refetchInterval: 60_000,
   });
   useEffect(() => {
     if (loopsQuery.data) setLoops(loopsQuery.data);

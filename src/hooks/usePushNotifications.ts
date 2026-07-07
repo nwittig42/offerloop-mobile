@@ -27,6 +27,10 @@ export function usePushNotifications() {
     const refreshFromPush = () => {
       queryClient.invalidateQueries({ queryKey: qk.inbox });
       queryClient.invalidateQueries({ queryKey: qk.notifications });
+      // Loop-cycle pushes carry new counters; auto-apply pushes change the
+      // applications list. Cheap to refresh both on any push.
+      queryClient.invalidateQueries({ queryKey: qk.loops });
+      queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
     };
 
     const open = (data: any) => {
