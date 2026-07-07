@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -56,16 +57,21 @@ export default function NetworkScreen() {
   const { width: windowWidth } = useWindowDimensions();
 
   // Applications submitted via auto-apply. Fetched on Applications (the list) and
-  // Companies (the grid uses per-company applied counts); polls every 8s while any
-  // application is still in flight (queued / running) so a submit lands without a
-  // manual refresh.
+  // Companies (the grid uses per-company applied counts); polls every 15s while
+  // any application is still in flight (queued / running) so a submit lands
+  // without a manual refresh. FOCUS-GATED: tab screens stay mounted in the
+  // background, and this response is heavy (~5MB) — un-gated it kept hammering
+  // the server every 8s from behind other tabs, which helped OOM the staging
+  // box mid-draft (field-tested 2026-07-07). No polling unless you're looking.
+  const isFocused = useIsFocused();
   const appliedQuery = useQuery({
     queryKey: ['appliedJobs'],
     queryFn: listAppliedJobs,
-    enabled: tab === 'Applications' || tab === 'Companies',
+    enabled: isFocused && (tab === 'Applications' || tab === 'Companies'),
     refetchInterval: (q) => {
+      if (!isFocused) return false;
       const items = q.state.data as AppliedJob[] | undefined;
-      return items?.some((j) => !AUTO_APPLY_TERMINAL.includes(j.status)) ? 8000 : false;
+      return items?.some((j) => !AUTO_APPLY_TERMINAL.includes(j.status)) ? 15_000 : false;
     },
   });
   const appliedJobs = appliedQuery.data ?? [];
