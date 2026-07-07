@@ -607,8 +607,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // is a placeholder; the server assigns a real Firestore id). Keep an
     // optimistic item until the server actually has it; when it does, record the
     // id swap so an open detail screen can follow it, and let the server copy win.
+    // Company names arrive spelled differently per source ("Janestreet" from
+    // the job card vs "jane street" from the saved contact) — strip everything
+    // but letters/digits so the same person+company always matches, otherwise
+    // the optimistic row and the server row both render (duplicate people in
+    // the Inbox, field-tested 2026-07-07).
+    const normCo = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
     const keyOf = (o: OutreachItem) =>
-      `${(o.contact?.name || '').toLowerCase().trim()}|${(o.company || '').toLowerCase().trim()}`;
+      `${(o.contact?.name || '').toLowerCase().trim()}|${normCo(o.company || '')}`;
     setOutreach((prev) => {
       const serverByKey = new Map(server.map((s) => [keyOf(s), s] as const));
       const keptOptimistic: OutreachItem[] = [];
