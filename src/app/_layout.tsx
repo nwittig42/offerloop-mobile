@@ -120,7 +120,7 @@ function useAuthGate() {
 function ThemedShell() {
   const colors = useColors();
   const { scheme, setSchool } = useTheme();
-  const { profile } = useApp();
+  const { profile, bootPending } = useApp();
   const status = useAuthGate();
   useScreenshotShare();
   usePushNotifications();
@@ -130,7 +130,10 @@ function ThemedShell() {
     setSchool(resolveSchool(profile.school));
   }, [profile.school, setSchool]);
 
-  if (status === 'loading') {
+  // bootPending: signed in but no profile from cache/network yet — hold the
+  // spinner (~50ms for returning users) instead of flashing sample data as
+  // real. A /me failure releases it to the honest "sample data" banner.
+  if (status === 'loading' || bootPending) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }}>
         <ActivityIndicator color={colors.navy} />

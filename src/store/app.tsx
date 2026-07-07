@@ -221,6 +221,11 @@ type AppStore = {
     usingSampleData: boolean;
     retry: () => void;
   };
+  /** Signed in but the profile hasn't arrived from cache or network yet — the
+   *  app shell holds its launch spinner instead of flashing MOCK_PROFILE as if
+   *  it were the user's data. Releases on first /me settle (data OR error; the
+   *  error path hands off to the honest "sample data" banner). */
+  bootPending: boolean;
   /**
    * Per-screen load state for the job feed and inbox. The store falls back to
    * fixtures until each query resolves, so these let the Feed/Inbox render their
@@ -668,6 +673,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
     };
   }, [authStatus, meQuery.isError, meQuery.data, queryClient]);
+
+  // Cold-start honesty: while signed in with NO profile yet (cache restore is
+  // ~50ms for returning users; first-ever session waits on the first /me), the
+  // shell keeps its launch spinner up instead of flashing MOCK_PROFILE as if
+  // it were real. An /me ERROR releases the gate — the red "sample data"
+  // banner is the honest state for that, and a spinner would never resolve.
+  const bootPending =
+    authStatus === 'signedIn' && meQuery.data === undefined && !meQuery.isError;
 
   // Per-screen load state. `loading` is the first fetch only (isLoading is false
   // while disabled pre-auth); `error` is a failed fetch with no data to show.
@@ -1468,6 +1481,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       trackerRows,
       profile,
       connection,
+      bootPending,
       feedState,
       inboxState,
       refetchInbox,
@@ -1533,6 +1547,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       trackerRows,
       profile,
       connection,
+      bootPending,
       feedState,
       inboxState,
       refetchInbox,
