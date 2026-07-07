@@ -1,5 +1,29 @@
 # PLAN: Instant-Feel — make every long-running action feel immediate and never broken
 
+> **STATUS 2026-07-06:** Phases 0, 1, and 2 SHIPPED and live-verified on
+> staging. Phase 0 (queue/retry/timeouts/push-refresh) + Phase 1 (swipe_id
+> idempotency — verified: duplicate call replayed in 2s, zero charge) +
+> Phase 2 (server-side draft jobs — verified: job accepted in 0.2s, honest
+> stages with the found person's name, charged once, re-post re-attached).
+> Backend on staging/mobile-field (commits 347ec1e5, 9d75ace4); app OTAs
+> published to preview channel (runtime 91f02c78). Remaining: Phase 3
+> (measure stage timings via job docs, prefetch evaluation, auto-apply/
+> company/Loops treatment, mock-profile flash) and Phase 4 (infra decisions).
+>
+> **PAYLOAD DIET (2026-07-07, after two OOM restarts under field load):**
+> auto-apply/list 5,036,139 → 19,034 B (screenshot_b64/attempt_log were
+> shipped per-application on every 8s poll; now Firestore select()
+> projection + app polls only while Network screen focused);
+> outbox/threads 517,995 → 410,797 B full (snippet≤160 chars, was full
+> emailBody) → 213,256 B for mobile via ?fields=list. Staleness windows
+> (draft job + swipe idem) 10 → 4 min so crashes turn into clean retries.
+> Also fixed: send-downgraded-to-draft shown as "Sent"; duplicate inbox
+> rows from company-name spelling mismatch in the reconcile key. Verified:
+> 6 concurrent draft jobs under burst load, zero restarts. Phase 3 ideas
+> added by this: gzip responses (flask-compress — nothing compresses
+> today), quiet flask-limiter "Skipping limit" log spam on exempted polls,
+> web tracker can adopt ?fields=list.
+
 **Owner:** Rylan (product) / whoever implements (this doc is the handoff)
 **Written:** 2026-07-06, after the Nick field-test pile-up (4 swipes → 4 "Couldn't draft")
 **Repos:** `~/offerloop-mobile` (Expo app) + `Final_offerloop/backend` (Flask, `staging/mobile-field` branch)
