@@ -50,18 +50,7 @@ export default function SwipeSettingsScreen() {
   const { swipeSettings, updateSwipeSettings, profile } = useApp();
   const { action, contacts, autoApply, priority } = swipeSettings;
 
-  // Hiring-manager finds are priced higher than teammate finds (server
-  // CREDIT_COSTS: find_hiring_manager 10 vs 5/contact via prompt-search).
-  // 'mix' targets ONE hiring manager then fills with teammates;
-  // 'hiring_manager' prices managers for every slot (worst case shown —
-  // teammate fill when fewer HMs exist costs less, never more).
-  const HM_CREDITS = 10;
-  const totalCredits =
-    priority === 'employee'
-      ? contacts * profile.creditsPerSwipe
-      : priority === 'mix'
-        ? HM_CREDITS + (contacts - 1) * profile.creditsPerSwipe
-        : contacts * HM_CREDITS;
+  const totalCredits = contacts * profile.creditsPerSwipe;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -266,9 +255,8 @@ export default function SwipeSettingsScreen() {
                   : 'We start with the hiring manager, then fill the rest with the team.'}
             </Text>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.accent }}>
-              {priority === 'employee'
-                ? `1 swipe · ${totalCredits} credits (${contacts} ${contacts === 1 ? 'person' : 'people'} × ${profile.creditsPerSwipe})`
-                : `1 swipe · up to ${totalCredits} credits (hiring managers ${HM_CREDITS}, teammates ${profile.creditsPerSwipe})`}
+              1 swipe · {totalCredits} credits ({contacts} {contacts === 1 ? 'person' : 'people'} ×{' '}
+              {profile.creditsPerSwipe})
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 16 }}>
               A swipe always costs one swipe from your daily batch. Reaching more people
