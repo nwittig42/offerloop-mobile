@@ -218,6 +218,17 @@ quality) degrades gracefully: a generic scope card, a templated say line.
    as-is). **`GET /api/scout/active`:** thin aggregator over job state
    already in Firestore.
 
+## The spend gate (added after field test 2026-07-08)
+
+Reversible-vs-irreversible wasn't the whole story: drafts are reversible
+but their CREDITS aren't. A misheard voice ask ("Bay or anywhere that like
+man is hiring") burned credits on a stranger. Mobile rule now: **voice asks
+that spend credits confirm by default** (interpreted ask + cost, one tap);
+a Settings toggle enables zero-touch; transcription-debris targets always
+confirm regardless. Typed asks and taps are deliberate — instant. The brain
+should mirror this: when confidence in the parse is low and the action
+spends, prefer a clarify/confirm over execution.
+
 ## Consent model (mobile) — noted divergence
 
 The mobile app ALWAYS confirms irreversible actions (receipt card). Web
