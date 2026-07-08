@@ -212,8 +212,13 @@ export function parseIntent(ask: string): ScoutIntent {
   const jobSearch = parseJobSearch(ask, lower);
   if (jobSearch) return jobSearch;
 
-  // Browse-only people search: explicit look-don't-draft phrasings.
-  if (/(^|\b)(show me|who works|who do (i|we) know|look up|browse)\b/.test(lower) && /\bat\s+\S/.test(lower)) {
+  // Browse-only people search: explicit look-don't-draft phrasings
+  // (including bare "people at X" — it names a crowd, not a pick).
+  if (
+    (/(^|\b)(show me|who works|who do (i|we) know|look up|browse)\b/.test(lower) ||
+      /\bpeople\s+at\s+\S/.test(lower)) &&
+    /\bat\s+\S/.test(lower)
+  ) {
     const atM = ask.match(/\bat\s+([A-Za-z0-9&.\-' ]{2,40}?)(?:\s+in\s+|[,.!?]|$)/i);
     const locM = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i);
     const roleM = ask.match(/(?:show me|look up|browse)\s+(?:the\s+|some\s+)?([A-Za-z /\-]{2,40}?)\s+at\s+/i);
@@ -347,10 +352,21 @@ export function refineOptions(ask: string, preferredLocations: string[]): string
   const at = ask.match(/\bat\s+([A-Za-z0-9&.\-' ]{2,40}?)(?:\s+in\s+|[,.!?]|$)/i);
   if (!at) return null;
   const company = at[1].trim();
-  const base = [`Managers at ${company}`, `Hiring managers at ${company}`, `Analysts at ${company}`];
-  const locs = (preferredLocations || []).filter((l) => l && l.length < 24).slice(0, 2);
-  const withLocs = locs.map((l) => `Hiring managers at ${company} in ${l}`);
-  return [...base.slice(0, withLocs.length ? 2 : 3), ...withLocs];
+  // Honor what was actually heard: a location in the ask sticks to every
+  // variant; browse-flavored asks get a browse variant first (Rylan
+  // screenshot 2026-07-08: "people at Goldman Sachs in LA" must not lose
+  // "in LA" or the show-me framing on the way to suggestions).
+  const heardLoc = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i)?.[1]?.trim() ?? null;
+  const browsey = /(show me|who works|people at|look up|browse)/i.test(ask);
+  const tail = heardLoc ? ` in ${heardLoc}` : '';
+  const opts: string[] = [];
+  if (browsey) opts.push(`Show me people at ${company}${tail}`);
+  opts.push(`Analysts at ${company}${tail}`, `Hiring managers at ${company}${tail}`);
+  if (!heardLoc) {
+    const loc = (preferredLocations || []).find((l) => l && l.length < 24);
+    if (loc) opts.push(`Hiring managers at ${company} in ${loc}`);
+  }
+  return opts.slice(0, 4);
 }
 
 // ---------------------------------------------------------------------------
