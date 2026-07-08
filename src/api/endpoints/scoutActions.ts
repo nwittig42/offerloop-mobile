@@ -136,10 +136,71 @@ export type DraftIntent = {
 };
 export type ApplyIntent = { kind: 'apply_saved' };
 export type PrepIntent = { kind: 'prep' };
-export type ScoutIntent = DraftIntent | ApplyIntent | PrepIntent | null;
+export type JobSearchIntent = { kind: 'find_jobs'; query: string; location: string | null };
+export type ScoutIntent = DraftIntent | ApplyIntent | PrepIntent | JobSearchIntent | null;
+
+/** Spoken shorthand for roles — expanded before matching job titles. */
+const ROLE_SYNONYMS: Record<string, string> = {
+  pm: 'product manager',
+  apm: 'associate product manager',
+  swe: 'software engineer',
+  sde: 'software engineer',
+  ib: 'investment banking',
+  ux: 'designer',
+  ml: 'machine learning',
+  bd: 'business development',
+};
+
+function parseJobSearch(ask: string, lower: string): JobSearchIntent | null {
+  // "find me a PM role to apply to", "can you find me product manager jobs",
+  // "apply to a consulting internship" — a role noun + job word IS the ask.
+  const jobWordy = /(role|job|jobs|position|positions|internship|internships|opening|openings)/.test(lower);
+  const searchy = /(find|get|show|search|look|apply|hunt)/.test(lower);
+  if (!jobWordy || !searchy) return null;
+  // "apply to my saved jobs" is the bulk-apply intent, not a search.
+  if (/(saved|my jobs)/.test(lower)) return null;
+  const m = lower.match(
+    /(?:find|get|show|search(?: for)?|look(?: for)?|apply(?: to)?|hunt)\s+(?:me\s+)?(?:a\s+|an\s+|some\s+)?([a-z /&\-]{2,40}?)\s*(?:roles?|jobs?|positions?|internships?|openings?)/,
+  );
+  let query = (m?.[1] || '').trim();
+  if (!query) return null;
+  query = query
+    .split(/\s+/)
+    .map((w) => ROLE_SYNONYMS[w] || w)
+    .join(' ')
+    .trim();
+  let location: string | null = null;
+  const loc = lower.match(/\bin\s+([a-z .\-]{2,32})[,.!?]?$/);
+  if (loc) location = loc[1].trim();
+  return { kind: 'find_jobs', query, location };
+}
+
+/** Score a job title against the expanded query — every query token must
+ *  appear somewhere in title+company for a hit; eligible-to-auto-apply
+ *  first, feed order (already location-ranked) breaking ties. */
+export function matchJobs(jobs: Job[], query: string, location: string | null): Job[] {
+  const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
+  if (!tokens.length) return [];
+  const hits = jobs.filter((j) => {
+    const hay = `${j.title} ${j.company}`.toLowerCase();
+    const locOk = !location || (j.location || '').toLowerCase().includes(location.toLowerCase());
+    return locOk && tokens.every((t) => hay.includes(t));
+  });
+  return [
+    ...hits.filter((j) => j.autoApplyEligible),
+    ...hits.filter((j) => !j.autoApplyEligible),
+  ].slice(0, 4);
+}
 
 export function parseIntent(ask: string): ScoutIntent {
   const lower = ask.toLowerCase().trim();
+
+  // Job hunting reads as a question half the time ("can you find me a PM
+  // role to apply to?") — check it BEFORE the question guard so it never
+  // dead-ends at the chat brain asking for a job URL (Rylan field test
+  // 2026-07-08: talk-and-go must not require URLs).
+  const jobSearch = parseJobSearch(ask, lower);
+  if (jobSearch) return jobSearch;
 
   // Question-shaped asks are conversations, not commands — let the chat brain
   // answer ("what should I say in a follow up email" must never spawn a job).
@@ -150,7 +211,7 @@ export function parseIntent(ask: string): ScoutIntent {
 
   if (/(coffee chat|meeting prep|prep me|prep for)/.test(lower)) return { kind: 'prep' };
 
-  if (/\bapply\b/.test(lower) && /(saved|my jobs|job)/.test(lower)) return { kind: 'apply_saved' };
+  if (/\bapply\b/.test(lower) && /(saved|my jobs)/.test(lower)) return { kind: 'apply_saved' };
 
   const actiony = /(draft|email|write|reach out|message|find|outreach|connect|contact|get me|send)/.test(lower);
   // Noun-phrase commands count too: "Manager at JP Morgan", "2 analysts at

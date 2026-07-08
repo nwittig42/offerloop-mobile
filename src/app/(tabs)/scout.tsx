@@ -26,6 +26,7 @@ import {
   executeApplyIntent,
   executeDraftIntent,
   normalizeAsk,
+  matchJobs,
   parseIntent,
   preflightFor,
   refineOptions,
@@ -77,6 +78,7 @@ const SUGGESTION_POOL = [
   'Draft 3 IB analysts at Goldman Sachs',
   'Find hiring managers at Stripe',
   'Prep me for my next coffee chat',
+  'Find me a PM role to apply to',
   'Analysts at Morgan Stanley in LA',
   'Draft 2 consultants at McKinsey',
   'Recruiters at Google',
@@ -128,7 +130,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs, profile, loops, toggleLoop } = useApp();
+  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -142,6 +144,8 @@ function ScoutTabInner() {
   const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
   const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent } | null>(null);
   const [sugOffset, setSugOffset] = useState(0);
+  const [jobPicks, setJobPicks] = useState<{ query: string; jobs: Job[] } | null>(null);
+  const [applyOne, setApplyOne] = useState<Job | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -306,6 +310,8 @@ function ScoutTabInner() {
       stopSpeaking();
       setRefine(null);
       setPreflight(null);
+      setJobPicks(null);
+      setApplyOne(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
       // held ask; a fresh full ask replaces it. One round max, then best effort.
@@ -353,6 +359,25 @@ function ScoutTabInner() {
           return;
         }
         void runDraftAction(intent);
+        return;
+      }
+
+      if (intent?.kind === 'find_jobs') {
+        const picks = matchJobs(allJobs, intent.query, intent.location);
+        if (picks.length) {
+          const applyable = picks.filter((j) => j.autoApplyEligible).length;
+          setReply({
+            say: `Found ${picks.length} ${intent.query} match${picks.length === 1 ? '' : 'es'} in your feed${applyable ? ` — ${applyable} can auto-apply` : ''}. Tap one:`,
+            actions: [],
+          });
+          setJobPicks({ query: intent.query, jobs: picks });
+        } else {
+          setReply({
+            say: `Nothing matching “${intent.query}${intent.location ? ` in ${intent.location}` : ''}” in your feed right now — the Feed refreshes daily, or try a broader role.`,
+            actions: [{ label: 'Open the Feed', href: '/(tabs)' }],
+          });
+        }
+        setPhase('idle');
         return;
       }
 
@@ -768,6 +793,76 @@ function ScoutTabInner() {
                   }}
                   style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Run it as-is</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {phase === 'idle' && jobPicks && !applyOne ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{ width: '96%', gap: 7 }}>
+              {jobPicks.jobs.map((j) => (
+                <Pressable
+                  key={j.id}
+                  onPress={() => {
+                    if (j.autoApplyEligible) setApplyOne(j);
+                    else router.push('/(tabs)' as never);
+                  }}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: 'rgba(91,123,255,0.5)',
+                    backgroundColor: 'rgba(59,130,246,0.15)',
+                    borderRadius: 13,
+                    paddingVertical: 11,
+                    paddingHorizontal: 13,
+                    gap: 2,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                    {j.title}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                    {j.company}{j.location ? ` · ${j.location}` : ''}
+                    {j.autoApplyEligible ? '  ·  auto-apply ✓' : '  ·  view in Feed'}
+                  </Text>
+                </Pressable>
+              ))}
+            </Animated.View>
+          ) : null}
+
+          {phase === 'idle' && applyOne ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 10,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+                Apply to {applyOne.title}?
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+                {applyOne.company}{applyOne.location ? ` · ${applyOne.location}` : ''} · submits for real · 5 credits
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 9 }}>
+                <Pressable
+                  onPress={() => setApplyOne(null)}
+                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Not now</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const j = applyOne;
+                    setApplyOne(null);
+                    setJobPicks(null);
+                    void runApplyAction([j]);
+                  }}
+                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Apply</Text>
                 </Pressable>
               </View>
             </Animated.View>
