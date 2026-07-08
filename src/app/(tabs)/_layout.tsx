@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
@@ -87,7 +87,11 @@ export default function TabsLayout() {
           },
           tabBarBackground: () => null,
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={size} color={color} />
+            <MaterialCommunityIcons
+              name={focused ? 'bag-personal' : 'bag-personal-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

@@ -55,7 +55,9 @@ export function startListening(events: SpeechEvents): (() => void) | null {
   const m = mod();
   if (!m) return null;
 
-  const subs = [
+  let subs: { remove: () => void }[] = [];
+  try {
+    subs = [
     m.ExpoSpeechRecognitionModule.addListener('result', (e: any) => {
       const text = e?.results?.[0]?.transcript ?? '';
       events.onTranscript(text, !!e?.isFinal);
@@ -72,7 +74,11 @@ export function startListening(events: SpeechEvents): (() => void) | null {
     m.ExpoSpeechRecognitionModule.addListener('error', () => {
       // 'end' fires after 'error'; nothing extra to do — onEnd handles cleanup.
     }),
-  ];
+    ];
+  } catch {
+    subs.forEach((x) => x.remove());
+    return null;
+  }
 
   try {
     m.ExpoSpeechRecognitionModule.start({

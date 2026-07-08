@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +19,7 @@ import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoi
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import { useApp } from '@/store/app';
 import { fonts } from '@/theme/tokens';
+import ScoutErrorBoundary from '@/components/scout/ScoutErrorBoundary';
 import { requestSpeechPermissions, speechSupported, startListening } from '@/lib/speech';
 
 /**
@@ -92,6 +93,14 @@ function Ridgeline() {
 }
 
 export default function ScoutTab() {
+  return (
+    <ScoutErrorBoundary>
+      <ScoutTabInner />
+    </ScoutErrorBoundary>
+  );
+}
+
+function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { showToast } = useApp();
@@ -108,7 +117,10 @@ export default function ScoutTab() {
   const inputRef = useRef<TextInput>(null);
   const volume = useSharedValue(0);
 
-  const voiceReady = useMemo(() => speechSupported(), []);
+  // Deliberately NOT probed at mount: the very first touch of the native
+  // speech module happens on the user's tap, so screen-open can never crash
+  // from it (post-crash hardening, 2026-07-08).
+  const voiceReady = () => speechSupported();
 
   // Rotate the trail vocabulary while thinking.
   useEffect(() => {
@@ -159,7 +171,7 @@ export default function ScoutTab() {
   );
 
   const beginListening = useCallback(async () => {
-    if (!voiceReady) {
+    if (!voiceReady()) {
       showToast('Voice arrives with the next app update — type below for now');
       inputRef.current?.focus();
       return;
@@ -321,7 +333,7 @@ export default function ScoutTab() {
 
           {phase === 'idle' && !reply ? (
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: NIGHT.ink2, textAlign: 'center', paddingHorizontal: 30 }}>
-              {voiceReady ? 'Tap and ask Scout for anything' : 'Ask Scout for anything — voice arrives with the next update'}
+              Tap and ask Scout for anything
             </Text>
           ) : null}
 
