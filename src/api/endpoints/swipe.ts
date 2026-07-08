@@ -90,6 +90,34 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const JOB_POLL_MS = 2500;
 const JOB_DEADLINE_MS = 6 * 60_000;
 
+/** Poll an EXISTING draft job to a terminal state (Scout action cards +
+ *  re-hydration after an app kill). Throws ApiError on failure/timeout. */
+export async function pollDraftJob(
+  jobId: string,
+  onProgress?: (p: DraftJobProgress) => void,
+): Promise<{ contacts: RawContact[]; creditsRemaining?: number }> {
+  let state = await apiFetch<DraftJobState>(`/api/mobile/draft-jobs/${jobId}`, {
+    timeoutMs: 20_000,
+  });
+  onProgress?.(state);
+  const deadline = Date.now() + JOB_DEADLINE_MS;
+  while (state.status === 'queued' || state.status === 'running') {
+    if (Date.now() > deadline) throw new ApiError(408, 'Draft timed out', null);
+    await sleep(JOB_POLL_MS);
+    state = await apiFetch<DraftJobState>(`/api/mobile/draft-jobs/${jobId}`, {
+      timeoutMs: 20_000,
+    });
+    onProgress?.(state);
+  }
+  if (state.status === 'failed') throw new ApiError(500, state.error || 'Draft failed', state);
+  const code = state.statusCode ?? 200;
+  const result = state.result ?? {};
+  if (code >= 400) {
+    throw new ApiError(code, (result as { error?: string }).error || 'Draft failed', result);
+  }
+  return { contacts: result.contacts || [], creditsRemaining: result.credits_remaining };
+}
+
 /** Create (or re-attach to — job id doubles as the idempotency key) a draft
  *  job and poll it to a terminal state. Throws ApiError on failure/timeout. */
 async function runJobToCompletion(

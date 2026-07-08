@@ -16,8 +16,21 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOut, useSharedValue } from 'react-native-reanimated';
 
+import { apiFetch } from '@/api/client';
 import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
+import {
+  ackFor,
+  applyScope,
+  clarifyFor,
+  executeApplyIntent,
+  executeDraftIntent,
+  parseIntent,
+  type ActionProgress,
+  type DraftIntent,
+} from '@/api/endpoints/scoutActions';
+import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
+import type { Job } from '@/types';
 import { useApp } from '@/store/app';
 import { fonts } from '@/theme/tokens';
 import ScoutErrorBoundary from '@/components/scout/ScoutErrorBoundary';
@@ -62,7 +75,15 @@ const THINK_WORDS = [
   'Checking the map', 'Packing the bag', 'Sniffing around',
 ];
 
-type Phase = 'idle' | 'listening' | 'thinking';
+type Phase = 'idle' | 'listening' | 'thinking' | 'clarify' | 'receipt';
+
+/** A live action card — the job plumbing wearing Scout's clothes. */
+type ActionCard = {
+  id: string;
+  title: string;
+  stageLabel: string;
+  progressPct: number;
+};
 
 /** The brand watercolor, night-tinted offline (light sky baked to
  *  transparency, ridges to glowing periwinkle) so it draws exactly like the
@@ -92,7 +113,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount } = useApp();
+  const { showToast, unreadCount, savedJobs } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -100,6 +121,13 @@ function ScoutTabInner() {
   const [typed, setTyped] = useState('');
   const [reply, setReply] = useState<{ say: string; actions: ScoutAction[] } | null>(null);
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
+  const [cards, setCards] = useState<ActionCard[]>([]);
+  const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
+  const [receipt, setReceipt] = useState<{
+    eligible: Job[];
+    tiers: { id: string; label: string; count: number; creditEstimate: number }[];
+    chosen: number;
+  } | null>(null);
   const historyRef = useRef<ScoutTurn[]>([]);
   const requestSeq = useRef(0);
   const stopRef = useRef<(() => void) | null>(null);
@@ -123,12 +151,172 @@ function ScoutTabInner() {
     return () => clearInterval(t);
   }, [phase]);
 
+  const upsertCard = useCallback((card: ActionCard) => {
+    setCards((prev) => {
+      const i = prev.findIndex((c) => c.id === card.id);
+      if (i === -1) return [...prev, card];
+      const next = prev.slice();
+      next[i] = card;
+      return next;
+    });
+  }, []);
+  const dropCard = useCallback((id: string) => {
+    setCards((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const runDraftAction = useCallback(
+    async (intent: DraftIntent) => {
+      const id = `scout-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const title = intent.company
+        ? `${intent.hm ? 'Hiring managers' : 'Outreach'} · ${intent.company}`
+        : `Outreach · ${intent.role}`;
+      setReply({ say: ackFor(intent), actions: [] });
+      setPhase('idle');
+      upsertCard({ id, title, stageLabel: 'Starting…', progressPct: 4 });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        const res = await executeDraftIntent(intent, id, (p: ActionProgress) => {
+          upsertCard({
+            id,
+            title,
+            stageLabel: p.found ? `Found ${p.found} — ${p.stageLabel.toLowerCase()}` : p.stageLabel,
+            progressPct: p.progressPct,
+          });
+        });
+        dropCard(id);
+        setReply({ say: res.say, actions: [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        dropCard(id);
+        setReply({
+          say: "That one didn't finish — nothing was charged for anyone I couldn't draft. Ask me again.",
+          actions: [],
+        });
+      }
+    },
+    [upsertCard, dropCard],
+  );
+
+  const runApplyAction = useCallback(
+    async (jobs: Job[]) => {
+      const id = `apply-${Date.now()}`;
+      const title = `Applying to ${jobs.length} saved job${jobs.length === 1 ? '' : 's'}`;
+      setReceipt(null);
+      setPhase('idle');
+      setReply({ say: `On it — submitting ${jobs.length} application${jobs.length === 1 ? '' : 's'}.`, actions: [] });
+      upsertCard({ id, title, stageLabel: 'Starting…', progressPct: 4 });
+      try {
+        const res = await executeApplyIntent(jobs, (p: ActionProgress) => {
+          upsertCard({ id, title, stageLabel: p.stageLabel, progressPct: p.progressPct });
+        });
+        dropCard(id);
+        setReply({ say: res.say, actions: [{ label: 'Open Applications', href: '/(tabs)/network' }] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        dropCard(id);
+        setReply({ say: 'Those applications hit a snag — check Applications for details.', actions: [] });
+      }
+    },
+    [upsertCard, dropCard],
+  );
+
+  // Re-hydration (SCOUT-ACTION-CONTRACT.md): after an app kill, in-flight
+  // server work re-appears as cards instead of silently finishing offstage.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await apiFetch<{ items: { jobRef: { kind: string; id: string }; title: string; stageLabel?: string }[] }>(
+          '/api/mobile/scout/active',
+          { timeoutMs: 15_000 },
+        );
+        for (const item of r.items || []) {
+          if (!alive || item.jobRef.kind !== 'draft_job') continue;
+          const id = item.jobRef.id;
+          upsertCard({ id, title: item.title, stageLabel: item.stageLabel || 'Working…', progressPct: 30 });
+          pollDraftJob(id, (p) => {
+            if (!alive) return;
+            upsertCard({ id, title: item.title, stageLabel: p.stageLabel || 'Working…', progressPct: p.progressPct || 30 });
+          })
+            .then(() => {
+              if (!alive) return;
+              dropCard(id);
+              setReply({ say: 'Done — that draft is in your Inbox.', actions: [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] });
+            })
+            .catch(() => alive && dropCard(id));
+        }
+      } catch {
+        /* re-hydration is best-effort */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [upsertCard, dropCard]);
+
   const submitAsk = useCallback(
     async (text: string) => {
-      const clean = text.trim();
+      let clean = text.trim();
       if (!clean) return;
-      const seq = ++requestSeq.current;
+
+      // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
+      // held ask; a fresh full ask replaces it. One round max, then best effort.
+      if (clarify) {
+        const answerIntent = parseIntent(clean);
+        if (!(answerIntent?.kind === 'draft' && answerIntent.company)) {
+          clean = `${clarify.baseAsk} at ${clean}`;
+        }
+        setClarify(null);
+        const merged = parseIntent(clean);
+        if (merged?.kind === 'draft') {
+          setAsk(clean);
+          void runDraftAction(merged);
+          return;
+        }
+      }
+
+      const intent = parseIntent(clean);
       setAsk(clean);
+
+      if (intent?.kind === 'draft') {
+        const c = clarifyFor(intent);
+        if (c) {
+          setReply(null);
+          setClarify({ question: c.question, baseAsk: clean });
+          setPhase('clarify');
+          return;
+        }
+        void runDraftAction(intent);
+        return;
+      }
+
+      if (intent?.kind === 'apply_saved') {
+        const { eligible, tiers } = applyScope(savedJobs);
+        if (!eligible.length) {
+          setReply({
+            say: "You don't have any auto-apply-eligible saved jobs yet — save a few from the Feed first.",
+            actions: [],
+          });
+          setPhase('idle');
+          return;
+        }
+        setReply(null);
+        setReceipt({ eligible, tiers, chosen: tiers[0]?.count ?? Math.min(5, eligible.length) });
+        setPhase('receipt');
+        return;
+      }
+
+      if (intent?.kind === 'prep') {
+        setReply({
+          say: "Let's prep — pick the person and I'll build the full brief.",
+          actions: [{ label: 'Open Meeting Prep', href: '/meeting-prep/new' }],
+        });
+        setPhase('idle');
+        return;
+      }
+
+      // No action intent — regular Scout conversation (P1 behavior).
+      const seq = ++requestSeq.current;
       setReply(null);
       setPhase('thinking');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -156,7 +344,7 @@ function ScoutTabInner() {
         });
       }
     },
-    [],
+    [clarify, savedJobs, runDraftAction],
   );
 
   const beginListening = useCallback(async () => {
@@ -220,7 +408,16 @@ function ScoutTabInner() {
     setTimeout(() => inputRef.current?.focus(), 60);
   }, [ask]);
 
-  const orbState: OrbState = phase === 'idle' ? (reply ? 'done' : 'idle') : phase;
+  const orbState: OrbState =
+    cards.length > 0
+      ? 'acting'
+      : phase === 'clarify' || phase === 'receipt'
+        ? 'idle'
+        : phase === 'idle'
+          ? reply
+            ? 'done'
+            : 'idle'
+          : phase;
 
   return (
     <View style={{ flex: 1, backgroundColor: NIGHT.bg }}>
@@ -316,6 +513,120 @@ function ScoutTabInner() {
             </Animated.View>
           ) : null}
 
+          {phase === 'clarify' && clarify ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{ alignItems: 'center', gap: 10, paddingHorizontal: 14 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: NIGHT.ink3, textAlign: 'center' }}>
+                “{clarify.baseAsk}”
+              </Text>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink, textAlign: 'center' }}>
+                {clarify.question}
+              </Text>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: NIGHT.ink3 }}>
+                say it, type it below, or
+              </Text>
+              <Pressable
+                onPress={() => {
+                  const base = clarify.baseAsk;
+                  setClarify(null);
+                  setPhase('idle');
+                  const intent = parseIntent(base);
+                  if (intent?.kind === 'draft') void runDraftAction(intent);
+                }}
+                style={{ borderWidth: 1, borderColor: NIGHT.line, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 15 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink2 }}>
+                  Search anywhere
+                </Text>
+              </Pressable>
+            </Animated.View>
+          ) : null}
+
+          {phase === 'receipt' && receipt ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 11,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+                You have {receipt.eligible.length} saved job{receipt.eligible.length === 1 ? '' : 's'} ready
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+                Pick a scope — applications submit for real:
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                {receipt.tiers.map((t) => (
+                  <Pressable
+                    key={t.id}
+                    onPress={() => setReceipt({ ...receipt, chosen: t.count })}
+                    style={{
+                      borderRadius: 999,
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      borderWidth: 1,
+                      borderColor: receipt.chosen === t.count ? 'rgba(91,123,255,0.7)' : NIGHT.line,
+                      backgroundColor: receipt.chosen === t.count ? 'rgba(59,130,246,0.3)' : 'transparent',
+                    }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: receipt.chosen === t.count ? NIGHT.ink : '#B9C8EE' }}>
+                      {t.label} · {t.creditEstimate} cr
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 9, marginTop: 3 }}>
+                <Pressable
+                  onPress={() => {
+                    setReceipt(null);
+                    setPhase('idle');
+                  }}
+                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink2 }}>Not now</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void runApplyAction(receipt.eligible.slice(0, receipt.chosen))}
+                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#fff' }}>
+                    Apply to {receipt.chosen}
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {cards.map((c) => (
+            <Animated.View
+              key={c.id}
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 15,
+                padding: 14,
+                gap: 8,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{c.title}</Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9DB4FF' }}>{c.stageLabel}</Text>
+              <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)', overflow: 'hidden' }}>
+                <View
+                  style={{
+                    height: '100%',
+                    width: `${Math.max(4, Math.min(c.progressPct, 96))}%`,
+                    borderRadius: 2,
+                    backgroundColor: NIGHT.accent,
+                  }}
+                />
+              </View>
+            </Animated.View>
+          ))}
+
           {phase === 'idle' && reply ? (
             <Animated.View
               entering={FadeInDown.duration(240)}
@@ -361,7 +672,7 @@ function ScoutTabInner() {
             </Text>
           ) : null}
 
-          {phase === 'idle' ? (
+          {phase === 'idle' || phase === 'clarify' ? (
             <View style={{ alignItems: 'center', gap: 12, width: '100%' }}>
               <View
                 style={{
@@ -403,7 +714,7 @@ function ScoutTabInner() {
               </View>
 
               {/* Quieter suggestions, under the input — prompts, not the show. */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
+              <View style={{ display: phase === 'clarify' ? 'none' : 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
                 {SUGGESTIONS.map((s) => (
                   <Pressable
                     key={s}
