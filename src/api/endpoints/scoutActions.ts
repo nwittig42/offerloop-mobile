@@ -43,6 +43,10 @@ const ASR_FIXES: [RegExp, string][] = [
   [/\bbark?l(eys|ies)\b/gi, 'Barclays'],
   [/\bcredit\s+swiss\b/gi, 'Credit Suisse'],
   [/\bcity\s+group\b/gi, 'Citigroup'],
+  // Role-word mishears (Rylan field test: "Managers" heard as "Manners")
+  [/\bmanners\b/gi, 'managers'],
+  [/\bmangers\b/gi, 'managers'],
+  [/\brecru(i)?ters?\b/gi, 'recruiters'],
 ];
 
 export function normalizeAsk(raw: string): { text: string; corrected: boolean } {
@@ -206,6 +210,22 @@ export function clarifyFor(intent: ScoutIntent): { question: string } | null {
     return { question: 'Which company should I look at?' };
   }
   return null;
+}
+
+/** The refine card (Rylan, 2026-07-08): when an ask names a target ("… at
+ *  Goldman Sachs") but doesn't parse into anything runnable — usually a
+ *  mishear like "Manners at Goldman Sachs" — NEVER hand it to the chat brain
+ *  (which answers with false promises). Instead offer complete, tappable
+ *  variants the user can pick or build on, personalized with their preferred
+ *  locations. Returns null when the ask has no target (real conversation). */
+export function refineOptions(ask: string, preferredLocations: string[]): string[] | null {
+  const at = ask.match(/\bat\s+([A-Za-z0-9&.\-' ]{2,40}?)(?:\s+in\s+|[,.!?]|$)/i);
+  if (!at) return null;
+  const company = at[1].trim();
+  const base = [`Managers at ${company}`, `Hiring managers at ${company}`, `Analysts at ${company}`];
+  const locs = (preferredLocations || []).filter((l) => l && l.length < 24).slice(0, 2);
+  const withLocs = locs.map((l) => `Hiring managers at ${company} in ${l}`);
+  return [...base.slice(0, withLocs.length ? 2 : 3), ...withLocs];
 }
 
 // ---------------------------------------------------------------------------

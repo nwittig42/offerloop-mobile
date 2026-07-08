@@ -27,6 +27,7 @@ import {
   executeDraftIntent,
   normalizeAsk,
   parseIntent,
+  refineOptions,
   suggestFirm,
   type ActionProgress,
   type DraftIntent,
@@ -116,7 +117,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs } = useApp();
+  const { showToast, unreadCount, savedJobs, profile } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -127,6 +128,7 @@ function ScoutTabInner() {
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
   const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
+  const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -273,6 +275,7 @@ function ScoutTabInner() {
     async (text: string) => {
       let clean = normalizeAsk(text.trim()).text;
       if (!clean) return;
+      setRefine(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
       // held ask; a fresh full ask replaces it. One round max, then best effort.
@@ -335,6 +338,18 @@ function ScoutTabInner() {
           say: "Let's prep — pick the person and I'll build the full brief.",
           actions: [{ label: 'Open Meeting Prep', href: '/meeting-prep/new' }],
         });
+        setPhase('idle');
+        return;
+      }
+
+      // Ask names a target but didn't parse into anything runnable — almost
+      // always a mishear ("Manners at Goldman Sachs"). NEVER hand these to
+      // the chat brain (it answers with false promises); offer complete,
+      // tappable variants instead.
+      const options = intent ? null : refineOptions(clean, profile?.preferredLocations ?? []);
+      if (options?.length) {
+        setReply(null);
+        setRefine({ heard: clean, options });
         setPhase('idle');
         return;
       }
@@ -654,6 +669,44 @@ function ScoutTabInner() {
               </View>
             </Animated.View>
           ))}
+
+          {phase === 'idle' && refine ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 10,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+                I heard “{refine.heard}” — did you mean one of these?
+              </Text>
+              <View style={{ gap: 7 }}>
+                {refine.options.map((o) => (
+                  <Pressable
+                    key={o}
+                    onPress={() => void submitAsk(o)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: 'rgba(91,123,255,0.5)',
+                      backgroundColor: 'rgba(59,130,246,0.18)',
+                      borderRadius: 12,
+                      paddingVertical: 10,
+                      paddingHorizontal: 13,
+                    }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{o}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: NIGHT.ink3 }}>
+                or say it again / type your own below
+              </Text>
+            </Animated.View>
+          ) : null}
 
           {phase === 'idle' && didYouMean ? (
             <Animated.View
