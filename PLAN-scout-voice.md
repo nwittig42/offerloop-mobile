@@ -139,3 +139,26 @@ voice replies (Scout talks back); Loops route fully retired.
 2. P0 design direction call once frames exist.
 3. Timing of the new-build cutover (it invalidates the OTA generation again — both phones reinstall).
 4. Intent contract review with cofounder (I draft it, you two bless it).
+
+
+---
+
+## P0 review decisions (2026-07-07, Rylan)
+
+- **Scout's room is always night.** The tab keeps its committed navy world in
+  BOTH light and dark mode; the rest of the app stays light. Entering the tab
+  is a mode switch (quick cross-fade on tab change). Real brand assets locked
+  in: badge head in the orb, watercolor ridges as a duotone night-sky horizon
+  reaching mid-screen, type bar directly under the suggestion chips.
+- **Receipt card scales with the ask (graduated confirmation):**
+  1. Reversible (draft/search/prep): NO stop, runs instantly.
+  2. Small irreversible (≤5 sends/applies): every name listed, one tap.
+  3. Big or vague ("apply to my saved jobs" = 94): a SCOPE step first —
+     smart-default chips (Top 20 matches / filtered subset / All), cost
+     estimate, and the daily-cap note ("20/day, rest queue for tomorrow").
+  4. Recurring ("every week"): becomes an ongoing-loop confirm
+     (Just once / Start weekly), surfaced under Ongoing.
+- **Copy tone:** never say "irreversible" to users — "A quick look before it
+  goes out." Buttons: "Not now" / "Send all 5", "Just once" / "Start weekly".
+- Interactive mock (source of truth for the screen):
+  https://claude.ai/code/artifact/7dca20af-6052-446c-b8ad-350011956d6a
