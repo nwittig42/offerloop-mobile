@@ -42,7 +42,7 @@ export default function TabsLayout() {
         },
       }}>
       <Tabs.Screen
-        name="index"
+        name="feed"
         options={{
           title: 'Feed',
           tabBarIcon: ({ color, size, focused }) => (
@@ -70,11 +70,20 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="network"
+        options={{
+          title: 'Network',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
+          ),
+        }}
+      />
       {/* Scout replaced Loops in the bar (PLAN-scout-voice.md P1); the Loops
           screen lives on at /loops for deep links + the Ongoing section. The
           Scout screen is a committed night room, so its bar goes dark too. */}
       <Tabs.Screen
-        name="scout"
+        name="index"
         options={{
           title: 'Scout',
           tabBarActiveTintColor: '#EAF0FF',

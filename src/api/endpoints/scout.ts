@@ -38,7 +38,7 @@ function mapScoutRoute(route?: string): string | null {
     ['', '/find', '/contact-search', '/home', '/dashboard', '/job-board', '/firm-search',
      '/company-tracker', '/recruiter-spreadsheet', '/hiring-manager-tracker'].includes(r)
   )
-    return '/(tabs)';
+    return '/(tabs)/feed';
   if (['/tracker', '/outbox', '/my-network', '/my-network/people', '/contact-directory'].includes(r))
     return '/(tabs)/network';
   if (['/agent', '/agent/setup', '/loops'].includes(r)) return '/loops';
@@ -58,7 +58,7 @@ export async function sendScoutMessage(args: {
     return {
       message:
         "Here's how I'd play it: lead with the alum angle, keep it to three sentences, and ask for 15 minutes, not a referral. Want me to draft it?",
-      actions: [{ label: 'Open your feed', href: '/(tabs)' }],
+      actions: [{ label: 'Open your feed', href: '/(tabs)/feed' }],
     };
   }
 
