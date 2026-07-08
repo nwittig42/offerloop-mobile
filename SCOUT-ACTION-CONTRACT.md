@@ -56,6 +56,13 @@ scout-assistant chat endpoint with a mode flag)
 - `say` renders as Scout's reply (and later feeds TTS). Always present, even
   with no actions (pure conversation falls back to chat behavior).
 - Zero actions = conversational answer only.
+- **Say-text honesty rule (field-tested 2026-07-08):** `say` must NEVER claim
+  work ("lining up managers for you", "I'll get on that") unless the same
+  response carries the matching action. The web chat brain currently does
+  this — the translator must strip/rephrase action-claiming language when it
+  emits zero actions, or users watch Scout promise work that never runs.
+  Corollary: mishears are corrected before parsing on the app side (firm-name
+  autocorrect) and the corrected ask is what the brain receives.
 
 ### Action
 
