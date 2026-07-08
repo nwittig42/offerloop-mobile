@@ -24,6 +24,8 @@ import {
   applyScope,
   clarifyFor,
   executeApplyIntent,
+  extractSlots,
+  type AskSlots,
   executeDraftIntent,
   normalizeAsk,
   matchJobs,
@@ -172,6 +174,7 @@ function ScoutTabInner() {
   const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
   const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent } | null>(null);
   const [sugOffset, setSugOffset] = useState(0);
+  const [ctx, setCtx] = useState<{ slots: AskSlots; age: number } | null>(null);
   const [jobPicks, setJobPicks] = useState<{ query: string; jobs: Job[] } | null>(null);
   const [applyOne, setApplyOne] = useState<Job | null>(null);
   const [peoplePicks, setPeoplePicks] = useState<{
@@ -201,6 +204,7 @@ function ScoutTabInner() {
   // it fades out after a while so the tab returns to a clean idle.
   useEffect(() => {
     if (!reply) return;
+    ageContext();
     // Spoken asks get spoken replies (the full assistant loop); typed asks
     // stay silent — gyms and lectures are why the type bar exists.
     if (askByVoice.current) speak(reply.say);
@@ -229,6 +233,20 @@ function ScoutTabInner() {
     }, 1100);
     return () => clearInterval(t);
   }, [phase]);
+
+  /** Merge an utterance's slots into the rolling conversation memory. */
+  const remember = useCallback((ask: string) => {
+    const slots = extractSlots(ask);
+    if (!Object.keys(slots).length) return;
+    setCtx((prev) => ({ slots: { ...(prev?.age ?? 9) <= 3 ? prev?.slots : {}, ...slots }, age: 0 }));
+  }, []);
+  const ageContext = useCallback(() => {
+    setCtx((prev) => {
+      if (!prev) return prev;
+      const age = prev.age + 1;
+      return age > 3 ? null : { ...prev, age };
+    });
+  }, []);
 
   const upsertCard = useCallback((card: ActionCard) => {
     setCards((prev) => {
@@ -367,7 +385,27 @@ function ScoutTabInner() {
       const intent = parseIntent(clean);
       setAsk(clean);
 
+      remember(clean);
+
       if (intent?.kind === 'draft') {
+        // Rolling conversation: a missing company fills from recent turns
+        // ("find me people at Bain" … "find two hiring managers" keeps Bain)
+        // — confirmed on the pre-flight card so the inference is visible.
+        if (!intent.company && ctx && ctx.age <= 3 && ctx.slots.company) {
+          const inferred = { ...intent, company: ctx.slots.company, location: intent.location ?? ctx.slots.location ?? null };
+          setReply(null);
+          setPreflight({
+            pf: {
+              interpreted: `${inferred.wantedSend ? 'Send' : 'Draft'} ${inferred.count} ${inferred.role}${inferred.company ? ` at ${inferred.company}` : ''}${inferred.location ? ` in ${inferred.location}` : ''}`,
+              heardRaw: null,
+              variants: [],
+              note: `Using ${ctx.slots.company} from earlier in this conversation — cancel if that's not what you meant.`,
+            },
+            intent: inferred,
+          });
+          setPhase('idle');
+          return;
+        }
         const c = clarifyFor(intent);
         if (c) {
           setReply(null);
@@ -600,6 +638,10 @@ function ScoutTabInner() {
     setTyped(ask);
     setTimeout(() => inputRef.current?.focus(), 60);
   }, [ask]);
+
+  // Scout asked a question — the next utterance is an ANSWER, and the UI
+  // should say so (Rylan: users need to know this is a rolling conversation).
+  const awaitingAnswer = !!reply && /\?\s*$/.test(reply.say.trim());
 
   const orbState: OrbState =
     cards.length > 0
@@ -1135,6 +1177,30 @@ function ScoutTabInner() {
             </Text>
           ) : null}
 
+          {phase === 'idle' && awaitingAnswer ? (
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: '#9DB4FF', textAlign: 'center' }}>
+              ↑ Scout's waiting on you — tap the orb to answer, or type below
+            </Text>
+          ) : null}
+
+          {phase === 'idle' && ctx && Object.keys(ctx.slots).length ? (
+            <Pressable
+              onPress={() => setCtx(null)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 12 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: NIGHT.ink3 }} numberOfLines={1}>
+                {[
+                  ctx.slots.company,
+                  ctx.slots.role,
+                  ctx.slots.count && ctx.slots.count > 1 ? `×${ctx.slots.count}` : null,
+                  ctx.slots.location,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: NIGHT.ink3 }}>✕</Text>
+            </Pressable>
+          ) : null}
+
           {(phase === 'idle' && cards.length === 0) || phase === 'clarify' ? (
             <View style={{ alignItems: 'center', gap: 12, width: '100%' }}>
               <View
@@ -1155,7 +1221,7 @@ function ScoutTabInner() {
                   ref={inputRef}
                   value={typed}
                   onChangeText={setTyped}
-                  placeholder="Type a command…"
+                  placeholder={awaitingAnswer ? "Answer Scout…" : "Type a command…"}
                   placeholderTextColor={NIGHT.ink3}
                   returnKeyType="send"
                   onSubmitEditing={() => {

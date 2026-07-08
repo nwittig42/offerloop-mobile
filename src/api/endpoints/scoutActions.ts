@@ -295,6 +295,41 @@ export function parseIntent(ask: string): ScoutIntent {
   return { kind: 'draft', count, role, company, location, hm, wantedSend };
 }
 
+/** Slots extractable from any utterance — the rolling-conversation memory
+ *  (Rylan field test 2026-07-08: "find me people at Bain" … "find two hiring
+ *  managers" must remember Bain). Both brains read these; answers fill gaps
+ *  instead of starting over. */
+export type AskSlots = {
+  company?: string;
+  role?: string;
+  count?: number;
+  location?: string;
+  hm?: boolean;
+};
+
+export function extractSlots(ask: string): AskSlots {
+  const lower = ask.toLowerCase();
+  const out: AskSlots = {};
+  const at = ask.match(/\bat\s+([A-Za-z0-9&.\-' ]{2,40}?)(?:\s+in\s+|[,.!?]|$)/i);
+  if (at) out.company = at[1].trim();
+  const loc = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i);
+  if (loc) out.location = loc[1].trim();
+  const digit = lower.match(/\b(\d{1,2})\b/);
+  const word = lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+  if (digit) out.count = Math.max(1, Math.min(parseInt(digit[1], 10), 5));
+  else if (word) out.count = NUM_WORDS[word[1]];
+  if (/(hiring manager|recruiter|talent)/.test(lower)) {
+    out.hm = true;
+    out.role = 'hiring manager';
+  } else {
+    const roleM = lower.match(
+      /\b(analysts?|associates?|managers?|consultants?|bankers?|engineers?|designers?|directors?|partners?|vps?|interns?)\b/,
+    );
+    if (roleM) out.role = roleM[1];
+  }
+  return out;
+}
+
 /** One clarify round, max (contract rule): a draft ask with no company is the
  *  only case broad enough to coach. Location stays optional — best effort. */
 export function clarifyFor(intent: ScoutIntent): { question: string } | null {
