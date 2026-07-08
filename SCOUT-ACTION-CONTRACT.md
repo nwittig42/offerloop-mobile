@@ -78,10 +78,17 @@ scout-assistant chat endpoint with a mode flag)
 }
 ```
 
-**Reserved for a later rev, pending explicit product decision (Nick's
-point 3):** `send_outreach`, `create_loop`. Adding them later is enum-only —
-the shape doesn't change. Until then the app's swipe-send path and the Loops
-page flow remain the only ways those happen.
+**Resolved 2026-07-08 (Nick + Rylan):**
+- `send_outreach` — **voice never sends in v1; always draft.** The app's
+  honest downgrade ("drafts land in your Inbox — sending from here is
+  coming soon") IS the spec. Enum stays reserved so adding
+  send-with-receipt later doesn't break the shape.
+- `create_loop` — **not from voice in v1.** A recurring credit commitment
+  is the riskiest thing a mishear can do. Instead: voice may PROPOSE a
+  loop — the brain returns an action that opens the loop-setup screen
+  pre-filled; the commit happens in UI. (Action type
+  `propose_loop { params: prefill }`, needsConfirm: false — navigation is
+  free.) Keeps the demo moment without the failure mode.
 
 **Max one action carrying a Confirm per response (v1)** — the brain may
 chain reversible actions (find→draft) in one turn, but never two pending
@@ -204,6 +211,14 @@ existing endpoints directly, shaped as if a brain had returned this contract.
 The day the real endpoint speaks this shape, the mapper is deleted — the UI
 doesn't change. Anything the brain can't fill yet (scope options, say-text
 quality) degrades gracefully: a generic scope card, a templated say line.
+
+## Pricing (blessed 2026-07-08)
+
+Search-only people preview stays **uncharged** (no emails shown, cap 5,
+auth + rate-limited) — the email reveal is where the value is, so previews
+don't cannibalize drafting. Caveat: previews still cost real PDL money per
+lookup; keep the rate limit tight and watch PDL spend for a couple weeks.
+If it grows, cap previews per day rather than charging credits.
 
 ## Resolved (Nick, 2026-07-07)
 
