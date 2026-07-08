@@ -177,11 +177,15 @@ Unconfirmed = nothing committed, ever (abandonment is safe by design).
 The app renders these as action cards with REAL stages (never invented
 progress). Push notifications on completion already fire from these systems.
 
-## Re-hydration (P2 requirement, small)
+## Re-hydration — BUILT (shipped on staging/mobile-field, commit ba8d001)
 
-`GET /api/scout/active` → `[ { jobRef, title, startedAt } ]` — the app's
-Scout tab redraws in-flight cards after a full app kill. Work already
-survives server-side; this makes the cards survive too.
+`GET /api/mobile/scout/active` (note the /mobile prefix — reconciled per
+Nick's review 2026-07-08) → `{ items: [ { jobRef, title, stageLabel,
+startedAt } ] }` — the app's Scout tab redraws in-flight cards after a full
+app kill. Includes a zombie filter: only jobs that heartbeat'd within 8
+minutes re-hydrate, so stuck 'running' docs never flash as ghost cards.
+The app already calls this on tab mount. If the brain later exposes its own
+active-work listing, keep this path as the app-facing alias.
 
 ## Errors
 
