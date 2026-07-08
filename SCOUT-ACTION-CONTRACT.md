@@ -109,7 +109,7 @@ a `Confirm` and NO jobRef until confirmed.
 
 ```json
 {
-  "style": "targets" | "scope" | "recurring",
+  "style": "targets" | "scope" | "recurring" | "clarify",
   "title": "Ready to send — 5 emails",
   "summary": "Hiring managers · Investment banking · Los Angeles",
 
@@ -127,6 +127,19 @@ a `Confirm` and NO jobRef until confirmed.
     { "id": "top20", "label": "Top 20 matches", "creditEstimate": 100 }
   ],
   "capNote": "20 applications per day — the rest queue for tomorrow",
+
+  // style: "clarify" (broad/underspecified ask — Rylan field-test insight
+  // 2026-07-08: coach the ask like web Find does, one light step, never an
+  // interrogation): the brain asks ONE tightening question with quick-tap
+  // refinement chips that append to the ask; free-form voice/typing also
+  // accepted. Maps from the brain's internal clarify states (e.g.
+  // COUNT_REQUIRED). Max one clarify round before acting on best effort.
+  "question": "Which city should I focus on?",
+  "refinements": [
+    { "id": "la",   "label": "Los Angeles" },
+    { "id": "sf",   "label": "San Francisco" },
+    { "id": "any",  "label": "Anywhere" }
+  ],
 
   // style: "recurring" (create_loop)
   "cadence": "weekly",
