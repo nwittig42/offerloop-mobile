@@ -111,7 +111,7 @@ export default function NotificationsScreen() {
                 // loop -> Loops, draft_ready / anything else -> Inbox. The tab
                 // switch has to wait for the modal dismiss to settle, or it's
                 // dropped (the "View does nothing" bug).
-                const tab = n.kind === 'loop' ? '/(tabs)/loops' : '/(tabs)/inbox';
+                const tab = n.kind === 'loop' ? '/loops' : '/(tabs)/inbox';
                 setTimeout(() => router.navigate(tab as never), 80);
               }}
               style={{

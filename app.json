@@ -61,6 +61,13 @@
         {
           "cameraPermission": "Offerloop uses the camera to scan a LinkedIn QR code at career fairs and start a meeting prep."
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Offerloop uses the microphone so you can talk to Scout \u2014 ask for drafts, research, and applications by voice.",
+          "speechRecognitionPermission": "Offerloop transcribes your voice on this device so Scout can act on what you ask. Audio never leaves your phone."
+        }
       ]
     ],
     "experiments": {

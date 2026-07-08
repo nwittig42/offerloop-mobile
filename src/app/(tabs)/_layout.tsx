@@ -9,11 +9,12 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Bottom navigation: Feed, Inbox, Network, Loops, Profile — the user's journey
- * (draft → replies → pipeline → autopilot → account), daily-use tabs left.
+ * Bottom navigation: Feed, Inbox, Network, Scout, Profile — the user's journey
+ * (draft → replies → pipeline → assistant → account), daily-use tabs left.
  * The bar is a liquid-glass surface (GlassTabBackground) with a hairline top
- * border and ink active state. The notification hub is the header bell, not
- * a tab. Scout is a summonable sheet from the header, not a tab.
+ * border and ink active state; the Scout tab overrides it with its night bar.
+ * The notification hub is the header bell, not a tab. Loops became Scout's
+ * background engine — the old screen survives at /loops for deep links.
  */
 export default function TabsLayout() {
   const { outreach } = useApp();
@@ -69,12 +70,24 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Scout replaced Loops in the bar (PLAN-scout-voice.md P1); the Loops
+          screen lives on at /loops for deep links + the Ongoing section. The
+          Scout screen is a committed night room, so its bar goes dark too. */}
       <Tabs.Screen
-        name="loops"
+        name="scout"
         options={{
-          title: 'Loops',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="infinite" size={size} color={color} />
+          title: 'Scout',
+          tabBarActiveTintColor: '#EAF0FF',
+          tabBarInactiveTintColor: colors.inkTertiary,
+          tabBarStyle: {
+            backgroundColor: '#0A111F',
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: 'rgba(160,190,255,0.18)',
+            elevation: 0,
+          },
+          tabBarBackground: () => null,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={size} color={color} />
           ),
         }}
       />

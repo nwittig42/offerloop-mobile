@@ -41,7 +41,7 @@ function mapScoutRoute(route?: string): string | null {
     return '/(tabs)';
   if (['/tracker', '/outbox', '/my-network', '/my-network/people', '/contact-directory'].includes(r))
     return '/(tabs)/network';
-  if (['/agent', '/agent/setup', '/loops'].includes(r)) return '/(tabs)/loops';
+  if (['/agent', '/agent/setup', '/loops'].includes(r)) return '/loops';
   if (['/coffee-chat-prep', '/coffee-chat-library', '/meeting-prep'].includes(r)) return '/meeting-prep/new';
   if (['/pricing', '/credits', '/account-settings'].includes(r)) return '/credits';
   return null;
