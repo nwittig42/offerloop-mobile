@@ -298,12 +298,21 @@ function ScoutTabInner() {
           actions: res.names.length ? [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] : [],
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch {
+      } catch (e: unknown) {
         dropCard(id);
-        setReply({
-          say: "That one didn't finish — nothing was charged for anyone I couldn't draft. Ask me again.",
-          actions: [],
-        });
+        const msg = e instanceof Error ? e.message : '';
+        const noCredits = /credit/i.test(msg);
+        setReply(
+          noCredits
+            ? {
+                say: "You're out of credits for this one — nothing was charged. Top up and I'll pick it right back up.",
+                actions: [{ label: 'Get credits', href: '/credits' }],
+              }
+            : {
+                say: "That one didn't finish — nothing was charged for anyone I couldn't draft. Ask me again.",
+                actions: [],
+              },
+        );
       }
     },
     [upsertCard, dropCard],
@@ -409,7 +418,7 @@ function ScoutTabInner() {
           setReply(null);
           setPreflight({
             pf: {
-              interpreted: `${inferred.wantedSend ? 'Send' : 'Draft'} ${inferred.count} ${inferred.role}${inferred.company ? ` at ${inferred.company}` : ''}${inferred.location ? ` in ${inferred.location}` : ''}`,
+              interpreted: `${inferred.wantedSend ? 'Send' : 'Draft'} ${inferred.count} ${inferred.role}${inferred.company ? ` at ${inferred.company}` : ''}${inferred.location ? ` in ${inferred.location}` : ''} · ${inferred.count * 5} credits`,
               heardRaw: null,
               variants: [],
               note: `Using ${ctx.slots.company} from earlier in this conversation — cancel if that's not what you meant.`,
@@ -470,6 +479,17 @@ function ScoutTabInner() {
       }
 
       if (intent?.kind === 'find_people') {
+        if (fishyCompany(intent.company)) {
+          // Transcription debris burns a real PDL lookup even when it's free
+          // to the user — refine instead of searching noise.
+          setReply(null);
+          setRefine({
+            heard: clean,
+            options: refineOptions(clean, profile?.preferredLocations ?? []) ?? [],
+          });
+          setPhase('idle');
+          return;
+        }
         const seqF = ++requestSeq.current;
         setReply(null);
         setPhase('thinking');
@@ -623,6 +643,7 @@ function ScoutTabInner() {
       inputRef.current?.focus();
       return;
     }
+    stopSpeaking(); // the mic must never transcribe Scout's own voice
     setTranscript('');
     setReply(null);
     setPhase('listening');
