@@ -875,6 +875,13 @@ export default function ProfileScreen() {
                 />
               </Card>
               <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
+              {/* P0 prototype for the voice tab (PLAN-scout-voice.md) — here so
+                  the orb can be felt on-device before the design locks. */}
+              <Button
+                label="Scout orb preview"
+                variant="outline"
+                onPress={() => router.push('/dev/scout-orb' as never)}
+              />
               {__DEV__ ? (
                 <Button
                   label="Replay onboarding"
