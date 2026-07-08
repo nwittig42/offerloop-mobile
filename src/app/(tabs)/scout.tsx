@@ -27,6 +27,7 @@ import {
   executeDraftIntent,
   normalizeAsk,
   parseIntent,
+  suggestFirm,
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
@@ -125,6 +126,7 @@ function ScoutTabInner() {
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
+  const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -194,7 +196,10 @@ function ScoutTabInner() {
           });
         });
         dropCard(id);
-        setReply({ say: res.say, actions: [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] });
+        setReply({
+          say: res.say,
+          actions: res.names.length ? [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] : [],
+        });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {
         dropCard(id);
@@ -294,6 +299,15 @@ function ScoutTabInner() {
           setReply(null);
           setClarify({ question: c.question, baseAsk: clean });
           setPhase('clarify');
+          return;
+        }
+        // Did-you-mean rescue: a near-miss of a known firm (ASR damage the
+        // fix-map didn't cover) gets one confirm BEFORE spending the run.
+        const suggestion = intent.company ? suggestFirm(intent.company) : null;
+        if (suggestion) {
+          setReply(null);
+          setDidYouMean({ intent, suggestion });
+          setPhase('idle');
           return;
         }
         void runDraftAction(intent);
@@ -641,7 +655,52 @@ function ScoutTabInner() {
             </Animated.View>
           ))}
 
-          {phase === 'idle' && reply ? (
+          {phase === 'idle' && didYouMean ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 11,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+                Did you mean {didYouMean.suggestion}?
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+                I heard “{didYouMean.intent.company}” — that doesn't look like a company I know.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 9 }}>
+                <Pressable
+                  onPress={() => {
+                    const it = { ...didYouMean.intent };
+                    setDidYouMean(null);
+                    void runDraftAction(it);
+                  }}
+                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>
+                    Keep “{didYouMean.intent.company}”
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const it = { ...didYouMean.intent, company: didYouMean.suggestion };
+                    setDidYouMean(null);
+                    void runDraftAction(it);
+                  }}
+                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>
+                    Yes — {didYouMean.suggestion}
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {phase === 'idle' && reply && !didYouMean ? (
             <Animated.View
               entering={FadeInDown.duration(240)}
               style={{

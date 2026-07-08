@@ -51,6 +51,67 @@ export function normalizeAsk(raw: string): { text: string; corrected: boolean } 
   return { text, corrected: text !== raw };
 }
 
+/** The firms our users actually target (IB / consulting / tech / PE-HF).
+ *  Used ONLY for did-you-mean fuzzy rescue — an unknown company runs as-is
+ *  (plenty of real startups aren't on any list; never block those). */
+const KNOWN_FIRMS = [
+  'Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Bank of America', 'Citigroup',
+  'Wells Fargo', 'Barclays', 'UBS', 'Deutsche Bank', 'RBC', 'Jefferies',
+  'Evercore', 'Lazard', 'Centerview', 'Moelis', 'PJT Partners', 'Houlihan Lokey',
+  'Rothschild', 'Guggenheim', 'Perella Weinberg', 'Qatalyst',
+  'McKinsey', 'Bain', 'BCG', 'Deloitte', 'PwC', 'EY', 'KPMG', 'Accenture',
+  'Oliver Wyman', 'Kearney', 'LEK', 'Alvarez and Marsal',
+  'Blackstone', 'KKR', 'Apollo', 'Carlyle', 'TPG', 'Warburg Pincus',
+  'Citadel', 'Point72', 'Millennium', 'Two Sigma', 'Jane Street', 'DE Shaw',
+  'Bridgewater', 'Vista Equity', 'Silver Lake', 'General Atlantic', 'BlackRock',
+  'Google', 'Meta', 'Amazon', 'Apple', 'Microsoft', 'Netflix', 'Nvidia',
+  'Stripe', 'OpenAI', 'Anthropic', 'Databricks', 'Palantir', 'Salesforce',
+  'Uber', 'Airbnb', 'LinkedIn', 'Snowflake', 'Figma', 'Ramp', 'Plaid',
+  'Coinbase', 'Robinhood', 'DoorDash', 'Tesla', 'SpaceX', 'Scale AI',
+];
+
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/** Did-you-mean rescue: if the parsed company is a near-miss of a firm we
+ *  know (likely ASR damage the fix-map didn't cover), suggest the real name
+ *  BEFORE spending a run on it. Exact/close-enough matches and true unknowns
+ *  both return null — only genuine near-misses interrupt. */
+export function suggestFirm(company: string): string | null {
+  const c = company.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  if (c.length < 3) return null;
+  for (const firm of KNOWN_FIRMS) {
+    const f = firm.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+    if (c === f) return null; // already right
+  }
+  let best: string | null = null;
+  let bestScore = Infinity;
+  for (const firm of KNOWN_FIRMS) {
+    const f = firm.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+    const d = editDistance(c, f);
+    if (d < bestScore) {
+      bestScore = d;
+      best = firm;
+    }
+  }
+  // Tolerance scales with length; "golman sax" → "goldman sachs" is d=3/13.
+  const tolerance = Math.max(1, Math.floor(c.length * 0.3));
+  return best && bestScore > 0 && bestScore <= tolerance ? best : null;
+}
+
 // ---------------------------------------------------------------------------
 // Intent parsing (deliberately dumb — the real brain replaces this)
 // ---------------------------------------------------------------------------
