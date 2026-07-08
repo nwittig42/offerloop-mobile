@@ -27,8 +27,10 @@ import {
   executeDraftIntent,
   normalizeAsk,
   parseIntent,
+  preflightFor,
   refineOptions,
   suggestFirm,
+  type Preflight,
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
@@ -129,6 +131,7 @@ function ScoutTabInner() {
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
   const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
   const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
+  const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent } | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -273,9 +276,11 @@ function ScoutTabInner() {
 
   const submitAsk = useCallback(
     async (text: string) => {
-      let clean = normalizeAsk(text.trim()).text;
+      const norm = normalizeAsk(text.trim());
+      let clean = norm.text;
       if (!clean) return;
       setRefine(null);
+      setPreflight(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
       // held ask; a fresh full ask replaces it. One round max, then best effort.
@@ -310,6 +315,15 @@ function ScoutTabInner() {
         if (suggestion) {
           setReply(null);
           setDidYouMean({ intent, suggestion });
+          setPhase('idle');
+          return;
+        }
+        // Pre-flight coach: corrected transcripts and senior-role asks pause
+        // for one look + reply-friendly variants before credits are spent.
+        const pf = preflightFor(intent, clean, norm.corrected ? text.trim() : null, profile?.preferredLocations ?? []);
+        if (pf) {
+          setReply(null);
+          setPreflight({ pf, intent });
           setPhase('idle');
           return;
         }
@@ -669,6 +683,69 @@ function ScoutTabInner() {
               </View>
             </Animated.View>
           ))}
+
+          {phase === 'idle' && preflight ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 10,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+                Ready to search: “{preflight.pf.interpreted}”
+              </Text>
+              {preflight.pf.heardRaw ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink3 }}>
+                  heard “{preflight.pf.heardRaw}” — I cleaned it up
+                </Text>
+              ) : null}
+              {preflight.pf.note ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 18, color: '#B9C8EE' }}>
+                  {preflight.pf.note}
+                </Text>
+              ) : null}
+              {preflight.pf.variants.length ? (
+                <View style={{ gap: 7 }}>
+                  {preflight.pf.variants.map((o) => (
+                    <Pressable
+                      key={o}
+                      onPress={() => void submitAsk(o)}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: 'rgba(91,123,255,0.5)',
+                        backgroundColor: 'rgba(59,130,246,0.18)',
+                        borderRadius: 12,
+                        paddingVertical: 10,
+                        paddingHorizontal: 13,
+                      }}>
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{o}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: 9, marginTop: 2 }}>
+                <Pressable
+                  onPress={() => setPreflight(null)}
+                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const it = preflight.intent;
+                    setPreflight(null);
+                    void runDraftAction(it);
+                  }}
+                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Run it as-is</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
 
           {phase === 'idle' && refine ? (
             <Animated.View

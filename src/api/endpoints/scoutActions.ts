@@ -193,8 +193,9 @@ export function parseIntent(ask: string): ScoutIntent {
     );
     if (m) role = m[1].trim().replace(/\b(emails?|people|someone|folks)\b/gi, '').trim();
     if (!role) {
-      // Verbless: everything before " at " is the role ("Manager at JPMorgan").
-      const nm = ask.match(/^(?:\d{1,2}\s+)?([A-Za-z /\-]{3,40}?)\s+at\s+/i);
+      // Verbless: everything before " at " is the role ("Manager at JPMorgan",
+      // "VP at Blackstone" — 2-char roles count).
+      const nm = ask.match(/^(?:\d{1,2}\s+)?([A-Za-z /\-]{2,40}?)\s+at\s+/i);
       if (nm) role = nm[1].trim();
     }
   }
@@ -210,6 +211,44 @@ export function clarifyFor(intent: ScoutIntent): { question: string } | null {
     return { question: 'Which company should I look at?' };
   }
   return null;
+}
+
+/** The pre-flight coach (Rylan, 2026-07-08 — "Grammarly for asks", like web
+ *  Find's query suggestions): pause BEFORE spending a run when either
+ *  (a) the transcript was auto-corrected — compound fixes can compound
+ *  errors, the user deserves one look — or (b) the ask targets seniors,
+ *  where cold student emails rarely land. Suggest reply-friendly variants;
+ *  running the original stays one tap. Clean junior asks skip this entirely. */
+export type Preflight = {
+  interpreted: string;
+  heardRaw: string | null;
+  variants: string[];
+  note: string | null;
+};
+
+export function preflightFor(
+  intent: DraftIntent,
+  interpreted: string,
+  heardRaw: string | null,
+  preferredLocations: string[],
+): Preflight | null {
+  const senior =
+    !intent.hm && /(^|\s)(manager|managers|director|vice president|vp|partner|principal|head)/i.test(intent.role);
+  const corrected = !!heardRaw;
+  if (!senior && !corrected) return null;
+
+  const variants: string[] = [];
+  if (intent.company) {
+    variants.push(`Analysts at ${intent.company}`);
+    variants.push(`Associates at ${intent.company}`);
+    const loc = (preferredLocations || []).find((l) => l && l.length < 24);
+    if (loc) variants.push(`Analysts at ${intent.company} in ${loc}`);
+    if (!intent.hm) variants.push(`Hiring managers at ${intent.company}`);
+  }
+  const note = senior
+    ? 'Heads up: senior people rarely reply to cold student emails — analysts and associates are the warm door. Want the senior search anyway? Run it below.'
+    : null;
+  return { interpreted, heardRaw, variants: variants.slice(0, 4), note };
 }
 
 /** The refine card (Rylan, 2026-07-08): when an ask names a target ("… at
