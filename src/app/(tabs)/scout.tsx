@@ -35,7 +35,7 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
-import { askScoutFindContacts, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutFindContacts, classifyAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import type { Job } from '@/types';
@@ -92,6 +92,33 @@ const THINK_WORDS = [
   'Thinking', 'Scouting', 'Charting the route', 'Reading the trail',
   'Checking the map', 'Packing the bag', 'Sniffing around',
 ];
+
+/** Render an LLM classification back into the regex ladder's native
+ *  language — canonical asks always parse, so one pipeline serves both
+ *  brains and every safety gate applies to classified asks too. */
+function canonicalAsk(c: AskClassification): string | null {
+  const loc = c.location ? ` in ${c.location}` : '';
+  switch (c.intent) {
+    case 'draft_outreach': {
+      const role = c.hiring_manager && !/hiring|recruit/i.test(c.role)
+        ? 'hiring managers'
+        : c.role || 'someone on the team';
+      const at = c.company ? ` at ${c.company}` : '';
+      return `${c.wants_send ? 'Send' : 'Draft'} ${c.count} ${role}${at}${loc}`;
+    }
+    case 'find_people':
+      if (!c.company) return `Draft ${c.count} ${c.role || 'someone on the team'}${loc}`;
+      return `Show me ${c.role || 'people'} at ${c.company}${loc}`;
+    case 'find_jobs':
+      return `find me ${c.job_query || c.role || 'new'} roles${loc}`;
+    case 'apply_saved':
+      return 'apply to my saved jobs';
+    case 'meeting_prep':
+      return 'prep me for my meeting';
+    default:
+      return null; // question → conversation
+  }
+}
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'clarify' | 'receipt';
 
@@ -310,7 +337,7 @@ function ScoutTabInner() {
   }, [upsertCard, dropCard]);
 
   const submitAsk = useCallback(
-    async (text: string) => {
+    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string }) => {
       const norm = normalizeAsk(text.trim());
       let clean = norm.text;
       if (!clean) return;
@@ -359,7 +386,7 @@ function ScoutTabInner() {
         }
         // Pre-flight coach: corrected transcripts and senior-role asks pause
         // for one look + reply-friendly variants before credits are spent.
-        const pf = preflightFor(intent, clean, norm.corrected ? text.trim() : null, profile?.preferredLocations ?? []);
+        const pf = preflightFor(intent, clean, meta?.heardRaw ?? (norm.corrected ? text.trim() : null), profile?.preferredLocations ?? []);
         if (pf) {
           setReply(null);
           setPreflight({ pf, intent });
@@ -443,6 +470,29 @@ function ScoutTabInner() {
         });
         setPhase('idle');
         return;
+      }
+
+      // No local parse — the ANY-ASK layer: LLM classification server-side
+      // (cached), then the result is re-spoken in canonical form back through
+      // this same pipeline so clarify/did-you-mean/pre-flight/receipts all
+      // still apply. Regexes are the fast path, never the ceiling.
+      if (!intent && !meta?.viaClassifier) {
+        const seqC = ++requestSeq.current;
+        setReply(null);
+        setPhase('thinking');
+        let cls: AskClassification | null = null;
+        try {
+          cls = await classifyAsk(clean, `cls-${Date.now()}`);
+        } catch {
+          cls = null;
+        }
+        if (seqC !== requestSeq.current) return;
+        const canonical = cls && !cls.error ? canonicalAsk(cls) : null;
+        if (canonical) {
+          void submitAsk(canonical, { viaClassifier: true, heardRaw: clean });
+          return;
+        }
+        setPhase('idle'); // fall through to refine/chat below with phase reset
       }
 
       // Ask names a target but didn't parse into anything runnable — almost

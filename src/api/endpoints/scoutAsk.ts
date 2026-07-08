@@ -29,6 +29,31 @@ export type ScoutAskEnvelope = {
   error?: { code: string; detail: string };
 };
 
+export type AskClassification = {
+  intent: 'draft_outreach' | 'find_people' | 'find_jobs' | 'apply_saved' | 'meeting_prep' | 'question';
+  cleaned_ask: string;
+  role: string;
+  company: string;
+  location: string;
+  count: number;
+  hiring_manager: boolean;
+  wants_send: boolean;
+  job_query: string;
+  error?: string;
+};
+
+/** The any-ask intelligence layer: LLM classification for whatever the
+ *  client regex ladder can't parse. Cached server-side (14d), never throws
+ *  business errors — worst case returns intent 'question'. */
+export async function classifyAsk(ask: string, askId: string): Promise<AskClassification> {
+  const r = await apiFetch<{ classification: AskClassification }>('/api/mobile/scout/ask', {
+    method: 'POST',
+    body: { ask, askId, source: 'voice', action: 'classify', params: {} },
+    timeoutMs: 15_000,
+  });
+  return r.classification;
+}
+
 export async function askScoutFindContacts(args: {
   ask: string;
   askId: string;
