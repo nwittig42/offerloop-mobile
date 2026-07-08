@@ -128,6 +128,13 @@ reply. No actions yet. This alone is filmable and demoable.
 App-side mapping of the top 3 intents to existing endpoints; receipt cards
 for send/apply; live action cards on the job plumbing; results deep-link to
 Inbox/Network/Applications; draft-ready pushes already work.
+**Stability rules (Rylan review 2026-07-07):** Scout-tab state lives in the
+global store keyed by job IDs (never component-local) so tab navigation can't
+break in-flight cards; add a small "list my active jobs" endpoint so the tab
+re-hydrates after an app kill/relaunch (work already survives server-side —
+this makes the CARDS survive too). Unconfirmed receipts = nothing committed
+(abandonment is safe by design). Multiple concurrent asks supported; the orb
+never locks.
 
 ### P3 — "Scout the agent" (rides the cofounder's backend)
 Agentic backend takes over intent parsing + multi-step plans via the
