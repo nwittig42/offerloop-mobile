@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeOut, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, LinearTransition, useSharedValue } from 'react-native-reanimated';
 
 import { apiFetch } from '@/api/client';
 import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
@@ -138,6 +139,14 @@ function ScoutTabInner() {
   // speech module happens on the user's tap, so screen-open can never crash
   // from it (post-crash hardening, 2026-07-08).
   const voiceReady = () => speechSupported();
+
+  // The reply card excuses itself: tapping its chip clears it, and otherwise
+  // it fades out after a while so the tab returns to a clean idle.
+  useEffect(() => {
+    if (!reply) return;
+    const t = setTimeout(() => setReply(null), 20_000);
+    return () => clearTimeout(t);
+  }, [reply]);
 
   // Rotate the trail vocabulary while thinking.
   useEffect(() => {
@@ -612,10 +621,14 @@ function ScoutTabInner() {
                 padding: 14,
                 gap: 8,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{c.title}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color="#9DB4FF" />
+                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{c.title}</Text>
+              </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9DB4FF' }}>{c.stageLabel}</Text>
               <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)', overflow: 'hidden' }}>
-                <View
+                <Animated.View
+                  layout={LinearTransition.duration(700)}
                   style={{
                     height: '100%',
                     width: `${Math.max(4, Math.min(c.progressPct, 96))}%`,
@@ -647,7 +660,10 @@ function ScoutTabInner() {
                   {reply.actions.map((a) => (
                     <Pressable
                       key={a.label}
-                      onPress={() => router.push(a.href as never)}
+                      onPress={() => {
+                        setReply(null);
+                        router.push(a.href as never);
+                      }}
                       style={{
                         borderRadius: 999,
                         paddingVertical: 7,
@@ -672,7 +688,7 @@ function ScoutTabInner() {
             </Text>
           ) : null}
 
-          {phase === 'idle' || phase === 'clarify' ? (
+          {(phase === 'idle' && cards.length === 0) || phase === 'clarify' ? (
             <View style={{ alignItems: 'center', gap: 12, width: '100%' }}>
               <View
                 style={{
