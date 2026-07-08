@@ -41,6 +41,7 @@ import { useApp } from '@/store/app';
 import { fonts } from '@/theme/tokens';
 import ScoutErrorBoundary from '@/components/scout/ScoutErrorBoundary';
 import { requestSpeechPermissions, speechSupported, startListening } from '@/lib/speech';
+import { speak, stopSpeaking } from '@/lib/speak';
 
 /**
  * The Scout tab — P1 of PLAN-scout-voice.md ("talk to Scout"). Voice/typed
@@ -127,7 +128,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs, profile } = useApp();
+  const { showToast, unreadCount, savedJobs, profile, loops, toggleLoop } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -148,6 +149,7 @@ function ScoutTabInner() {
   } | null>(null);
   const historyRef = useRef<ScoutTurn[]>([]);
   const requestSeq = useRef(0);
+  const askByVoice = useRef(false);
   const stopRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<TextInput>(null);
   const volume = useSharedValue(0);
@@ -161,9 +163,15 @@ function ScoutTabInner() {
   // it fades out after a while so the tab returns to a clean idle.
   useEffect(() => {
     if (!reply) return;
+    // Spoken asks get spoken replies (the full assistant loop); typed asks
+    // stay silent — gyms and lectures are why the type bar exists.
+    if (askByVoice.current) speak(reply.say);
     const t = setTimeout(() => setReply(null), 20_000);
     return () => clearTimeout(t);
   }, [reply]);
+
+  // Leaving the tab silences Scout mid-sentence.
+  useEffect(() => () => stopSpeaking(), []);
 
   // Rotate the suggestion chips while the tab idles.
   useEffect(() => {
@@ -295,6 +303,7 @@ function ScoutTabInner() {
       const norm = normalizeAsk(text.trim());
       let clean = norm.text;
       if (!clean) return;
+      stopSpeaking();
       setRefine(null);
       setPreflight(null);
 
@@ -448,6 +457,7 @@ function ScoutTabInner() {
         setPhase((p) => {
           if (p !== 'listening') return p;
           if (finalText.trim()) {
+            askByVoice.current = true;
             void submitAsk(finalText);
             return 'thinking';
           }
@@ -920,6 +930,7 @@ function ScoutTabInner() {
                   onSubmitEditing={() => {
                     const t = typed;
                     setTyped('');
+                    askByVoice.current = false;
                     void submitAsk(t);
                   }}
                   style={{ flex: 1, color: NIGHT.transcript, fontFamily: fonts.sans, fontSize: 14.5, paddingVertical: 8 }}
@@ -928,6 +939,7 @@ function ScoutTabInner() {
                   onPress={() => {
                     const t = typed;
                     setTyped('');
+                    askByVoice.current = false;
                     void submitAsk(t);
                   }}
                   style={{ backgroundColor: NIGHT.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 13 }}>
@@ -960,6 +972,42 @@ function ScoutTabInner() {
                   );
                 })}
               </Animated.View>
+            </View>
+          ) : null}
+
+          {phase === 'idle' && cards.length === 0 && loops.length > 0 ? (
+            <View style={{ width: '96%', gap: 7, marginTop: 2 }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, letterSpacing: 1.4, color: NIGHT.ink3 }}>
+                ONGOING
+              </Text>
+              {loops.slice(0, 3).map((l) => (
+                <Pressable
+                  key={l.id}
+                  onPress={() => router.push('/loops' as never)}
+                  onLongPress={() => toggleLoop(l.id)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    borderWidth: 1,
+                    borderColor: NIGHT.lineSoft,
+                    borderRadius: 12,
+                    paddingVertical: 9,
+                    paddingHorizontal: 12,
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    opacity: l.status === 'Paused' ? 0.55 : 1,
+                  }}>
+                  <Text
+                    numberOfLines={1}
+                    style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#B9C8EE' }}>
+                    {l.brief}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: l.status === 'Paused' ? NIGHT.ink3 : '#22D3EE' }}>
+                    {l.status === 'Paused' ? 'Paused' : `${l.weeklyDone} / ${l.weeklyTarget}`}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           ) : null}
         </ScrollView>
