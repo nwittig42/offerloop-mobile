@@ -29,7 +29,10 @@ import {
   executeDraftIntent,
   normalizeAsk,
   matchJobs,
+  parseAffirmation,
+  parseAgain,
   parseIntent,
+  parseNav,
   preflightFor,
   refineOptions,
   suggestFirm,
@@ -203,6 +206,7 @@ function ScoutTabInner() {
   const historyRef = useRef<ScoutTurn[]>([]);
   const requestSeq = useRef(0);
   const askByVoice = useRef(false);
+  const lastDraftRef = useRef<DraftIntent | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<TextInput>(null);
   const volume = useSharedValue(0);
@@ -275,6 +279,7 @@ function ScoutTabInner() {
 
   const runDraftAction = useCallback(
     async (intent: DraftIntent) => {
+      lastDraftRef.current = intent;
       const id = `scout-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
       const title = intent.company
         ? `${intent.hm ? 'Hiring managers' : 'Outreach'} · ${intent.company}`
@@ -381,6 +386,79 @@ function ScoutTabInner() {
       let clean = norm.text;
       if (!clean) return;
       askByVoice.current = !!meta?.byVoice;
+
+      // Spoken confirmation/dismissal drives whatever card is waiting.
+      const aff = parseAffirmation(clean);
+      const pending = preflight || didYouMean || applyOne || receipt;
+      if (aff && pending) {
+        stopSpeaking();
+        if (aff === 'yes') {
+          if (preflight) {
+            const it = preflight.intent;
+            setPreflight(null);
+            void runDraftAction(it);
+          } else if (didYouMean) {
+            const it = { ...didYouMean.intent, company: didYouMean.suggestion };
+            setDidYouMean(null);
+            void runDraftAction(it);
+          } else if (applyOne) {
+            const j = applyOne;
+            setApplyOne(null);
+            setJobPicks(null);
+            void runApplyAction([j]);
+          } else if (receipt) {
+            const jobs = receipt.eligible.slice(0, receipt.chosen);
+            setReceipt(null);
+            setPhase('idle');
+            void runApplyAction(jobs);
+          }
+        } else {
+          setPreflight(null);
+          setDidYouMean(null);
+          setApplyOne(null);
+          setReceipt(null);
+          setPhase('idle');
+          setReply({ say: 'Cancelled — nothing ran.', actions: [] });
+        }
+        return;
+      }
+      if (aff === 'no') {
+        // "Stop / never mind" with nothing pending: stand down cleanly.
+        stopSpeaking();
+        setPhase('idle');
+        setReply({ say: 'Standing down — nothing ran.', actions: [] });
+        return;
+      }
+
+      // "Again / one more" re-runs the last draft — through the confirm card
+      // so the repeat (and its cost) is visible before it spends.
+      if (parseAgain(clean) && lastDraftRef.current) {
+        const it = lastDraftRef.current;
+        stopSpeaking();
+        setReply(null);
+        setPreflight({
+          pf: {
+            interpreted: `${it.wantedSend ? 'Send' : 'Draft'} ${it.count} ${it.role}${it.company ? ` at ${it.company}` : ''}${it.location ? ` in ${it.location}` : ''} · ${it.count * 5} credits`,
+            heardRaw: null,
+            variants: [],
+            note: 'Running the same ask again.',
+          },
+          intent: it,
+        });
+        setPhase('idle');
+        return;
+      }
+
+      // In-app navigation by voice: just go.
+      const nav = parseNav(clean);
+      if (nav) {
+        stopSpeaking();
+        setPhase('idle');
+        setReply({ say: `Opening ${nav.label}.`, actions: [] });
+        router.push(nav.href as never);
+        return;
+      }
+
       stopSpeaking();
       setRefine(null);
       setPreflight(null);

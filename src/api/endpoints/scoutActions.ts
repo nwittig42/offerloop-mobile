@@ -202,6 +202,63 @@ export function matchJobs(jobs: Job[], query: string, location: string | null): 
   ].slice(0, 4);
 }
 
+/** Short spoken confirmations / dismissals while a card is waiting —
+ *  "yes", "run it", "no, cancel". Checked against PENDING state only. */
+export function parseAffirmation(ask: string): 'yes' | 'no' | null {
+  const lower = ask.toLowerCase().trim();
+  if (lower.split(/\s+/).length > 4) return null;
+  if (lower === 'go') return 'yes';
+  if (/^(yes|yeah|yep|yup|sure|go ahead|run it|do it|confirm|send it|okay|ok|sounds good)\b/.test(lower)) return 'yes';
+  if (/^(no|nope|cancel|stop|never ?mind|don'?t|nah)\b/.test(lower)) return 'no';
+  return null;
+}
+
+/** "Again / one more / another" — re-run the last action. */
+export function parseAgain(ask: string): boolean {
+  const lower = ask.toLowerCase().trim();
+  return lower.split(/\s+/).length <= 4 &&
+    /^(again|one more|another( one)?|do (it|that) again|run (it|that) again|more)\b/.test(lower);
+}
+
+/** In-app navigation by voice — "open my inbox", "check my replies",
+ *  "where are my saved jobs". Zero-friction: the app just goes there. */
+const NAV_MAP: [RegExp, string, string][] = [
+  [/\b(inbox|drafts|my (replies|messages)|outreach)\b/, '/(tabs)/inbox', 'Inbox'],
+  [/\bsaved jobs?\b/, '/saved-jobs', 'Saved jobs'],
+  [/\b(feed|job board|swipe|deck)\b/, '/(tabs)/feed', 'Feed'],
+  [/\b(network|contacts|tracker|applications|pipeline)\b/, '/(tabs)/network', 'Network'],
+  [/\b(profile|settings|account)\b/, '/(tabs)/profile', 'Profile'],
+  [/\b(credits|billing|my plan)\b/, '/credits', 'Credits'],
+  [/\b(meeting prep|coffee chat)s?\b/, '/meeting-prep/new', 'Meeting Prep'],
+  [/\b(loops?|ongoing)\b/, '/loops', 'Loops'],
+  [/\bnotifications?\b/, '/notifications', 'Notifications'],
+];
+
+export function parseNav(ask: string): { href: string; label: string } | null {
+  const lower = ask.toLowerCase().trim();
+  const navVerb = /(^|\b)(open|go to|take me to|show( me)?( my)?|check( my)?|where('s| is| are)( my)?|view( my)?)\b/.test(lower);
+  if (!navVerb) return null;
+  // Never hijack people/job searches ("show me people at…", "show me PM roles").
+  if (/\bat\s+\S/.test(lower) || /(role|position|internship|opening)/.test(lower) || /people/.test(lower)) return null;
+  for (const [re, href, label] of NAV_MAP) {
+    if (re.test(lower)) return { href, label };
+  }
+  return null;
+}
+
+/** Bare company ("Goldman Sachs") — the safe default is the FREE preview. */
+export function parseBareCompany(ask: string): string | null {
+  const words = ask.trim().split(/\s+/);
+  if (words.length > 4 || words.length === 0) return null;
+  const c = ask.trim().replace(/[.!?]$/, '');
+  const norm = c.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  if (norm.length < 3) return null;
+  for (const firm of KNOWN_FIRMS) {
+    if (firm.toLowerCase().replace(/[^a-z0-9 ]/g, '') === norm) return firm;
+  }
+  return suggestFirm(c);
+}
+
 export function parseIntent(ask: string): ScoutIntent {
   const lower = ask.toLowerCase().trim();
 
@@ -211,6 +268,29 @@ export function parseIntent(ask: string): ScoutIntent {
   // 2026-07-08: talk-and-go must not require URLs).
   const jobSearch = parseJobSearch(ask, lower);
   if (jobSearch) return jobSearch;
+
+  // Bare company name → free people preview (the safe default action).
+  const bare = parseBareCompany(ask);
+  if (bare) return { kind: 'find_people', role: '', company: bare, location: null };
+
+  // Bare role ("hiring managers", "IB analysts in LA") → draft intent with
+  // no company, which flows into the clarify question instead of chat.
+  const ROLE_ONLY = /(manager|recruiter|analyst|associate|banker|consultant|engineer|designer|director|partner|intern)/;
+  if (ROLE_ONLY.test(lower) && !/\bat\s+\S/.test(lower) && lower.split(/\s+/).length <= 5 &&
+      !/(draft|email|find|send|show|apply|write|message)/.test(lower) &&
+      !/^(what|how|why|when|where|who|should|can|could|would|do|does|is|are|am)\b/.test(lower)) {
+    const locM = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i);
+    const hmBare = /(hiring manager|recruiter|talent)/.test(lower);
+    return {
+      kind: 'draft',
+      count: 1,
+      role: hmBare ? 'hiring manager' : ask.replace(/\bin\s+[A-Za-z .\-]{2,32}[,.!?]?$/i, '').trim(),
+      company: null,
+      location: locM ? locM[1].trim() : null,
+      hm: hmBare,
+      wantedSend: false,
+    };
+  }
 
   // Browse-only people search: explicit look-don't-draft phrasings
   // (including bare "people at X" — it names a crowd, not a pick).
