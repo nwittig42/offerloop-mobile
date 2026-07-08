@@ -1,10 +1,27 @@
-# Scout Action Contract v1
+# Scout Action Contract v1.1
 
 **The boundary between the Scout tab (app, Rylan/Claude) and the Scout brain
-(backend, Nick).** The app renders and executes whatever conforms to this
-shape; the brain can get infinitely smarter without a single UI change.
-Bless this before building against it — changes after both sides ship are
-10× the cost.
+(backend, Nick).** This is the MOBILE dialect only — it describes what the
+app renders and executes; web Scout keeps its own envelope ("one brain, two
+dialects", Nick's translator owns both). The app renders and executes
+whatever conforms to this shape; the brain can get infinitely smarter
+without a single UI change.
+
+**Status: blessed with amendments (Nick, 2026-07-07) — this revision applies
+all four amendments + his answers.** Changes from v1: results payload +
+search action types; send_outreach/create_loop moved to a reserved v1.1
+enum pending explicit product decision; scope-option counts optional;
+max one Confirm per response; endpoint locked as new `/api/scout/ask`;
+non-streaming v1.
+
+**Correction to Nick's review point 1:** the draft-job system DOES exist —
+it shipped this week on the `staging/mobile-field` branch (not on main):
+`backend/app/services/draft_jobs.py` (bounded pool, stage/progressPct/
+foundContacts/stageTimings), `backend/app/routes/mobile.py` (`POST
+/api/mobile/draft-jobs`, `GET /api/mobile/draft-jobs/{id}`, rate-limit
+exempt), `backend/app/services/swipe_idempotency.py` (the per-gesture
+dedupe store — the askId pattern can reuse it directly). Live-verified
+under burst load. Nothing to rebuild — point the translator at that branch.
 
 Companion docs: `PLAN-scout-voice.md` (product decisions), the interactive
 mock (P0 sign-off artifact).
@@ -44,18 +61,49 @@ scout-assistant chat endpoint with a mode flag)
 
 ```json
 {
-  "type": "draft_outreach" | "send_outreach" | "auto_apply" | "meeting_prep" | "create_loop",
+  "type": "draft_outreach" | "auto_apply" | "meeting_prep"
+        | "find_contacts" | "discover_companies" | "find_hiring_managers"
+        | "generate_cover_letter" | "tailor_resume_to_job",
   "params": { …type-specific… },
   "needsConfirm": false | Confirm,
-  "jobRef": null | { "kind": "draft_job" | "auto_apply" | "meeting_prep", "id": "…" }
+  "jobRef": null | { "kind": "draft_job" | "auto_apply" | "meeting_prep", "id": "…" },
+  "results": null | Results
 }
 ```
 
-**Execution rule (locked in design review):** reversible actions
-(`draft_outreach`, `meeting_prep`, searches) run immediately —
-`needsConfirm: false`, `jobRef` present in the SAME response. Irreversible
-ones (`send_outreach`, `auto_apply` submit) and recurring ones
-(`create_loop`) always carry a `Confirm` and NO jobRef until confirmed.
+**Reserved for a later rev, pending explicit product decision (Nick's
+point 3):** `send_outreach`, `create_loop`. Adding them later is enum-only —
+the shape doesn't change. Until then the app's swipe-send path and the Loops
+page flow remain the only ways those happen.
+
+**Max one action carrying a Confirm per response (v1)** — the brain may
+chain reversible actions (find→draft) in one turn, but never two pending
+confirms; the app renders exactly one receipt card at a time.
+
+### Results — inline payload for search-type actions
+
+The brain's most-used workflows return THINGS, not just prose. `results`
+lets the app render them as cards (contact/company rows reusing the app's
+existing card components); v1 may render them as plain text and upgrade
+rendering later without contract change.
+
+```json
+{
+  "kind": "contacts" | "companies" | "document",
+  "items": [
+    { "name": "Sarah Kim", "title": "VP Recruiting", "company": "Goldman Sachs",
+      "linkedinUrl": "…", "contactId": "…" },
+    …
+  ],
+  "documentRef": null | { "kind": "cover_letter" | "resume", "id": "…" }
+}
+```
+
+**Execution rule (locked in design review):** reversible actions (drafts,
+preps, all search types, document generation) run immediately —
+`needsConfirm: false`, `jobRef`/`results` present in the SAME response.
+Irreversible ones (auto_apply submit; send/loop when they land) always carry
+a `Confirm` and NO jobRef until confirmed.
 
 ### Confirm — the receipt card, graduated (locked in design review)
 
@@ -68,11 +116,15 @@ ones (`send_outreach`, `auto_apply` submit) and recurring ones
   // style: "targets" (small concrete ask, ≤5): every name shown
   "targets": [ { "name": "Sarah Kim", "company": "Goldman Sachs" }, … ],
 
-  // style: "scope" (big/vague ask): brain proposes options, FIRST is default
+  // style: "scope" (big/vague ask): brain proposes options, FIRST is default.
+  // `count` is OPTIONAL (Nick's point 4 — no cheap preview-count today):
+  // v1 degrades to fixed tiers with credit estimates; real counts arrive
+  // when the brain grows a preview path. Brain computes creditEstimate
+  // (it owns the credit table + tier caps).
   "options": [
-    { "id": "top20",  "label": "Top 20 matches",   "count": 20, "creditEstimate": 100 },
-    { "id": "bayarea","label": "Bay Area only",     "count": 31 },
-    { "id": "all",    "label": "All 94",            "count": 94 }
+    { "id": "top5",  "label": "Top 5 matches",  "creditEstimate": 25 },
+    { "id": "top10", "label": "Top 10 matches", "creditEstimate": 50 },
+    { "id": "top20", "label": "Top 20 matches", "creditEstimate": 100 }
   ],
   "capNote": "20 applications per day — the rest queue for tomorrow",
 
@@ -129,13 +181,22 @@ The day the real endpoint speaks this shape, the mapper is deleted — the UI
 doesn't change. Anything the brain can't fill yet (scope options, say-text
 quality) degrades gracefully: a generic scope card, a templated say line.
 
-## Open questions for Nick
+## Resolved (Nick, 2026-07-07)
 
-1. Endpoint: new `/api/scout/ask` vs a mode on the existing scout-assistant
-   chat? (App is agnostic; pick whatever fits your architecture.)
-2. Streaming `say` (token-by-token) — nice for long replies; v1 can be
-   non-streaming.
-3. Multi-action responses (e.g. "draft 5 AND apply") — contract supports an
-   array; confirm each Confirm renders as its own card, executed independently.
-4. Who computes credit estimates on scope options — brain (preferred, it has
-   the counts) or app?
+1. **Endpoint:** new `POST /api/scout/ask` — a thin wrapper on the same brain
+   (ScoutAssistantService.handle_chat) with a translator to this envelope.
+2. **Non-streaming v1.** Streaming `say` later is cheap; don't build for it.
+3. **Action arrays allowed; at most ONE pending Confirm per response.**
+4. **Brain computes credit estimates.** Real per-option counts: later,
+   behind a preview path.
+5. **askId dedupe:** per-user dedupe collection on Nick's side (the
+   `swipe_idempotency.py` pattern on staging/mobile-field is reusable
+   as-is). **`GET /api/scout/active`:** thin aggregator over job state
+   already in Firestore.
+
+## Consent model (mobile) — noted divergence
+
+The mobile app ALWAYS confirms irreversible actions (receipt card). Web
+Scout's rule (explicit ask = consent, execute + undo) stays web's. Nick's
+translator owns the mapping (e.g. the brain's COUNT_REQUIRED clarify becomes
+the app's scope card). The two surfaces will feel different — accepted.
