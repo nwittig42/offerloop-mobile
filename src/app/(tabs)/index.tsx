@@ -122,6 +122,18 @@ function canonicalAsk(c: AskClassification): string | null {
   }
 }
 
+/** A "company" that's really transcription debris ("Bay or anywhere that
+ *  like man is hiring") — must NEVER spend credits without a look, even in
+ *  zero-touch mode (Rylan field test 2026-07-08: 5 credits burned on a
+ *  misheard ask). */
+function fishyCompany(company: string | null): boolean {
+  if (!company) return false;
+  return (
+    company.trim().split(/\s+/).length > 3 ||
+    /(or|anywhere|that|like|something|whatever|stuff|thing)/i.test(company)
+  );
+}
+
 type Phase = 'idle' | 'listening' | 'thinking' | 'clarify' | 'receipt';
 
 /** A live action card — the job plumbing wearing Scout's clothes. */
@@ -160,7 +172,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop } = useApp();
+  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop, swipeSettings } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -355,10 +367,11 @@ function ScoutTabInner() {
   }, [upsertCard, dropCard]);
 
   const submitAsk = useCallback(
-    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string }) => {
+    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string; byVoice?: boolean }) => {
       const norm = normalizeAsk(text.trim());
       let clean = norm.text;
       if (!clean) return;
+      askByVoice.current = !!meta?.byVoice;
       stopSpeaking();
       setRefine(null);
       setPreflight(null);
@@ -428,6 +441,27 @@ function ScoutTabInner() {
         if (pf) {
           setReply(null);
           setPreflight({ pf, intent });
+          setPhase('idle');
+          return;
+        }
+        // Spend gate: voice asks confirm before credits go (default ON,
+        // Settings → zero-touch to disable); transcription-debris companies
+        // ALWAYS confirm, whatever the setting. Typed asks were deliberate —
+        // they run instantly.
+        const fishy = fishyCompany(intent.company);
+        if (fishy || (meta?.byVoice && swipeSettings.scoutConfirmSpend)) {
+          setReply(null);
+          setPreflight({
+            pf: {
+              interpreted: `${intent.wantedSend ? 'Send' : 'Draft'} ${intent.count} ${intent.role}${intent.company ? ` at ${intent.company}` : ''}${intent.location ? ` in ${intent.location}` : ''} · ${intent.count * 5} credits`,
+              heardRaw: null,
+              variants: [],
+              note: fishy
+                ? `“${intent.company}” doesn't look like a company — I may have misheard. Cancel and say it again, or run it anyway.`
+                : null,
+            },
+            intent,
+          });
           setPhase('idle');
           return;
         }
@@ -527,7 +561,7 @@ function ScoutTabInner() {
         if (seqC !== requestSeq.current) return;
         const canonical = cls && !cls.error ? canonicalAsk(cls) : null;
         if (canonical) {
-          void submitAsk(canonical, { viaClassifier: true, heardRaw: clean });
+          void submitAsk(canonical, { viaClassifier: true, heardRaw: clean, byVoice: meta?.byVoice });
           return;
         }
         setPhase('idle'); // fall through to refine/chat below with phase reset
@@ -609,8 +643,7 @@ function ScoutTabInner() {
         setPhase((p) => {
           if (p !== 'listening') return p;
           if (finalText.trim()) {
-            askByVoice.current = true;
-            void submitAsk(finalText);
+            void submitAsk(finalText, { byVoice: true });
             return 'thinking';
           }
           return 'idle';
@@ -1227,7 +1260,6 @@ function ScoutTabInner() {
                   onSubmitEditing={() => {
                     const t = typed;
                     setTyped('');
-                    askByVoice.current = false;
                     void submitAsk(t);
                   }}
                   style={{ flex: 1, color: NIGHT.transcript, fontFamily: fonts.sans, fontSize: 14.5, paddingVertical: 8 }}
@@ -1236,7 +1268,6 @@ function ScoutTabInner() {
                   onPress={() => {
                     const t = typed;
                     setTyped('');
-                    askByVoice.current = false;
                     void submitAsk(t);
                   }}
                   style={{ backgroundColor: NIGHT.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 13 }}>

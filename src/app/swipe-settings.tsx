@@ -303,6 +303,33 @@ export default function SwipeSettingsScreen() {
               ask you for a detail or two to get started, and every answer you give trains your
               auto-apply so it needs you less each time.
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 }}>
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  backgroundColor: colors.navy + '12',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="mic-outline" size={18} color={colors.navy} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+                  Scout confirms before spending
+                </Text>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
+                  Voice asks show one Run-it tap before credits go — mishears can't spend for you
+                </Text>
+              </View>
+              <Switch
+                value={swipeSettings.scoutConfirmSpend}
+                onValueChange={(v) => updateSwipeSettings({ scoutConfirmSpend: v })}
+                trackColor={{ true: colors.accent, false: colors.hairline }}
+              />
+            </View>
+
             {autoApply ? (
               <Pressable
                 onPress={() => router.push('/application-profile')}

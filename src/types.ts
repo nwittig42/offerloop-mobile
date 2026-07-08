@@ -51,6 +51,9 @@ export type SwipeSettings = {
   //  'hiring_manager'= hiring managers first (verified), teammates only to fill
   // 'mix'/'hiring_manager' always draft (the HM endpoint never auto-sends).
   priority: 'employee' | 'mix' | 'hiring_manager';
+  /** Voice asks confirm before spending credits (mishears can't burn money).
+   *  Zero-touch users can turn it off; obvious-garbage asks confirm anyway. */
+  scoutConfirmSpend: boolean;
 };
 
 export type ScoutChat = {

@@ -96,6 +96,7 @@ const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   contacts: 1,
   autoApply: false,
   priority: 'employee',
+  scoutConfirmSpend: true,
 };
 
 /**
