@@ -70,10 +70,18 @@ const NIGHT = {
   transcript: '#DCE6FF',
 };
 
-const SUGGESTIONS = [
-  'Draft 3 IB analysts at Goldman',
+/** Rotating pool — three show at a time, refreshing while the tab idles so
+ *  the door never looks the same twice (all real, runnable asks). */
+const SUGGESTION_POOL = [
+  'Draft 3 IB analysts at Goldman Sachs',
   'Find hiring managers at Stripe',
   'Prep me for my next coffee chat',
+  'Analysts at Morgan Stanley in LA',
+  'Draft 2 consultants at McKinsey',
+  'Recruiters at Google',
+  'Apply to my saved jobs',
+  'Associates at Evercore in New York',
+  'Draft someone on the deal team at Lazard',
 ];
 
 const THINK_WORDS = [
@@ -132,6 +140,7 @@ function ScoutTabInner() {
   const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
   const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
   const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent } | null>(null);
+  const [sugOffset, setSugOffset] = useState(0);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -155,6 +164,13 @@ function ScoutTabInner() {
     const t = setTimeout(() => setReply(null), 20_000);
     return () => clearTimeout(t);
   }, [reply]);
+
+  // Rotate the suggestion chips while the tab idles.
+  useEffect(() => {
+    if (phase !== 'idle') return;
+    const t = setInterval(() => setSugOffset((o) => (o + 3) % SUGGESTION_POOL.length), 8000);
+    return () => clearInterval(t);
+  }, [phase]);
 
   // Rotate the trail vocabulary while thinking.
   useEffect(() => {
@@ -919,24 +935,31 @@ function ScoutTabInner() {
                 </Pressable>
               </View>
 
-              {/* Quieter suggestions, under the input — prompts, not the show. */}
-              <View style={{ display: phase === 'clarify' ? 'none' : 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
-                {SUGGESTIONS.map((s) => (
-                  <Pressable
-                    key={s}
-                    onPress={() => void submitAsk(s)}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: NIGHT.lineSoft,
-                      borderRadius: 999,
-                      paddingVertical: 5,
-                      paddingHorizontal: 10,
-                      backgroundColor: 'rgba(255,255,255,0.03)',
-                    }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: '#8FA3CC' }}>{s}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              {/* Quieter suggestions, under the input — prompts, not the show.
+                  The window rotates every 8s while idle (key remount fades). */}
+              <Animated.View
+                key={sugOffset}
+                entering={FadeInDown.duration(350)}
+                style={{ display: phase === 'clarify' ? 'none' : 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
+                {[0, 1, 2].map((i) => {
+                  const sug = SUGGESTION_POOL[(sugOffset + i) % SUGGESTION_POOL.length];
+                  return (
+                    <Pressable
+                      key={sug}
+                      onPress={() => void submitAsk(sug)}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: NIGHT.lineSoft,
+                        borderRadius: 999,
+                        paddingVertical: 5,
+                        paddingHorizontal: 10,
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                      }}>
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: '#8FA3CC' }}>{sug}</Text>
+                    </Pressable>
+                  );
+                })}
+              </Animated.View>
             </View>
           ) : null}
         </ScrollView>
