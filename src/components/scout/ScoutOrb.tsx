@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import Animated, {
@@ -16,28 +15,35 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 /**
  * The Scout orb — the voice tab's centerpiece (PLAN-scout-voice.md, P0 mock).
- * One intensity dial drives every visual: idle breathes slow, listening swells
- * with mic volume, thinking spins tight, acting/done shrink to hand the stage
- * to the work. Scout's badge face lives at the center: present at rest,
- * recessed while the motion carries meaning, forward on done.
- * Pure Reanimated + SVG + LinearGradient — OTA-safe, no native modules.
+ * Soft radial-gradient plumes (never hard-edged shapes) drift inside the
+ * sphere so the light reads as one glowing mass, matching the mock's blurred
+ * look. One intensity dial drives everything: idle breathes slow, listening
+ * swells with mic volume, thinking spins tight, acting/done shrink to hand
+ * the stage to the work. Scout's badge face sits at the center.
+ * Pure Reanimated + SVG — OTA-safe, no native modules.
  */
 
 export type OrbState = 'idle' | 'listening' | 'thinking' | 'acting' | 'done';
 
 const FACE = require('../../../assets/images/scout-face.png');
 
-function Blob({
-  colors,
+/** A soft plume: an SVG circle whose radial gradient fades to fully
+ *  transparent well before its edge — layered plumes visually merge. */
+function Plume({
+  id,
+  color,
   size,
   duration,
   reverse,
+  orbitRatio,
   intensity,
 }: {
-  colors: [string, string];
+  id: string;
+  color: string;
   size: number;
   duration: number;
   reverse?: boolean;
+  orbitRatio: number;
   intensity: SharedValue<number>;
 }) {
   const spin = useSharedValue(0);
@@ -49,32 +55,36 @@ function Blob({
 
   const style = useAnimatedStyle(() => {
     const angle = spin.value * 2 * Math.PI * (reverse ? -1 : 1);
-    const radius = 14 + intensity.value * 26;
+    const radius = size * orbitRatio * (0.55 + intensity.value * 0.75);
     return {
       transform: [
         { translateX: Math.cos(angle) * radius },
         { translateY: Math.sin(angle) * radius },
-        { scale: 1 + intensity.value * 0.25 },
+        { scale: 1 + intensity.value * 0.22 },
       ],
-      opacity: 0.75 + intensity.value * 0.25,
+      opacity: 0.85,
     };
   });
 
   return (
-    <Animated.View style={[{ position: 'absolute', width: size, height: size }, style]}>
-      <LinearGradient
-        colors={colors}
-        start={{ x: 0.1, y: 0.1 }}
-        end={{ x: 0.9, y: 0.9 }}
-        style={{ flex: 1, borderRadius: size / 2 }}
-      />
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={id} cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor={color} stopOpacity="0.9" />
+            <Stop offset="45%" stopColor={color} stopOpacity="0.5" />
+            <Stop offset="100%" stopColor={color} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx="50%" cy="50%" r="50%" fill={`url(#${id})`} />
+      </Svg>
     </Animated.View>
   );
 }
 
 export default function ScoutOrb({
   state,
-  size = 210,
+  size = 220,
   volume,
   onPress,
 }: {
@@ -103,40 +113,44 @@ export default function ScoutOrb({
   }, [state, intensity]);
 
   const orbStyle = useAnimatedStyle(() => {
-    const breatheScale = interpolate(breathe.value, [0, 1], [1, 1.045]);
+    const breatheScale = interpolate(breathe.value, [0, 1], [1, 1.04]);
     const vol = state === 'listening' && volume ? volume.value * 0.12 : 0;
     const shrink = state === 'acting' || state === 'done' ? 0.66 : 1;
     return {
-      transform: [{ scale: breatheScale * shrink * (1 + intensity.value * 0.06 + vol) }],
+      transform: [{ scale: breatheScale * shrink * (1 + intensity.value * 0.05 + vol) }],
     };
   });
 
   const glowStyle = useAnimatedStyle(() => ({
-    opacity: 0.35 + intensity.value * 0.55 + (state === 'listening' && volume ? volume.value * 0.2 : 0),
-    transform: [{ scale: 1 + intensity.value * 0.18 }],
+    opacity: 0.45 + intensity.value * 0.5 + (state === 'listening' && volume ? volume.value * 0.2 : 0),
+    transform: [{ scale: 1 + intensity.value * 0.16 }],
   }));
 
   const faceStyle = useAnimatedStyle(() => ({
-    opacity: state === 'listening' || state === 'thinking' ? 0.45 : 1,
-    transform: [{ scale: state === 'listening' || state === 'thinking' ? 0.82 : state === 'done' ? 1.12 : 1 }],
+    opacity: state === 'listening' || state === 'thinking' ? 0.5 : 1,
+    transform: [
+      { scale: state === 'listening' || state === 'thinking' ? 0.84 : state === 'done' ? 1.12 : 1 },
+    ],
   }));
 
-  const blobDur = state === 'thinking' ? 0.35 : state === 'listening' ? 0.6 : 1;
+  const speed = state === 'thinking' ? 0.32 : state === 'listening' ? 0.55 : 1;
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Halo — reaches well past the sphere so it melts into the sky */}
       <Animated.View
         pointerEvents="none"
-        style={[{ position: 'absolute', width: size * 2.1, height: size * 2.1 }, glowStyle]}>
+        style={[{ position: 'absolute', width: size * 2.4, height: size * 2.4 }, glowStyle]}>
         <Svg width="100%" height="100%">
           <Defs>
-            <RadialGradient id="halo" cx="50%" cy="50%" r="50%">
-              <Stop offset="0%" stopColor="#5B7BFF" stopOpacity="0.55" />
-              <Stop offset="55%" stopColor="#3B82F6" stopOpacity="0.18" />
+            <RadialGradient id="scout-halo" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#6D7BFF" stopOpacity="0.5" />
+              <Stop offset="45%" stopColor="#4A60D8" stopOpacity="0.22" />
+              <Stop offset="75%" stopColor="#3B82F6" stopOpacity="0.07" />
               <Stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
             </RadialGradient>
           </Defs>
-          <Circle cx="50%" cy="50%" r="50%" fill="url(#halo)" />
+          <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-halo)" />
         </Svg>
       </Animated.View>
 
@@ -148,16 +162,29 @@ export default function ScoutOrb({
               height: size,
               borderRadius: size / 2,
               overflow: 'hidden',
-              backgroundColor: '#16264A',
+              backgroundColor: '#131F3D',
               alignItems: 'center',
               justifyContent: 'center',
             },
             orbStyle,
           ]}>
-          <Blob colors={['#4A60A8', '#3B82F6']} size={size * 0.82} duration={9000 * blobDur} intensity={intensity} />
-          <Blob colors={['#7C5CFF', '#3B82F6']} size={size * 0.7} duration={6400 * blobDur} reverse intensity={intensity} />
-          <Blob colors={['#22D3EE', '#4A60A8']} size={size * 0.58} duration={4800 * blobDur} intensity={intensity} />
-          <Blob colors={['#FACC15', '#7C5CFF']} size={size * 0.34} duration={3600 * blobDur} reverse intensity={intensity} />
+          {/* Base wash so the sphere itself glows from within */}
+          <Svg width="100%" height="100%" style={{ position: 'absolute' }}>
+            <Defs>
+              <RadialGradient id="scout-base" cx="50%" cy="42%" r="62%">
+                <Stop offset="0%" stopColor="#4A5BD6" stopOpacity="0.85" />
+                <Stop offset="60%" stopColor="#2B3B78" stopOpacity="0.6" />
+                <Stop offset="100%" stopColor="#131F3D" stopOpacity="0.2" />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-base)" />
+          </Svg>
+
+          <Plume id="p1" color="#7C5CFF" size={size * 0.95} duration={9000 * speed} orbitRatio={0.12} intensity={intensity} />
+          <Plume id="p2" color="#3B82F6" size={size * 0.85} duration={6400 * speed} reverse orbitRatio={0.16} intensity={intensity} />
+          <Plume id="p3" color="#22D3EE" size={size * 0.6} duration={4800 * speed} orbitRatio={0.2} intensity={intensity} />
+          <Plume id="p4" color="#FACC15" size={size * 0.32} duration={3600 * speed} reverse orbitRatio={0.24} intensity={intensity} />
+
           <Animated.View style={faceStyle}>
             <Image
               source={FACE}
@@ -166,19 +193,20 @@ export default function ScoutOrb({
                 height: size * 0.42,
                 borderRadius: size * 0.21,
                 borderWidth: 2,
-                borderColor: 'rgba(160,190,255,0.45)',
+                borderColor: 'rgba(190,205,255,0.55)',
               }}
               resizeMode="cover"
             />
           </Animated.View>
+
           <View
             pointerEvents="none"
             style={{
               position: 'absolute',
               top: 0, left: 0, right: 0, bottom: 0,
               borderRadius: size / 2,
-              borderWidth: 1.5,
-              borderColor: 'rgba(160,190,255,0.35)',
+              borderWidth: 1.25,
+              borderColor: 'rgba(170,195,255,0.4)',
             }}
           />
         </Animated.View>

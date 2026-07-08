@@ -1,8 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,7 +15,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOut, useSharedValue } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 
 import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
@@ -63,31 +64,19 @@ const THINK_WORDS = [
 
 type Phase = 'idle' | 'listening' | 'thinking';
 
-/** Code-drawn night ridgeline (brand watercolor arrives as a tuned asset in
- *  P2 polish — this keeps the horizon without shipping a light-on-dark PNG). */
+/** The brand watercolor, night-tinted offline (light sky baked to
+ *  transparency, ridges to glowing periwinkle) so it draws exactly like the
+ *  mock's blended horizon without runtime blend modes. */
+const RIDGES = require('../../../assets/images/scout-ridges-night.png');
+
 function Ridgeline() {
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '46%' }}>
-      <Svg width="100%" height="100%" viewBox="0 0 390 340" preserveAspectRatio="xMidYMax slice">
-        <Defs>
-          <SvgGradient id="far" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#31437A" stopOpacity="0.55" />
-            <Stop offset="1" stopColor="#1B2A44" stopOpacity="0.15" />
-          </SvgGradient>
-          <SvgGradient id="near" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#22335E" stopOpacity="0.9" />
-            <Stop offset="1" stopColor="#101B33" stopOpacity="0.6" />
-          </SvgGradient>
-        </Defs>
-        <Path
-          d="M0 150 L55 92 L110 138 L172 70 L235 128 L300 84 L355 122 L390 100 L390 340 L0 340 Z"
-          fill="url(#far)"
-        />
-        <Path
-          d="M0 210 L70 150 L140 196 L215 132 L290 190 L350 158 L390 176 L390 340 L0 340 Z"
-          fill="url(#near)"
-        />
-      </Svg>
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '44%' }}>
+      <Image
+        source={RIDGES}
+        resizeMode="cover"
+        style={{ width: '100%', height: '100%', opacity: 0.9 }}
+      />
     </View>
   );
 }
@@ -103,7 +92,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast } = useApp();
+  const { showToast, unreadCount } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -241,17 +230,52 @@ function ScoutTabInner() {
       />
       <Ridgeline />
 
+      {/* Title centered like the rest of the app's headers; the bell is the
+          standard notifications icon + badge, just on the night palette. */}
       <View
         style={{
           paddingTop: insets.top + 12,
           paddingHorizontal: 22,
           flexDirection: 'row',
-          justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 26, color: NIGHT.ink }}>Scout</Text>
-        <Pressable onPress={() => router.push('/notifications')} hitSlop={10}>
-          <Text style={{ fontSize: 18 }}>🔔</Text>
+        <View style={{ width: 32 }} />
+        <Text
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: fonts.display,
+            fontSize: 26,
+            color: NIGHT.ink,
+          }}>
+          Scout
+        </Text>
+        <Pressable
+          onPress={() => router.push('/notifications')}
+          hitSlop={10}
+          style={{ width: 32, alignItems: 'flex-end' }}>
+          <View>
+            <Ionicons name="notifications-outline" size={23} color={NIGHT.ink} />
+            {unreadCount > 0 ? (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -6,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: '#DC2626',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: 3,
+                }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 9.5, color: '#fff' }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </Pressable>
       </View>
 
