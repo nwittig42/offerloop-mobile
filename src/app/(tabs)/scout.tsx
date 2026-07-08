@@ -363,24 +363,6 @@ function ScoutTabInner() {
 
           {phase === 'idle' ? (
             <View style={{ alignItems: 'center', gap: 12, width: '100%' }}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-                {SUGGESTIONS.map((s) => (
-                  <Pressable
-                    key={s}
-                    onPress={() => void submitAsk(s)}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: NIGHT.line,
-                      borderRadius: 999,
-                      paddingVertical: 8,
-                      paddingHorizontal: 13,
-                      backgroundColor: 'rgba(255,255,255,0.04)',
-                    }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: '#B9C8EE' }}>{s}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
               <View
                 style={{
                   width: '96%',
@@ -418,6 +400,25 @@ function ScoutTabInner() {
                   style={{ backgroundColor: NIGHT.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 13 }}>
                   <Text style={{ color: '#fff', fontFamily: fonts.sansSemibold, fontSize: 13 }}>➤</Text>
                 </Pressable>
+              </View>
+
+              {/* Quieter suggestions, under the input — prompts, not the show. */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
+                {SUGGESTIONS.map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => void submitAsk(s)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: NIGHT.lineSoft,
+                      borderRadius: 999,
+                      paddingVertical: 5,
+                      paddingHorizontal: 10,
+                      backgroundColor: 'rgba(255,255,255,0.03)',
+                    }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: '#8FA3CC' }}>{s}</Text>
+                  </Pressable>
+                ))}
               </View>
             </View>
           ) : null}
