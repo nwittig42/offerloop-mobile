@@ -25,6 +25,7 @@ import {
   clarifyFor,
   executeApplyIntent,
   executeDraftIntent,
+  normalizeAsk,
   parseIntent,
   type ActionProgress,
   type DraftIntent,
@@ -265,7 +266,7 @@ function ScoutTabInner() {
 
   const submitAsk = useCallback(
     async (text: string) => {
-      let clean = text.trim();
+      let clean = normalizeAsk(text.trim()).text;
       if (!clean) return;
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the

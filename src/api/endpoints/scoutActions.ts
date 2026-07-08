@@ -19,6 +19,39 @@ import type { Job } from '@/types';
  */
 
 // ---------------------------------------------------------------------------
+// Voice autocorrect
+// ---------------------------------------------------------------------------
+
+/** Common voice-recognition mishears of the firms our users actually chase
+ *  (IB / consulting / tech). Deterministic word-boundary fixes, applied to
+ *  the transcript BEFORE parsing and SHOWN corrected in the witnessed ask —
+ *  the user sees the fix and can Edit if we guessed wrong. */
+const ASR_FIXES: [RegExp, string][] = [
+  [/\bgol?d?man\s*(sex|sacks|sachs?|sax|saks)\b/gi, 'Goldman Sachs'],
+  [/\bj\.?\s*p\.?\s*morgan\b/gi, 'JPMorgan'],
+  [/\bmorgan\s*stanl(ey|y|ee)\b/gi, 'Morgan Stanley'],
+  [/\bmc\s*kin(sey|zee|zy|sy)\b/gi, 'McKinsey'],
+  [/\bmickenzie\b/gi, 'McKinsey'],
+  [/\bbane\s+(and|&)\s+(company|co)\b/gi, 'Bain'],
+  [/\bdeloit\b/gi, 'Deloitte'],
+  [/\bblack\s+stone\b/gi, 'Blackstone'],
+  [/\bblack\s+rock\b/gi, 'BlackRock'],
+  [/\bever\s+core\b/gi, 'Evercore'],
+  [/\bcenter\s+view\b/gi, 'Centerview'],
+  [/\bmo\s+(ellis|less|liss)\b/gi, 'Moelis'],
+  [/\bjeff?er(ys|eys)\b/gi, 'Jefferies'],
+  [/\bbark?l(eys|ies)\b/gi, 'Barclays'],
+  [/\bcredit\s+swiss\b/gi, 'Credit Suisse'],
+  [/\bcity\s+group\b/gi, 'Citigroup'],
+];
+
+export function normalizeAsk(raw: string): { text: string; corrected: boolean } {
+  let text = raw;
+  for (const [re, fix] of ASR_FIXES) text = text.replace(re, fix);
+  return { text, corrected: text !== raw };
+}
+
+// ---------------------------------------------------------------------------
 // Intent parsing (deliberately dumb — the real brain replaces this)
 // ---------------------------------------------------------------------------
 
@@ -45,7 +78,7 @@ export function parseIntent(ask: string): ScoutIntent {
 
   // Question-shaped asks are conversations, not commands — let the chat brain
   // answer ("what should I say in a follow up email" must never spawn a job).
-  if (/^(what|how|why|when|where|who|should|can|could|would|do|does|is|are|am)/.test(lower) || lower.endsWith('?')) {
+  if (/^(what|how|why|when|where|who|should|can|could|would|do|does|is|are|am)\b/.test(lower) || lower.endsWith('?')) {
     if (/(prep me|meeting prep|coffee chat)/.test(lower)) return { kind: 'prep' };
     return null;
   }
@@ -55,7 +88,13 @@ export function parseIntent(ask: string): ScoutIntent {
   if (/\bapply\b/.test(lower) && /(saved|my jobs|job)/.test(lower)) return { kind: 'apply_saved' };
 
   const actiony = /(draft|email|write|reach out|message|find|outreach|connect|contact|get me|send)/.test(lower);
-  if (!actiony) return null;
+  // Noun-phrase commands count too: "Manager at JP Morgan", "2 analysts at
+  // Bain in NYC" — a role + a target IS the ask. Without this, the chat brain
+  // answers with words like "lining up managers for you" while nothing runs —
+  // a false promise (Rylan field test 2026-07-08).
+  const ROLE_WORDS = /(manager|recruiter|analyst|associate|banker|consultant|engineer|designer|marketer|director|vp\b|partner|principal|talent|founder)/;
+  const nounCommand = ROLE_WORDS.test(lower) && /\bat\s+\S/.test(lower);
+  if (!actiony && !nounCommand) return null;
 
   const hm = /(hiring manager|recruiter|talent)/.test(lower);
   const wantedSend = /\bsend\b/.test(lower);
@@ -88,6 +127,11 @@ export function parseIntent(ask: string): ScoutIntent {
       /(?:draft|email|write to|reach out to|message|find|connect with|contact|get me|send)\s+(?:\d{1,2}\s+|one\s+|two\s+|three\s+|four\s+|five\s+)?(?:emails?\s+to\s+)?([A-Za-z /\-]{3,40}?)(?:\s+at\s+|\s+in\s+|[,.!?]|$)/i,
     );
     if (m) role = m[1].trim().replace(/\b(emails?|people|someone|folks)\b/gi, '').trim();
+    if (!role) {
+      // Verbless: everything before " at " is the role ("Manager at JPMorgan").
+      const nm = ask.match(/^(?:\d{1,2}\s+)?([A-Za-z /\-]{3,40}?)\s+at\s+/i);
+      if (nm) role = nm[1].trim();
+    }
   }
   if (!role) role = hm ? 'hiring manager' : 'someone on the team';
 
