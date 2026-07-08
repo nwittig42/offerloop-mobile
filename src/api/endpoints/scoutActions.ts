@@ -137,7 +137,17 @@ export type DraftIntent = {
 export type ApplyIntent = { kind: 'apply_saved' };
 export type PrepIntent = { kind: 'prep' };
 export type JobSearchIntent = { kind: 'find_jobs'; query: string; location: string | null };
-export type ScoutIntent = DraftIntent | ApplyIntent | PrepIntent | JobSearchIntent | null;
+/** Browse-only: see people BEFORE deciding to draft (web-Find parity).
+ *  Explicit browse phrasings only — "find me a hiring manager" still drafts
+ *  (that behavior is field-validated); "show me / who works at" previews. */
+export type FindPeopleIntent = { kind: 'find_people'; role: string; company: string; location: string | null };
+export type ScoutIntent =
+  | DraftIntent
+  | ApplyIntent
+  | PrepIntent
+  | JobSearchIntent
+  | FindPeopleIntent
+  | null;
 
 /** Spoken shorthand for roles — expanded before matching job titles. */
 const ROLE_SYNONYMS: Record<string, string> = {
@@ -201,6 +211,21 @@ export function parseIntent(ask: string): ScoutIntent {
   // 2026-07-08: talk-and-go must not require URLs).
   const jobSearch = parseJobSearch(ask, lower);
   if (jobSearch) return jobSearch;
+
+  // Browse-only people search: explicit look-don't-draft phrasings.
+  if (/(^|\b)(show me|who works|who do (i|we) know|look up|browse)\b/.test(lower) && /\bat\s+\S/.test(lower)) {
+    const atM = ask.match(/\bat\s+([A-Za-z0-9&.\-' ]{2,40}?)(?:\s+in\s+|[,.!?]|$)/i);
+    const locM = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i);
+    const roleM = ask.match(/(?:show me|look up|browse)\s+(?:the\s+|some\s+)?([A-Za-z /\-]{2,40}?)\s+at\s+/i);
+    if (atM) {
+      return {
+        kind: 'find_people',
+        role: (roleM?.[1] || '').trim().replace(/\b(people|folks|everyone|anyone)\b/gi, '').trim(),
+        company: atM[1].trim(),
+        location: locM ? locM[1].trim() : null,
+      };
+    }
+  }
 
   // Question-shaped asks are conversations, not commands — let the chat brain
   // answer ("what should I say in a follow up email" must never spawn a job).

@@ -35,6 +35,7 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
+import { askScoutFindContacts, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import type { Job } from '@/types';
@@ -146,6 +147,12 @@ function ScoutTabInner() {
   const [sugOffset, setSugOffset] = useState(0);
   const [jobPicks, setJobPicks] = useState<{ query: string; jobs: Job[] } | null>(null);
   const [applyOne, setApplyOne] = useState<Job | null>(null);
+  const [peoplePicks, setPeoplePicks] = useState<{
+    items: ContactPreview[];
+    role: string;
+    company: string;
+    location: string | null;
+  } | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
@@ -312,6 +319,7 @@ function ScoutTabInner() {
       setPreflight(null);
       setJobPicks(null);
       setApplyOne(null);
+      setPeoplePicks(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
       // held ask; a fresh full ask replaces it. One round max, then best effort.
@@ -359,6 +367,37 @@ function ScoutTabInner() {
           return;
         }
         void runDraftAction(intent);
+        return;
+      }
+
+      if (intent?.kind === 'find_people') {
+        const seqF = ++requestSeq.current;
+        setReply(null);
+        setPhase('thinking');
+        try {
+          const env = await askScoutFindContacts({
+            ask: clean,
+            askId: `scout-find-${Date.now()}`,
+            role: intent.role,
+            company: intent.company,
+            location: intent.location,
+          });
+          if (seqF !== requestSeq.current) return;
+          const items = env.actions[0]?.results?.items ?? [];
+          setReply({ say: env.say, actions: [] });
+          if (items.length) {
+            setPeoplePicks({ items, role: intent.role, company: intent.company, location: intent.location });
+          }
+          setPhase('idle');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch {
+          if (seqF !== requestSeq.current) return;
+          setPhase('idle');
+          setReply({
+            say: "The people search didn't come back — check your connection and try again.",
+            actions: [],
+          });
+        }
         return;
       }
 
@@ -795,6 +834,53 @@ function ScoutTabInner() {
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Run it as-is</Text>
                 </Pressable>
               </View>
+            </Animated.View>
+          ) : null}
+
+          {phase === 'idle' && peoplePicks ? (
+            <Animated.View entering={FadeInDown.duration(220)} style={{ width: '96%', gap: 7 }}>
+              {peoplePicks.items.map((c) => (
+                <View
+                  key={c.name + c.title}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: NIGHT.lineSoft,
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    borderRadius: 13,
+                    paddingVertical: 10,
+                    paddingHorizontal: 13,
+                    gap: 2,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                    {c.title || 'Team member'} · {c.company}
+                  </Text>
+                </View>
+              ))}
+              <Pressable
+                onPress={() => {
+                  const pp = peoplePicks;
+                  setPeoplePicks(null);
+                  void runDraftAction({
+                    kind: 'draft',
+                    count: Math.min(pp.items.length, 5),
+                    role: pp.role || 'someone on the team',
+                    company: pp.company,
+                    location: pp.location,
+                    hm: /hiring manager|recruiter/i.test(pp.role),
+                    wantedSend: false,
+                  });
+                }}
+                style={{ backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#fff' }}>
+                  Draft the best {Math.min(peoplePicks.items.length, 5)} · {Math.min(peoplePicks.items.length, 5) * 5} credits
+                </Text>
+              </Pressable>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: NIGHT.ink3, textAlign: 'center' }}>
+                preview is free — drafting finds and charges the top matches
+              </Text>
             </Animated.View>
           ) : null}
 
