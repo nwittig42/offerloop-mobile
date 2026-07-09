@@ -114,8 +114,25 @@ export function suggestFirm(company: string): string | null {
     }
   }
   // Tolerance scales with length; "golman sax" → "goldman sachs" is d=3/13.
-  const tolerance = Math.max(1, Math.floor(c.length * 0.3));
+  // Short names still get room for 2 edits — "mollys" → "moelis" is d=2/6
+  // (Rylan field walk 2026-07-08: Moelis heard as Molly's, rescue never
+  // fired). 4-and-under stays at 1 so "bain"-length names don't over-match.
+  const tolerance = c.length <= 4 ? 1 : Math.max(2, Math.floor(c.length * 0.3));
   return best && bestScore > 0 && bestScore <= tolerance ? best : null;
+}
+
+/** Known-firm anchor: ASR reliably preserves famous firm NAMES while
+ *  mangling the connectors around them ("Draft 2 analysts at Evercore" →
+ *  "You have two analyst set Evercore", same walk). If a firm we know
+ *  appears anywhere in the ask, trust it over the grammar — callers use it
+ *  instead of asking "which company?" when the parse found none. */
+export function findFirmInText(ask: string): string | null {
+  const t = ` ${ask.toLowerCase().replace(/[^a-z0-9 ]/g, ' ')} `;
+  for (const firm of KNOWN_FIRMS) {
+    const f = firm.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+    if (t.includes(` ${f} `)) return firm;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

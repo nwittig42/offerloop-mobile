@@ -37,6 +37,7 @@ import {
   preflightFor,
   refineOptions,
   suggestFirm,
+  findFirmInText,
   KNOWN_FIRMS,
   type Preflight,
   type ActionProgress,
@@ -561,7 +562,30 @@ function ScoutTabInner() {
         if (merged?.kind === 'draft') {
           track('scout_gate_outcome', { gate: 'clarify', outcome: 'answered', method: meta?.byVoice ? 'voice' : 'tap' });
           setAsk(clean);
-          void runDraftAction(merged);
+          // A clarify ANSWER is one more ASR roll of the dice — it must NOT
+          // bypass the ladder (field walk 2026-07-08: "Evercore" answered,
+          // "Core" ran and spent). Near-miss rescue first, then one confirm.
+          const mergedSug = merged.company ? suggestFirm(merged.company) : null;
+          if (mergedSug) {
+            setReply(null);
+            track('scout_gate', { gate: 'did_you_mean' });
+            setDidYouMean({ intent: merged, suggestion: mergedSug });
+            setPhase('idle');
+            return;
+          }
+          setReply(null);
+          track('scout_gate', { gate: 'clarify_confirm' });
+          setPreflight({
+            pf: {
+              interpreted: `${merged.wantedSend ? 'Send' : 'Draft'} ${merged.count} ${merged.role}${merged.company ? ` at ${merged.company}` : ''}${merged.location ? ` in ${merged.location}` : ''} · ${merged.count * 5} credits`,
+              heardRaw: null,
+              variants: [],
+              note: null,
+            },
+            intent: merged,
+            gate: 'clarify_confirm',
+          });
+          setPhase('idle');
           return;
         }
       }
@@ -608,6 +632,28 @@ function ScoutTabInner() {
         }
         const c = clarifyFor(intent);
         if (c) {
+          // Known-firm anchor: ASR keeps famous firm names intact while
+          // garbling the connectors, so the parse misses the company the
+          // user clearly said ("...analyst set Evercore"). If a firm we
+          // know is in the transcript, confirm it instead of asking.
+          const anchored = findFirmInText(clean);
+          if (anchored) {
+            const inferred = { ...intent, company: anchored };
+            setReply(null);
+            track('scout_gate', { gate: 'firm_anchor' });
+            setPreflight({
+              pf: {
+                interpreted: `${inferred.wantedSend ? 'Send' : 'Draft'} ${inferred.count} ${inferred.role} at ${anchored}${inferred.location ? ` in ${inferred.location}` : ''} · ${inferred.count * 5} credits`,
+                heardRaw: clean,
+                variants: [],
+                note: `I heard ${anchored} in there — run it, or cancel and say it again.`,
+              },
+              intent: inferred,
+              gate: 'firm_anchor',
+            });
+            setPhase('idle');
+            return;
+          }
           setReply(null);
           track('scout_gate', { gate: 'clarify' });
           setClarify({ question: c.question, baseAsk: clean });
@@ -676,6 +722,20 @@ function ScoutTabInner() {
           setPhase('idle');
           return;
         }
+        // Did-you-mean on the browse path too — "Show me people at Molly's"
+        // searched PDL for Molly's while Moelis sat one rescue away (field
+        // walk 2026-07-08). Free to the user, but garbage PDL spend for us.
+        const browseSug = suggestFirm(intent.company);
+        if (browseSug) {
+          setReply(null);
+          track('scout_gate', { gate: 'did_you_mean' });
+          setRefine({
+            heard: clean,
+            options: [`Show me ${intent.role || 'people'} at ${browseSug}${intent.location ? ` in ${intent.location}` : ''}`],
+          });
+          setPhase('idle');
+          return;
+        }
         const seqF = ++requestSeq.current;
         setReply(null);
         setPhase('thinking');
@@ -692,6 +752,11 @@ function ScoutTabInner() {
           setReply({ say: env.say, actions: [] });
           if (items.length) {
             setPeoplePicks({ items, role: intent.role, company: intent.company, location: intent.location });
+          } else {
+            // A search that found nobody is a bad anchor — likely a mishear
+            // ("Molly's · analyst" haunted the context trail for turns on
+            // the field walk). Don't let it steer the next ask.
+            setCtx(null);
           }
           setPhase('idle');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
