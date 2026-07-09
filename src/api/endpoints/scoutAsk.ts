@@ -39,6 +39,9 @@ export type AskClassification = {
   hiring_manager: boolean;
   wants_send: boolean;
   job_query: string;
+  /** Server repaired a likely speech-recognition error (e.g. "Molly's" →
+   *  Moelis). Client must confirm-card repaired companies, never run silent. */
+  repaired: boolean;
   error?: string;
 };
 

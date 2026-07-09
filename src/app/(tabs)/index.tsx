@@ -38,6 +38,7 @@ import {
   refineOptions,
   suggestFirm,
   findFirmInText,
+  isHighConfidenceParse,
   KNOWN_FIRMS,
   type Preflight,
   type ActionProgress,
@@ -146,6 +147,16 @@ function canonicalAsk(c: AskClassification): string | null {
   }
 }
 
+/** Did the user actually SAY this company (normalized substring), or did the
+ *  server brain repair it in? Repaired companies always get a confirm card. */
+function companyVerbatimIn(company: string, transcript: string): boolean {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const c = norm(company);
+  if (!c) return false;
+  return ` ${norm(transcript)} `.includes(` ${c} `);
+}
+
 /** A "company" that's really transcription debris ("Bay or anywhere that
  *  like man is hiring") — must NEVER spend credits without a look, even in
  *  zero-touch mode (Rylan field test 2026-07-08: 5 credits burned on a
@@ -154,7 +165,7 @@ function fishyCompany(company: string | null): boolean {
   if (!company) return false;
   return (
     company.trim().split(/\s+/).length > 3 ||
-    /(or|anywhere|that|like|something|whatever|stuff|thing)/i.test(company)
+    /\b(or|anywhere|that|like|something|whatever|stuff|thing)\b/i.test(company)
   );
 }
 
@@ -270,23 +281,30 @@ function ScoutTabInner() {
   // Chips lean toward no-setup asks until Gmail is connected (risk #5).
   const suggestionPool = profile?.gmailConnected ? SUGGESTION_POOL : NO_GMAIL_POOL;
 
+  // Companies this user actually targets (named in their loops) — feeds both
+  // the ASR vocabulary and the voice-confidence check.
+  const loopCompanies = useMemo(
+    () =>
+      loops
+        .map((l) => extractSlots(l.brief).company)
+        .filter((c): c is string => !!c),
+    [loops],
+  );
+
   // ASR vocabulary (SCOUT-RISK-REGISTER.md #6): Apple's on-device model
   // favors these exact phrases, so "Moelis" survives a loud room. The base
   // firm list plus this user's own targets — roles, locations, and any
   // company named in their loops.
   const speechVocab = useMemo(() => {
-    const fromLoops = loops
-      .map((l) => extractSlots(l.brief).company)
-      .filter((c): c is string => !!c);
     return [
       ...new Set([
         ...KNOWN_FIRMS,
-        ...fromLoops,
+        ...loopCompanies,
         ...(profile?.targetRoles ?? []),
         ...(profile?.preferredLocations ?? []),
       ]),
     ];
-  }, [loops, profile?.targetRoles, profile?.preferredLocations]);
+  }, [loopCompanies, profile?.targetRoles, profile?.preferredLocations]);
 
   // The reply card excuses itself: tapping its chip clears it, and otherwise
   // it fades out after a while so the tab returns to a clean idle.
@@ -471,7 +489,19 @@ function ScoutTabInner() {
   }, [upsertCard, dropCard]);
 
   const submitAsk = useCallback(
-    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string; byVoice?: boolean; source?: string }) => {
+    async (
+      text: string,
+      meta?: {
+        viaClassifier?: boolean;
+        heardRaw?: string;
+        byVoice?: boolean;
+        source?: string;
+        /** Server understanding failed — run today's pure-local ladder. */
+        localOnly?: boolean;
+        /** Server repaired the company to this name — always confirm-card. */
+        serverCorrected?: string | null;
+      },
+    ) => {
       const norm = normalizeAsk(text.trim());
       let clean = norm.text;
       if (!clean) return;
@@ -623,7 +653,67 @@ function ScoutTabInner() {
         });
       }
 
+      // LLM-first understanding (voice overhaul P1): a mishear that PARSES
+      // cleanly ("Molly's" is a valid-looking company) used to sail past the
+      // brain entirely — the root cause of the 2026-07-08 field failures.
+      // Voice asks now consult the server classifier unless the parse names
+      // an exact known firm; the canonical result re-enters this ladder so
+      // every gate still applies. Typed asks stay regex-first (no mishears).
+      if (
+        meta?.byVoice &&
+        !meta?.viaClassifier &&
+        !meta?.localOnly &&
+        !isHighConfidenceParse(intent, loopCompanies)
+      ) {
+        const seqU = ++requestSeq.current;
+        setReply(null);
+        setPhase('thinking');
+        const t0 = Date.now();
+        let cls: AskClassification | null = null;
+        try {
+          cls = await classifyAsk(clean, `cls-${Date.now()}`);
+        } catch {
+          cls = null;
+        }
+        if (seqU !== requestSeq.current) return;
+        const canonical = cls && !cls.error ? canonicalAsk(cls) : null;
+        if (canonical) {
+          const corrected =
+            !!cls!.company && (cls!.repaired || !companyVerbatimIn(cls!.company, clean));
+          track('scout_understand', { leg: 'apple', ms: Date.now() - t0, corrected });
+          void submitAsk(canonical, {
+            viaClassifier: true,
+            heardRaw: clean,
+            byVoice: true,
+            serverCorrected: corrected ? cls!.company : null,
+          });
+          return;
+        }
+        // Server unreachable or unhelpful — today's local ladder, unchanged.
+        track('scout_understand', { leg: 'local', ms: Date.now() - t0, corrected: false });
+        void submitAsk(clean, { ...meta, localOnly: true });
+        return;
+      }
+
       if (intent?.kind === 'draft') {
+        // Trust rule: a server-repaired company is never run silently — one
+        // look first, whatever the spend-gate setting says.
+        if (meta?.serverCorrected && intent.company) {
+          setReply(null);
+          track('scout_gate', { gate: 'server_correction' });
+          setPreflight({
+            pf: {
+              interpreted: `${intent.wantedSend ? 'Send' : 'Draft'} ${intent.count} ${intent.role} at ${intent.company}${intent.location ? ` in ${intent.location}` : ''} · ${intent.count * 5} credits`,
+              heardRaw: meta.heardRaw ?? null,
+              variants: [],
+              note: `I heard ${meta.serverCorrected} in there — run it, or cancel and say it again.`,
+            },
+            intent,
+            gate: 'server_correction',
+          });
+          setPhase('idle');
+          return;
+        }
         // Rolling conversation: a missing company fills from recent turns
         // ("find me people at Bain" … "find two hiring managers" keeps Bain)
         // — confirmed on the pre-flight card so the inference is visible.
@@ -736,6 +826,20 @@ function ScoutTabInner() {
           setPhase('idle');
           return;
         }
+        // Trust rule (browse): a server-repaired company gets one tappable
+        // look before we spend a PDL search on it.
+        if (meta?.serverCorrected) {
+          setReply(null);
+          track('scout_gate', { gate: 'server_correction' });
+          setRefine({
+            heard: meta.heardRaw ?? clean,
+            options: [
+              `Show me ${intent.role || 'people'} at ${intent.company}${intent.location ? ` in ${intent.location}` : ''}`,
+            ],
+          });
+          setPhase('idle');
+          return;
+        }
         // Did-you-mean on the browse path too — "Show me people at Molly's"
         // searched PDL for Molly's while Moelis sat one rescue away (field
         // walk 2026-07-08). Free to the user, but garbage PDL spend for us.
@@ -834,7 +938,7 @@ function ScoutTabInner() {
       // (cached), then the result is re-spoken in canonical form back through
       // this same pipeline so clarify/did-you-mean/pre-flight/receipts all
       // still apply. Regexes are the fast path, never the ceiling.
-      if (!intent && !meta?.viaClassifier) {
+      if (!intent && !meta?.viaClassifier && !meta?.localOnly) {
         const seqC = ++requestSeq.current;
         setReply(null);
         setPhase('thinking');
@@ -895,7 +999,7 @@ function ScoutTabInner() {
         });
       }
     },
-    [clarify, savedJobs, runDraftAction],
+    [clarify, savedJobs, runDraftAction, loopCompanies],
   );
 
   const beginListening = useCallback(async () => {

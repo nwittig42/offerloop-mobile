@@ -160,6 +160,26 @@ export function findFirmInText(ask: string): string | null {
   return null;
 }
 
+/** Voice-confidence check (voice overhaul P1): is this parse safe to run
+ *  without the server brain? Only exact-known companies qualify — a mishear
+ *  that PARSES cleanly ("Molly's" → valid-looking company) is exactly the
+ *  leak the LLM-first routing exists to close. Company-free intents
+ *  (jobs/apply/prep) are low-stakes and stay instant. */
+export function isHighConfidenceParse(
+  intent: ScoutIntent,
+  extraFirms: string[],
+): boolean {
+  if (!intent) return false;
+  if (intent.kind === 'find_jobs' || intent.kind === 'apply_saved' || intent.kind === 'prep') return true;
+  if (intent.kind === 'draft' || intent.kind === 'find_people') {
+    if (!intent.company) return false; // clarify-shaped: let the server see it
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    const c = norm(intent.company);
+    return [...KNOWN_FIRMS, ...extraFirms].some((f) => norm(f) === c);
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Intent parsing (deliberately dumb — the real brain replaces this)
 // ---------------------------------------------------------------------------
