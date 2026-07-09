@@ -896,25 +896,27 @@ export default function ProfileScreen() {
                   }}
                 />
               ) : null}
-              {/* Which JS bundle is this phone actually running? Answers
-                  "did the OTA land" at a glance — updateId is null while on
-                  the build's embedded bundle. */}
-              <Text
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 11,
-                  color: colors.inkTertiary,
-                  textAlign: 'center',
-                  marginTop: 4,
-                }}>
-                {Updates.updateId
-                  ? `Update ${Updates.updateId.slice(0, 8)}${
-                      Updates.createdAt ? ` · ${new Date(Updates.createdAt).toLocaleString()}` : ''
-                    }`
-                  : 'Embedded bundle — no OTA applied yet'}
-              </Text>
             </>
           ) : null}
+
+          {/* Which JS bundle is this phone actually running? Answers
+              "did the OTA land" at a glance — updateId is null while on
+              the build's embedded bundle. Outside the segment conditionals
+              on purpose: visible from any Profile segment. */}
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 11,
+              color: colors.inkTertiary,
+              textAlign: 'center',
+              marginTop: 4,
+            }}>
+            {Updates.updateId
+              ? `Update ${Updates.updateId.slice(0, 8)}${
+                  Updates.createdAt ? ` · ${new Date(Updates.createdAt).toLocaleString()}` : ''
+                }`
+              : 'Embedded bundle — no OTA applied yet'}
+          </Text>
         </View>
       </ScrollView>
     </View>
