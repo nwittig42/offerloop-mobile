@@ -69,21 +69,45 @@ export function normalizeAsk(raw: string): { text: string; corrected: boolean } 
  *  (plenty of real startups aren't on any list; never block those) — and
  *  exported as ASR contextual vocabulary so Apple's recognizer hears
  *  "Moelis", not "mo lease" (SCOUT-RISK-REGISTER.md #6). */
-export const KNOWN_FIRMS = [
+const FINANCE_FIRMS = [
   'Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Bank of America', 'Citigroup',
   'Wells Fargo', 'Barclays', 'UBS', 'Deutsche Bank', 'RBC', 'Jefferies',
   'Evercore', 'Lazard', 'Centerview', 'Moelis', 'PJT Partners', 'Houlihan Lokey',
   'Rothschild', 'Guggenheim', 'Perella Weinberg', 'Qatalyst',
-  'McKinsey', 'Bain', 'BCG', 'Deloitte', 'PwC', 'EY', 'KPMG', 'Accenture',
-  'Oliver Wyman', 'Kearney', 'LEK', 'Alvarez and Marsal',
   'Blackstone', 'KKR', 'Apollo', 'Carlyle', 'TPG', 'Warburg Pincus',
   'Citadel', 'Point72', 'Millennium', 'Two Sigma', 'Jane Street', 'DE Shaw',
   'Bridgewater', 'Vista Equity', 'Silver Lake', 'General Atlantic', 'BlackRock',
+];
+
+const CONSULTING_FIRMS = [
+  'McKinsey', 'Bain', 'BCG', 'Deloitte', 'PwC', 'EY', 'KPMG', 'Accenture',
+  'Oliver Wyman', 'Kearney', 'LEK', 'Alvarez and Marsal',
+];
+
+const TECH_FIRMS = [
   'Google', 'Meta', 'Amazon', 'Apple', 'Microsoft', 'Netflix', 'Nvidia',
   'Stripe', 'OpenAI', 'Anthropic', 'Databricks', 'Palantir', 'Salesforce',
   'Uber', 'Airbnb', 'LinkedIn', 'Snowflake', 'Figma', 'Ramp', 'Plaid',
   'Coinbase', 'Robinhood', 'DoorDash', 'Tesla', 'SpaceX', 'Scale AI',
 ];
+
+export const KNOWN_FIRMS = [...FINANCE_FIRMS, ...CONSULTING_FIRMS, ...TECH_FIRMS];
+
+const normFirm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+
+/** Titles that actually EXIST at this kind of firm — suggestion chips must
+ *  be answerable (Rylan 2026-07-09: "Hiring managers at Moelis" searches a
+ *  title boutique banks barely use; titles are industry-specific). Unknown
+ *  firms get the generic-safe pair. */
+export function titleFamiliesFor(company: string | null): string[] {
+  if (!company) return ['Analysts', 'Recruiters'];
+  const c = normFirm(company);
+  const has = (list: string[]) => list.some((f) => normFirm(f) === c);
+  if (has(FINANCE_FIRMS)) return ['Analysts', 'Associates'];
+  if (has(CONSULTING_FIRMS)) return ['Consultants', 'Associates'];
+  if (has(TECH_FIRMS)) return ['Recruiters', 'Engineers'];
+  return ['Analysts', 'Recruiters'];
+}
 
 function editDistance(a: string, b: string): number {
   const m = a.length;
@@ -509,11 +533,14 @@ export function preflightFor(
 
   const variants: string[] = [];
   if (intent.company) {
-    variants.push(`Analysts at ${intent.company}`);
-    variants.push(`Associates at ${intent.company}`);
+    // Industry-aware titles + one can't-miss door (no title constraint —
+    // returns people at virtually any firm).
+    const fams = titleFamiliesFor(intent.company);
+    variants.push(`${fams[0]} at ${intent.company}`);
+    if (fams[1]) variants.push(`${fams[1]} at ${intent.company}`);
     const loc = (preferredLocations || []).find((l) => l && l.length < 24);
-    if (loc) variants.push(`Analysts at ${intent.company} in ${loc}`);
-    if (!intent.hm) variants.push(`Hiring managers at ${intent.company}`);
+    if (loc) variants.push(`${fams[0]} at ${intent.company} in ${loc}`);
+    variants.push(`Draft someone on the team at ${intent.company}`);
   }
   const note = senior
     ? 'Heads up: senior people rarely reply to cold student emails — analysts and associates are the warm door. Want the senior search anyway? Run it below.'
@@ -538,12 +565,16 @@ export function refineOptions(ask: string, preferredLocations: string[]): string
   const heardLoc = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i)?.[1]?.trim() ?? null;
   const browsey = /(show me|who works|people at|look up|browse)/i.test(ask);
   const tail = heardLoc ? ` in ${heardLoc}` : '';
+  // Industry-aware titles (chips must be answerable) + a can't-miss door.
+  const fams = titleFamiliesFor(company);
   const opts: string[] = [];
   if (browsey) opts.push(`Show me people at ${company}${tail}`);
-  opts.push(`Analysts at ${company}${tail}`, `Hiring managers at ${company}${tail}`);
-  if (!heardLoc) {
+  opts.push(`${fams[0]} at ${company}${tail}`);
+  if (fams[1]) opts.push(`${fams[1]} at ${company}${tail}`);
+  opts.push(`Draft someone on the team at ${company}${tail}`);
+  if (!browsey && !heardLoc && opts.length < 4) {
     const loc = (preferredLocations || []).find((l) => l && l.length < 24);
-    if (loc) opts.push(`Hiring managers at ${company} in ${loc}`);
+    if (loc) opts.push(`${fams[0]} at ${company} in ${loc}`);
   }
   return opts.slice(0, 4);
 }

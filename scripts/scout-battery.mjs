@@ -57,6 +57,9 @@ const battery = [
   ['show me people at Bain in LA', 'PREVIEW'],
   ['people at Evercore', null], ['who works at Meta', 'PREVIEW'],
   ['analysts at Blackstone in New York', null],
+  // The can't-miss chip phrasing (industry-aware variants, 2026-07-09) must
+  // parse as a draft at the named firm — it's on every coach/refine card.
+  ['Draft someone on the team at Moelis', 'DRAFT'],
   ['find me a pm role to apply to', 'JOBS'],
   ['apply to my saved jobs', 'APPLY'],
   ['prep me for my 2pm', 'PREP'],
