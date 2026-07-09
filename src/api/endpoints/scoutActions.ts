@@ -39,6 +39,11 @@ const ASR_FIXES: [RegExp, string][] = [
   [/\bever\s+core\b/gi, 'Evercore'],
   [/\bcenter\s+view\b/gi, 'Centerview'],
   [/\bmo\s+(ellis|less|liss)\b/gi, 'Moelis'],
+  // Field walk 2026-07-08: Moelis arrived as "Molly's" and "Molise" (the
+  // latter parsed as a LOCATION — "in Molise"). Zero legit uses in-domain.
+  [/\bmoll(y'?s|ies|is)\b/gi, 'Moelis'],
+  [/\b(at|in)\s+molise\b/gi, 'at Moelis'],
+  [/\bmolise\b/gi, 'Moelis'],
   [/\bjeff?er(ys|eys)\b/gi, 'Jefferies'],
   [/\bbark?l(eys|ies)\b/gi, 'Barclays'],
   [/\bcredit\s+swiss\b/gi, 'Credit Suisse'],
@@ -52,6 +57,10 @@ const ASR_FIXES: [RegExp, string][] = [
 export function normalizeAsk(raw: string): { text: string; corrected: boolean } {
   let text = raw;
   for (const [re, fix] of ASR_FIXES) text = text.replace(re, fix);
+  // Voice politeness is grammar noise to the parser — "…at Moelis please"
+  // must not read as a company called "Moelis please" (or merge a clarify
+  // answer into "at Please").
+  text = text.replace(/[,\s]*\b(please|thanks|thank you)\b\s*[.!?]?\s*$/i, '').trim();
   return { text, corrected: text !== raw };
 }
 
@@ -131,6 +140,22 @@ export function findFirmInText(ask: string): string | null {
   for (const firm of KNOWN_FIRMS) {
     const f = firm.toLowerCase().replace(/[^a-z0-9 ]/g, '');
     if (t.includes(` ${f} `)) return firm;
+  }
+  // Fuzzy pass over capitalized tokens: ASR capitalizes the proper nouns it
+  // invents ("Molise", "Molly's"), so a near-miss of a known firm hiding
+  // mid-sentence is still findable. Skip the first word (sentence case) and
+  // gate through suggestFirm's tolerance so common words can't false-fire.
+  const tokens = ask.split(/\s+/);
+  for (let i = 1; i < tokens.length; i++) {
+    const w = tokens[i];
+    if (!/^[A-Z]/.test(w) || w.length < 4) continue;
+    const hit = suggestFirm(w);
+    if (hit) return hit;
+    // Two-word window catches split names ("Perella Weinberg"-shaped damage).
+    if (i + 1 < tokens.length && /^[A-Z]/.test(tokens[i + 1])) {
+      const pair = suggestFirm(`${w} ${tokens[i + 1]}`);
+      if (pair) return pair;
+    }
   }
   return null;
 }

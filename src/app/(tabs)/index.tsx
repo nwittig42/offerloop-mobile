@@ -322,6 +322,20 @@ function ScoutTabInner() {
     return () => clearInterval(t);
   }, [phase]);
 
+  // Thinking watchdog: no request is allowed to pin the orb forever (field
+  // walk 2026-07-08 — backgrounded mid-search, spinner never recovered).
+  // Timers suspend in the background too, so this fires on return at worst.
+  useEffect(() => {
+    if (phase !== 'thinking') return;
+    const t = setTimeout(() => {
+      requestSeq.current += 1; // orphan whatever is still in flight
+      setPhase('idle');
+      setReply({ say: "That one took too long — nothing was charged. Ask me again.", actions: [] });
+      track('scout_thinking_timeout', {});
+    }, 40_000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   /** Merge an utterance's slots into the rolling conversation memory. */
   const remember = useCallback((ask: string) => {
     const slots = extractSlots(ask);

@@ -64,6 +64,10 @@ export async function sendScoutMessage(args: {
 
   const r = await apiFetch<any>('/api/scout-assistant/chat', {
     method: 'POST',
+    // Without a deadline this call can hang forever and pin the Scout tab on
+    // "Thinking…" (field walk 2026-07-08: backgrounded mid-ask, spinner never
+    // recovered). LLM chat is slow, but not this slow.
+    timeoutMs: 45_000,
     body: {
       message: args.message,
       conversation_history: args.history,
