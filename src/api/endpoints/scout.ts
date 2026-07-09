@@ -55,6 +55,44 @@ export function mapScoutRoute(route?: string): string | null {
   return null;
 }
 
+export type ScoutChatMeta = {
+  chat_id: string;
+  title: string;
+  last_active_at?: string;
+  message_count?: number;
+};
+
+/** Saved chats (server-persisted threads, TTL by tier — free sees 1, its
+ *  upgrade affordance). Backend: GET /api/scout-assistant/chats. */
+export async function listScoutChats(): Promise<ScoutChatMeta[]> {
+  const r = await apiFetch<any>('/api/scout-assistant/chats', {
+    method: 'GET',
+    query: { limit: 20 },
+    timeoutMs: 15_000,
+  });
+  return (Array.isArray(r?.chats) ? r.chats : []).filter(
+    (c: any) => typeof c?.chat_id === 'string' && c.chat_id,
+  );
+}
+
+/** One saved chat's messages, oldest first, mapped to plain turns. A missing
+ *  chat comes back empty rather than erroring (the server never 404s here). */
+export async function getScoutChat(
+  chatId: string,
+): Promise<{ chatId: string; turns: ScoutTurn[] }> {
+  const r = await apiFetch<any>(
+    `/api/scout-assistant/chats/${encodeURIComponent(chatId)}`,
+    { method: 'GET', timeoutMs: 15_000 },
+  );
+  const turns: ScoutTurn[] = (Array.isArray(r?.messages) ? r.messages : [])
+    .map((m: any) => ({
+      role: m?.role === 'user' ? ('user' as const) : ('assistant' as const),
+      content: typeof m?.content === 'string' ? m.content : '',
+    }))
+    .filter((t: ScoutTurn) => t.content.trim());
+  return { chatId, turns };
+}
+
 export async function sendScoutMessage(args: {
   message: string;
   history: ScoutTurn[];

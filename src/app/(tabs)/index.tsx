@@ -45,6 +45,10 @@ import {
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
 import { askScoutBrain, askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
+import { useIsFocused } from '@react-navigation/native';
+
+import { scoutThread } from '@/lib/scoutThread';
 import { useAuth } from '@/auth/AuthProvider';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
@@ -185,12 +189,14 @@ function fishyCompany(company: string | null): boolean {
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'clarify' | 'receipt';
 
-/** A live action card — the job plumbing wearing Scout's clothes. */
+/** A live action card — the job plumbing wearing Scout's clothes.
+ *  progressPct is optional: re-hydrated cards start WITHOUT a number (the
+ *  never-invented-progress rule) and gain one when the poller reports it. */
 type ActionCard = {
   id: string;
   title: string;
   stageLabel: string;
-  progressPct: number;
+  progressPct?: number;
 };
 
 /** The brand watercolor, night-tinted offline (light sky baked to
@@ -235,7 +241,13 @@ function ScoutTabInner() {
   // voice-first identity), but nothing Scout says vanishes anymore — long
   // answers and Scout's own questions used to auto-clear after 20s with no
   // way back (parity audit's top UX gap).
-  const [thread, setThread] = useState<{ from: 'user' | 'scout'; text: string }[]>([]);
+  // Thread storage lives in the shared scoutThread module (one conversation
+  // across the tab AND the header sheet); this counter just re-renders the
+  // header button + transcript overlay when entries land.
+  const [threadSize, setThreadSize] = useState(0);
+  // Focus re-render: the sheet appends to the shared thread while this tab
+  // is backgrounded — coming back must light the transcript button up.
+  const isFocused = useIsFocused();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
   const [cards, setCards] = useState<ActionCard[]>([]);
@@ -258,11 +270,9 @@ function ScoutTabInner() {
     tiers: { id: string; label: string; count: number; creditEstimate: number }[];
     chosen: number;
   } | null>(null);
-  const historyRef = useRef<ScoutTurn[]>([]);
-  // Server-side conversation id (SCOUT_BACKEND_HANDOFF.md): echo it back every
-  // turn or the backend starts a fresh chat each time — server memory, clarify
-  // resolution, and titling all hang off it. Session-scoped like historyRef.
-  const chatIdRef = useRef<string | null>(null);
+  // Conversation id + history live in scoutThread (shared with the sheet):
+  // echo chat_id back every turn or the backend starts a fresh chat each
+  // time — server memory, clarify resolution, and titling all hang off it.
   const requestSeq = useRef(0);
   const askByVoice = useRef(false);
   const lastDraftRef = useRef<DraftIntent | null>(null);
@@ -344,7 +354,8 @@ function ScoutTabInner() {
     // stay silent — gyms and lectures are why the type bar exists.
     if (askByVoice.current) speak(reply.say);
     if (reply.say) {
-      setThread((t) => [...t.slice(-79), { from: 'scout', text: reply.say }]);
+      scoutThread.append({ from: 'scout', text: reply.say });
+      setThreadSize(scoutThread.size());
     }
   }, [reply]);
 
@@ -495,19 +506,57 @@ function ScoutTabInner() {
           { timeoutMs: 15_000 },
         );
         for (const item of r.items || []) {
-          if (!alive || item.jobRef.kind !== 'draft_job') continue;
+          if (!alive) break;
           const id = item.jobRef.id;
-          upsertCard({ id, title: item.title, stageLabel: item.stageLabel || 'Working…', progressPct: 30 });
-          pollDraftJob(id, (p) => {
-            if (!alive) return;
-            upsertCard({ id, title: item.title, stageLabel: p.stageLabel || 'Working…', progressPct: p.progressPct || 30 });
-          })
-            .then(() => {
+          if (item.jobRef.kind === 'draft_job') {
+            // No invented progress: the card starts numberless and gains a
+            // real percentage on the first poll.
+            upsertCard({ id, title: item.title, stageLabel: item.stageLabel || 'Working…' });
+            pollDraftJob(id, (p) => {
               if (!alive) return;
-              dropCard(id);
-              setReply({ say: 'Done — that draft is in your Inbox.', actions: [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] });
+              upsertCard({ id, title: item.title, stageLabel: p.stageLabel || 'Working…', progressPct: p.progressPct });
             })
-            .catch(() => alive && dropCard(id));
+              .then(() => {
+                if (!alive) return;
+                dropCard(id);
+                setReply({ say: 'Done — that draft is in your Inbox.', actions: [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] });
+              })
+              .catch(() => alive && dropCard(id));
+          } else if (item.jobRef.kind === 'auto_apply') {
+            // Previously skipped with a bare `continue` — a submitting
+            // application survived the app kill invisibly. Poll the real
+            // status doc until a terminal state, no invented numbers.
+            const cardId = `aa-${id}`;
+            upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: item.stageLabel || 'Submitting…' });
+            void (async () => {
+              for (let i = 0; i < 45 && alive; i += 1) {
+                await new Promise((res) => setTimeout(res, 4000));
+                if (!alive) return;
+                let doc: AutoApplyStatusDoc;
+                try {
+                  doc = await fetchAutoApplyStatus(id);
+                } catch {
+                  continue; // transient — keep the card, try again
+                }
+                if (!alive) return;
+                if (AUTO_APPLY_TERMINAL.includes(doc.status)) {
+                  dropCard(cardId);
+                  const who = doc.job_title ? `${doc.job_title}${doc.company ? ` at ${doc.company}` : ''}` : item.title;
+                  setReply(
+                    doc.status === 'submitted'
+                      ? { say: `Submitted — ${who} is in.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] }
+                      : doc.status === 'needs_attention' || doc.status === 'needs_verification'
+                        ? { say: `${who} needs you — a question or a verification code is waiting.`, actions: [{ label: 'Finish it', href: `/apply-questions/${id}` }] }
+                        : { say: `${who} didn't go through — check Applications for what happened.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] },
+                  );
+                  return;
+                }
+                upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: doc.stage || 'Submitting…' });
+              }
+              // Poll budget spent (~3 min) — server zombie-filters at 8; let it go quietly.
+              if (alive) dropCard(cardId);
+            })();
+          }
         }
       } catch {
         /* re-hydration is best-effort */
@@ -543,7 +592,8 @@ function ScoutTabInner() {
       // re-entries re-speak the SAME ask in canonical form — the human's
       // words are already on the thread, so skip the echo.
       if (!meta?.viaClassifier) {
-        setThread((t) => [...t.slice(-79), { from: 'user', text: clean }]);
+        scoutThread.append({ from: 'user', text: clean });
+        setThreadSize(scoutThread.size());
       }
 
       // Spoken confirmation/dismissal drives whatever card is waiting.
@@ -1095,11 +1145,11 @@ function ScoutTabInner() {
           const env = await askScoutBrain({
             ask: clean,
             askId: `ask-${Date.now()}`,
-            conversationId: chatIdRef.current,
+            conversationId: scoutThread.chatId(),
             source: meta?.byVoice ? 'voice' : 'typed',
           });
           if (seq !== requestSeq.current) return; // edited/superseded — drop it
-          if (env.conversationId) chatIdRef.current = env.conversationId;
+          if (env.conversationId) scoutThread.setChatId(env.conversationId);
           say = env.say || "I didn't catch that — try asking again?";
           for (const a of env.actions || []) {
             if (
@@ -1130,20 +1180,17 @@ function ScoutTabInner() {
         } catch {
           const res = await sendScoutMessage({
             message: clean,
-            history: historyRef.current,
+            history: scoutThread.history(16),
             currentPage: '/scout',
-            chatId: chatIdRef.current,
+            chatId: scoutThread.chatId(),
           });
           if (seq !== requestSeq.current) return;
-          if (res.chatId) chatIdRef.current = res.chatId;
+          if (res.chatId) scoutThread.setChatId(res.chatId);
           say = res.message;
           actions = res.actions;
         }
-        historyRef.current = [
-          ...historyRef.current.slice(-8),
-          { role: 'user', content: clean },
-          { role: 'assistant', content: say },
-        ];
+        // The user's ask and Scout's reply both land on the shared thread via
+        // the submitAsk/reply-effect appends — no separate history to keep.
         setReply({ say, actions });
         setPhase('idle');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1277,7 +1324,7 @@ function ScoutTabInner() {
         }}>
         <Pressable
           onPress={() => {
-            if (thread.length) setTranscriptOpen(true);
+            if (scoutThread.size()) setTranscriptOpen(true);
           }}
           hitSlop={10}
           accessibilityRole="button"
@@ -1286,7 +1333,7 @@ function ScoutTabInner() {
           <Ionicons
             name="chatbubbles-outline"
             size={22}
-            color={thread.length ? NIGHT.ink : NIGHT.ink3}
+            color={isFocused && (threadSize || scoutThread.size()) ? NIGHT.ink : NIGHT.ink3}
           />
         </Pressable>
         <Text
@@ -1477,17 +1524,23 @@ function ScoutTabInner() {
                 <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{c.title}</Text>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9DB4FF' }}>{c.stageLabel}</Text>
-              <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)', overflow: 'hidden' }}>
-                <Animated.View
-                  layout={LinearTransition.duration(700)}
-                  style={{
-                    height: '100%',
-                    width: `${Math.max(4, Math.min(c.progressPct, 96))}%`,
-                    borderRadius: 2,
-                    backgroundColor: NIGHT.accent,
-                  }}
-                />
-              </View>
+              {typeof c.progressPct === 'number' ? (
+                <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)', overflow: 'hidden' }}>
+                  <Animated.View
+                    layout={LinearTransition.duration(700)}
+                    style={{
+                      height: '100%',
+                      width: `${Math.max(4, Math.min(c.progressPct, 96))}%`,
+                      borderRadius: 2,
+                      backgroundColor: NIGHT.accent,
+                    }}
+                  />
+                </View>
+              ) : (
+                // No number yet (re-hydrated card) — an empty track, never an
+                // invented percentage. The spinner above already says "live".
+                <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)' }} />
+              )}
             </Animated.View>
           ))}
 
@@ -2072,7 +2125,7 @@ function ScoutTabInner() {
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, gap: 9 }}
             // Latest exchange is what you came to re-read.
             ref={(r) => r?.scrollToEnd({ animated: false })}>
-            {thread.map((m, i) =>
+            {scoutThread.entries().map((m, i) =>
               m.from === 'user' ? (
                 <View
                   key={i}

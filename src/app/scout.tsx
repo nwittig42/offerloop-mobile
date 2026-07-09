@@ -12,17 +12,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
+import {
+  getScoutChat,
+  listScoutChats,
+  sendScoutMessage,
+  type ScoutAction,
+  type ScoutChatMeta,
+  type ScoutTurn,
+} from '@/api/endpoints/scout';
 import Input from '@/components/ui/Input';
+import { scoutThread } from '@/lib/scoutThread';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Scout, the AI assistant, as a summonable sheet. A small history sidebar
- * holds a New chat button, tucked behind a button so it never crowds the
- * conversation. The chat is live against the real backend service
- * (/api/scout-assistant/chat) — it answers with the user's resume + pipeline.
+ * Scout, the AI assistant, as a summonable sheet. The conversation is the
+ * SAME thread as the Scout tab (shared via scoutThread) — opening the sheet
+ * mid-session shows what you and Scout already said, and the server chat_id
+ * rides along so clarifies resolve across surfaces. The history sidebar
+ * lists the server-persisted chats (free tier sees one — its upgrade
+ * affordance); tapping one loads it into both surfaces.
  */
 
 type Message = { from: 'user' | 'scout'; text: string; actions?: ScoutAction[] };
@@ -47,11 +57,16 @@ export default function ScoutScreen() {
     ? `You're looking at ${job.title} at ${job.company}. Ask me how to position yourself, who to reach, or what to say — I've got your resume and pipeline.`
     : "Hey, I'm Scout. Ask me anything about your search — who to reach at a company, what to say in a coffee chat, or which jobs fit your resume.";
 
-  const [messages, setMessages] = useState<Message[]>([{ from: 'scout', text: greeting }]);
+  // Seed from the shared thread: the sheet continues whatever conversation
+  // the Scout tab already has going (and vice versa).
+  const [messages, setMessages] = useState<Message[]>(() => [
+    { from: 'scout', text: greeting },
+    ...scoutThread.entries().map((e) => ({ from: e.from, text: e.text })),
+  ]);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const chatId = useRef<string | null>(null);
+  const [savedChats, setSavedChats] = useState<ScoutChatMeta[] | 'loading' | 'error'>('loading');
 
   const userInfo = {
     name: profile.name,
@@ -61,25 +76,52 @@ export default function ScoutScreen() {
   };
 
   const newChat = () => {
-    chatId.current = null;
+    scoutThread.reset();
     setMessages([{ from: 'scout', text: greeting }]);
     setHistoryOpen(false);
+  };
+
+  const openHistory = () => {
+    setHistoryOpen(true);
+    setSavedChats('loading');
+    listScoutChats()
+      .then(setSavedChats)
+      .catch(() => setSavedChats('error'));
+  };
+
+  const loadChat = async (meta: ScoutChatMeta) => {
+    setHistoryOpen(false);
+    setThinking(true);
+    try {
+      const { turns } = await getScoutChat(meta.chat_id);
+      const entries = turns.map((t) => ({
+        from: t.role === 'user' ? ('user' as const) : ('scout' as const),
+        text: t.content,
+      }));
+      // Both surfaces swap to the loaded thread together.
+      scoutThread.replaceAll(entries, meta.chat_id);
+      setMessages([{ from: 'scout', text: greeting }, ...entries]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 50);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { from: 'scout', text: "I couldn't load that chat — give it another try." },
+      ]);
+    } finally {
+      setThinking(false);
+    }
   };
 
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || thinking) return;
 
-    // History = the conversation so far, minus the synthetic greeting
-    // (index 0), capped at the last 8 turns like the Scout tab — the server
-    // reloads the full thread from chat_id anyway; resending everything just
-    // bloats the request.
-    const history: ScoutTurn[] = messages.slice(1).slice(-16).map((m) => ({
-      role: m.from === 'user' ? 'user' : 'assistant',
-      content: m.text,
-    }));
+    // Shared rolling window (server reloads the full thread from chat_id
+    // anyway; resending everything just bloats the request).
+    const history: ScoutTurn[] = scoutThread.history(16);
 
     setMessages((prev) => [...prev, { from: 'user', text: trimmed }]);
+    scoutThread.append({ from: 'user', text: trimmed });
     setDraft('');
     setThinking(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
@@ -90,9 +132,10 @@ export default function ScoutScreen() {
         history,
         currentPage: job ? '/job-board' : '/home',
         userInfo,
-        chatId: chatId.current,
+        chatId: scoutThread.chatId(),
       });
-      if (res.chatId) chatId.current = res.chatId;
+      if (res.chatId) scoutThread.setChatId(res.chatId);
+      scoutThread.append({ from: 'scout', text: res.message });
       setMessages((prev) => [...prev, { from: 'scout', text: res.message, actions: res.actions }]);
     } catch {
       setMessages((prev) => [
@@ -121,7 +164,7 @@ export default function ScoutScreen() {
           gap: 8,
         }}>
         <Pressable
-          onPress={() => setHistoryOpen(true)}
+          onPress={openHistory}
           accessibilityRole="button"
           accessibilityLabel="Chat history"
           style={{ padding: 4 }}>
@@ -362,11 +405,50 @@ export default function ScoutScreen() {
                 New chat
               </Text>
             </Pressable>
-            <View style={{ paddingTop: 16, paddingHorizontal: 4 }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, lineHeight: 18 }}>
-                Saved chat history is coming soon. New chat starts a fresh thread.
-              </Text>
-            </View>
+            <ScrollView style={{ flex: 1, marginTop: 10 }} contentContainerStyle={{ gap: 6, paddingBottom: 24 }}>
+              {savedChats === 'loading' ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, paddingHorizontal: 4 }}>
+                  Loading your chats…
+                </Text>
+              ) : savedChats === 'error' ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, paddingHorizontal: 4, lineHeight: 18 }}>
+                  Couldn't load saved chats — check your connection and reopen this panel.
+                </Text>
+              ) : savedChats.length === 0 ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, paddingHorizontal: 4, lineHeight: 18 }}>
+                  No saved chats yet — ask Scout something and the thread lands here.
+                </Text>
+              ) : (
+                savedChats.map((c) => {
+                  const active = c.chat_id === scoutThread.chatId();
+                  return (
+                    <Pressable
+                      key={c.chat_id}
+                      onPress={() => void loadChat(c)}
+                      style={{
+                        paddingVertical: 10,
+                        paddingHorizontal: 10,
+                        borderRadius: 8,
+                        backgroundColor: active ? colors.accent + '14' : 'transparent',
+                        borderWidth: active ? 1 : 0,
+                        borderColor: active ? colors.accent + '44' : 'transparent',
+                        gap: 2,
+                      }}>
+                      <Text
+                        style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}
+                        numberOfLines={1}>
+                        {c.title || 'Untitled chat'}
+                      </Text>
+                      {c.message_count ? (
+                        <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.inkTertiary }}>
+                          {c.message_count} message{c.message_count === 1 ? '' : 's'}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
           </View>
           <Pressable
             onPress={() => setHistoryOpen(false)}
