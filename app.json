@@ -75,8 +75,8 @@
     },
     "extra": {
       "apiBaseUrl": "https://offerloop-staging.onrender.com",
-      "posthogKey": "",
-      "posthogHost": "https://us.i.posthog.com",
+      "posthogKey": "phc_rnG5BFvMaxqNrdDFPGcXpAQxgsUGvxpYcuo7hEZqM8Wo",
+      "posthogHost": "https://data.offerloop.ai",
       "eas": {
         "projectId": "c2498b56-5d1c-4d17-bea7-b319b137541e"
       },
