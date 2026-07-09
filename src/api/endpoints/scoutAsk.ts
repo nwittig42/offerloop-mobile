@@ -57,6 +57,29 @@ export async function classifyAsk(ask: string, askId: string): Promise<AskClassi
   return r.classification;
 }
 
+/** Voice overhaul P2: one round trip that turns the RAW ask audio into an
+ *  understanding. Server transcribes with a firm-vocabulary-primed model
+ *  (falls back internally to the Apple transcript on any ASR failure —
+ *  transcript_source says which won), then classifies with the same cached
+ *  brain as classifyAsk. */
+export async function transcribeAsk(args: {
+  audioUri: string;
+  appleTranscript: string;
+  askId: string;
+  hintCompanies: string[];
+}): Promise<{ transcript: string; transcript_source: 'audio' | 'apple'; classification: AskClassification }> {
+  const form = new FormData();
+  form.append('audio', { uri: args.audioUri, name: 'ask.wav', type: 'audio/wav' } as unknown as Blob);
+  form.append('askId', args.askId);
+  form.append('apple_transcript', args.appleTranscript.slice(0, 500));
+  form.append('hint_companies', JSON.stringify(args.hintCompanies.slice(0, 25)));
+  return apiFetch('/api/mobile/scout/transcribe-ask', {
+    method: 'POST',
+    body: form,
+    timeoutMs: 15_000,
+  });
+}
+
 export async function askScoutFindContacts(args: {
   ask: string;
   askId: string;

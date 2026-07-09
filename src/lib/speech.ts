@@ -4,7 +4,11 @@
  * in builds cut after 2026-07-07, but this JS ships over the air to older
  * builds too — so every access goes through lazy require + try/catch, and
  * callers render a type-first UI when voice isn't available yet.
- * Audio never leaves the device (requiresOnDeviceRecognition).
+ * Recognition runs on-device (requiresOnDeviceRecognition) for the live
+ * transcript; when a caller passes onAudioFile, the raw clip is also
+ * persisted locally and MAY be uploaded for server transcription — gated to
+ * founder accounts until the permission-copy build ships (see app.json note
+ * in the voice-overhaul plan).
  */
 
 type SpeechModule = typeof import('expo-speech-recognition');
@@ -52,6 +56,10 @@ export type SpeechEvents = {
    *  targets) — SFSpeechRecognitionRequest.contextualStrings on iOS. Apple
    *  wants this list short and specific, so callers should cap it. */
   contextualStrings?: string[];
+  /** URI of the persisted recording (voice overhaul P2) — fires on the
+   *  native 'audioend' event, null on platforms that can't record
+   *  (Android <13). The file is the raw ask, uploadable for server ASR. */
+  onAudioFile?: (uri: string | null) => void;
 };
 
 /** Start listening. Returns a stop() function, or null if unavailable. */
@@ -70,6 +78,9 @@ export function startListening(events: SpeechEvents): (() => void) | null {
       // value arrives roughly in [-2, 10] dBish range per docs; normalize.
       const v = typeof e?.value === 'number' ? Math.max(0, Math.min(1, (e.value + 2) / 12)) : 0;
       events.onVolume?.(v);
+    }),
+    m.ExpoSpeechRecognitionModule.addListener('audioend', (e: any) => {
+      events.onAudioFile?.(e?.uri ?? null);
     }),
     m.ExpoSpeechRecognitionModule.addListener('end', () => {
       subs.forEach((s) => s.remove());
@@ -94,6 +105,21 @@ export function startListening(events: SpeechEvents): (() => void) | null {
       volumeChangeEventOptions: { enabled: true, intervalMillis: 120 },
       ...(events.contextualStrings?.length
         ? { contextualStrings: events.contextualStrings.slice(0, 120) }
+        : {}),
+      // Persist the raw ask audio (voice overhaul P2) so the server can
+      // transcribe it with a vocabulary-primed model. iOS may ignore the
+      // 16k hint and emit 44.1k — the server reads the WAV header, and a
+      // 10s clip is <1MB either way. On-device recognition still runs for
+      // the live transcript; the callers' founder gate decides uploads.
+      ...(events.onAudioFile
+        ? {
+            recordingOptions: {
+              persist: true,
+              outputFileName: `scout_ask_${Date.now()}.wav`,
+              outputSampleRate: 16000,
+              outputEncoding: 'pcmFormatInt16',
+            },
+          }
         : {}),
     });
   } catch {

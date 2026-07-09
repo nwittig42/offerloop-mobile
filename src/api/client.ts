@@ -68,7 +68,10 @@ export async function apiFetch<T = any>(path: string, opts: FetchOptions = {}): 
 
   const doFetch = async (forceTokenRefresh: boolean): Promise<Response> => {
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    // FormData passes through raw — RN's fetch sets the multipart boundary
+    // itself, and a manual Content-Type would break it (voice-ask uploads).
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
     if (auth) {
       const token = await getIdToken(forceTokenRefresh);
       if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -76,7 +79,7 @@ export async function apiFetch<T = any>(path: string, opts: FetchOptions = {}): 
     return fetch(url, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       signal: effectiveSignal,
     });
   };

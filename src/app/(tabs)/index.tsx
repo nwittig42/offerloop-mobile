@@ -44,7 +44,8 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
-import { askScoutFindContacts, classifyAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { useAuth } from '@/auth/AuthProvider';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import type { Job } from '@/types';
@@ -114,6 +115,19 @@ const NO_GMAIL_POOL = [
 ];
 
 const INTRO_SEEN_KEY = 'offerloop.scoutIntro.v1';
+
+/** Voice audio-upload gate (voice overhaul P2): current builds' mic
+ *  permission copy promises "Audio never leaves your phone", so server
+ *  transcription runs ONLY for founder accounts until the App Store build
+ *  ships honest copy (blocking item in the overhaul plan). Everyone else
+ *  gets the Phase-1 path (LLM understanding of the Apple transcript). */
+const AUDIO_UPLOAD_ALLOWLIST = ['rylanbohnett@gmail.com', 'deena.bandi004@gmail.com'];
+const audioUploadAllowed = (email: string | null | undefined): boolean => {
+  const e = (email || '').toLowerCase();
+  return !!e && (AUDIO_UPLOAD_ALLOWLIST.includes(e) || e.endsWith('@offerloop.ai'));
+};
+
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const THINK_WORDS = [
   'Thinking', 'Scouting', 'Charting the route', 'Reading the trail',
@@ -208,6 +222,8 @@ function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { showToast, unreadCount, savedJobs, allJobs, profile, loops, swipeSettings, bootPending, loopsReady } = useApp();
+  const { user } = useAuth();
+  const serverAudioAllowed = audioUploadAllowed(user?.email);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -500,6 +516,9 @@ function ScoutTabInner() {
         localOnly?: boolean;
         /** Server repaired the company to this name — always confirm-card. */
         serverCorrected?: string | null;
+        /** Recorded ask audio (founder-gated) — audioend races end, so a
+         *  getter + settled flag instead of a plain value. */
+        getAudio?: () => { uri: string | null; settled: boolean };
       },
     ) => {
       const norm = normalizeAsk(text.trim());
@@ -669,29 +688,87 @@ function ScoutTabInner() {
         setReply(null);
         setPhase('thinking');
         const t0 = Date.now();
-        let cls: AskClassification | null = null;
-        try {
-          cls = await classifyAsk(clean, `cls-${Date.now()}`);
-        } catch {
-          cls = null;
+
+        // Leg B needs the recording; the native audioend event races 'end',
+        // so give the file URI up to 400ms to settle before deciding.
+        let audioUri: string | null = null;
+        if (meta.getAudio) {
+          for (let w = 0; w < 8 && !meta.getAudio().settled; w++) await wait(50);
+          audioUri = meta.getAudio().uri;
         }
         if (seqU !== requestSeq.current) return;
-        const canonical = cls && !cls.error ? canonicalAsk(cls) : null;
-        if (canonical) {
+
+        // One resolution wins; every path re-enters submitAsk so the whole
+        // gate ladder (incl. the spend gate) applies to the canonical ask.
+        let done = false;
+        const finish = (
+          cls: AskClassification | null,
+          transcript: string,
+          leg: 'audio' | 'apple',
+        ): boolean => {
+          if (done || seqU !== requestSeq.current) return done;
+          const canonical = cls && !cls.error ? canonicalAsk(cls) : null;
+          if (!canonical) return false;
+          done = true;
+          // Verbatim is judged against the transcript THIS classification was
+          // computed from — checking leg B's company against Apple's garble
+          // would flag every successful server fix on the wrong string.
           const corrected =
-            !!cls!.company && (cls!.repaired || !companyVerbatimIn(cls!.company, clean));
-          track('scout_understand', { leg: 'apple', ms: Date.now() - t0, corrected });
+            !!cls!.company && (cls!.repaired || !companyVerbatimIn(cls!.company, transcript));
+          track('scout_understand', { leg, ms: Date.now() - t0, corrected });
           void submitAsk(canonical, {
             viaClassifier: true,
             heardRaw: clean,
             byVoice: true,
             serverCorrected: corrected ? cls!.company : null,
           });
-          return;
+          return true;
+        };
+
+        // Fire both legs concurrently. B (audio) subsumes A (it classifies
+        // the better transcript, and the server internally falls back to the
+        // Apple transcript) — so B-preferred, A is the latency hedge.
+        const legA = classifyAsk(clean, `cls-${Date.now()}`).catch(() => null);
+        const legB: Promise<Awaited<ReturnType<typeof transcribeAsk>> | null> = audioUri
+          ? transcribeAsk({
+              audioUri,
+              appleTranscript: clean,
+              askId: `ta-${Date.now()}`,
+              hintCompanies: loopCompanies,
+            }).catch(() => null)
+          : Promise.resolve(null);
+
+        let heldA: AskClassification | null = null;
+        void legB.then((b) => {
+          if (b) finish(b.classification, b.transcript, b.transcript_source);
+        });
+        void legA.then((a) => {
+          if (!a || a.error) return;
+          // Act on A immediately only when Apple clearly heard a real firm
+          // (verbatim + unrepaired) — audio adds nothing there. Otherwise
+          // hold A for the deadline; B's transcript is authoritative.
+          if (a.company && !a.repaired && companyVerbatimIn(a.company, clean)) {
+            finish(a, clean, 'apple');
+            return;
+          }
+          heldA = a;
+        });
+
+        // Policy deadline: prefer B up to 12s, then act on A, then B's tail
+        // (12-15s), then the pure-local ladder. Never a dead end.
+        await Promise.race([legB, wait(12_000)]);
+        if (!done) {
+          const a = heldA ?? (await legA);
+          if (a) finish(a, clean, 'apple');
         }
-        // Server unreachable or unhelpful — today's local ladder, unchanged.
-        track('scout_understand', { leg: 'local', ms: Date.now() - t0, corrected: false });
-        void submitAsk(clean, { ...meta, localOnly: true });
+        if (!done) {
+          const b = await legB;
+          if (b) finish(b.classification, b.transcript, b.transcript_source);
+        }
+        if (!done && seqU === requestSeq.current) {
+          track('scout_understand', { leg: 'local', ms: Date.now() - t0, corrected: false });
+          void submitAsk(clean, { ...meta, localOnly: true });
+        }
         return;
       }
 
@@ -1020,8 +1097,20 @@ function ScoutTabInner() {
     setPhase('listening');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     let finalText = '';
+    // Ask audio for server transcription (P2). Only captured at all for
+    // allowlisted founder accounts — see AUDIO_UPLOAD_ALLOWLIST.
+    let audioUri: string | null = null;
+    let audioSettled = false;
     stopRef.current = startListening({
       contextualStrings: speechVocab,
+      ...(serverAudioAllowed
+        ? {
+            onAudioFile: (u: string | null) => {
+              audioUri = u;
+              audioSettled = true;
+            },
+          }
+        : {}),
       onTranscript: (text) => {
         finalText = text;
         setTranscript(text);
@@ -1036,7 +1125,12 @@ function ScoutTabInner() {
         setPhase((p) => {
           if (p !== 'listening') return p;
           if (finalText.trim()) {
-            void submitAsk(finalText, { byVoice: true });
+            void submitAsk(finalText, {
+              byVoice: true,
+              ...(serverAudioAllowed
+                ? { getAudio: () => ({ uri: audioUri, settled: audioSettled }) }
+                : {}),
+            });
             return 'thinking';
           }
           return 'idle';
@@ -1047,7 +1141,7 @@ function ScoutTabInner() {
       setPhase('idle');
       showToast('Voice is unavailable right now — type below instead');
     }
-  }, [voiceReady, showToast, submitAsk, volume, speechVocab]);
+  }, [voiceReady, showToast, submitAsk, volume, speechVocab, serverAudioAllowed]);
 
   const orbPressed = useCallback(() => {
     firstAction('orb');
