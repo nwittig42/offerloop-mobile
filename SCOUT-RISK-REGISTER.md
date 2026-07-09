@@ -13,6 +13,20 @@ for: landing-tab first tap, Scout ask count/day, gate outcomes
 (run/cancel/edit rates on pre-flight). The cancel-rate on the spend gate is
 also the mishear-rate metric we currently can't see.
 
+**INSTRUMENTED 2026-07-08 (OTA-able, no native deps):** the Scout tab now
+emits `scout_first_action` (orb/typed/chip/notifications), `scout_ask`
+(intent, voice/typed/chip/variant source, ASR-corrected flag),
+`scout_ask_classified`, `scout_ask_edited`, `scout_gate` +
+`scout_gate_outcome` (every trust-ladder card: spend / fishy_company /
+preflight_coach / did_you_mean / clarify / refine / receipt / apply_one /
+repeat / context_inferred — outcome run/cancel/variant, method tap/voice),
+and `scout_action_completed` (draft/apply, ok, no_credits). Mishear rate =
+`scout_gate_outcome` where gate in (spend, fishy_company) and outcome =
+cancel. **Still needed to go live:** paste the web project's PostHog key
+into app.json → expo.extra.posthogKey (grab `VITE_PUBLIC_POSTHOG_KEY` from
+Render env or PostHog project settings), then OTA publish. Events no-op
+until then.
+
 ## 2. PDL spend on free previews
 Preview is uncharged but each browse costs a real PDL lookup. **Trigger:**
 PDL line item grows without matching draft revenue (watch for 2 weeks —

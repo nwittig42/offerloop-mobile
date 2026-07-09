@@ -49,6 +49,7 @@ import { fonts } from '@/theme/tokens';
 import ScoutErrorBoundary from '@/components/scout/ScoutErrorBoundary';
 import { requestSpeechPermissions, speechSupported, startListening } from '@/lib/speech';
 import { speak, stopSpeaking } from '@/lib/speak';
+import { track } from '@/lib/analytics';
 
 /**
  * The Scout tab — P1 of PLAN-scout-voice.md ("talk to Scout"). Voice/typed
@@ -187,7 +188,7 @@ function ScoutTabInner() {
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
   const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
   const [refine, setRefine] = useState<{ heard: string; options: string[] } | null>(null);
-  const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent } | null>(null);
+  const [preflight, setPreflight] = useState<{ pf: Preflight; intent: DraftIntent; gate: string } | null>(null);
   const [sugOffset, setSugOffset] = useState(0);
   const [ctx, setCtx] = useState<{ slots: AskSlots; age: number } | null>(null);
   const [jobPicks, setJobPicks] = useState<{ query: string; jobs: Job[] } | null>(null);
@@ -210,6 +211,15 @@ function ScoutTabInner() {
   const stopRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<TextInput>(null);
   const volume = useSharedValue(0);
+
+  // The landing-screen bet needs first-tap data, not anecdotes
+  // (SCOUT-RISK-REGISTER.md #1): what does a user touch first on this tab?
+  const firstActionRef = useRef(false);
+  const firstAction = useCallback((action: string) => {
+    if (firstActionRef.current) return;
+    firstActionRef.current = true;
+    track('scout_first_action', { action });
+  }, []);
 
   // Deliberately NOT probed at mount: the very first touch of the native
   // speech module happens on the user's tap, so screen-open can never crash
@@ -298,6 +308,7 @@ function ScoutTabInner() {
           });
         });
         dropCard(id);
+        track('scout_action_completed', { action: 'draft', ok: true, count: res.names.length });
         setReply({
           say: res.say,
           actions: res.names.length ? [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] : [],
@@ -307,6 +318,7 @@ function ScoutTabInner() {
         dropCard(id);
         const msg = e instanceof Error ? e.message : '';
         const noCredits = /credit/i.test(msg);
+        track('scout_action_completed', { action: 'draft', ok: false, no_credits: noCredits });
         setReply(
           noCredits
             ? {
@@ -336,10 +348,12 @@ function ScoutTabInner() {
           upsertCard({ id, title, stageLabel: p.stageLabel, progressPct: p.progressPct });
         });
         dropCard(id);
+        track('scout_action_completed', { action: 'apply', ok: true, count: jobs.length });
         setReply({ say: res.say, actions: [{ label: 'Open Applications', href: '/(tabs)/network' }] });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {
         dropCard(id);
+        track('scout_action_completed', { action: 'apply', ok: false });
         setReply({ say: 'Those applications hit a snag — check Applications for details.', actions: [] });
       }
     },
@@ -381,7 +395,7 @@ function ScoutTabInner() {
   }, [upsertCard, dropCard]);
 
   const submitAsk = useCallback(
-    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string; byVoice?: boolean }) => {
+    async (text: string, meta?: { viaClassifier?: boolean; heardRaw?: string; byVoice?: boolean; source?: string }) => {
       const norm = normalizeAsk(text.trim());
       let clean = norm.text;
       if (!clean) return;
@@ -392,6 +406,11 @@ function ScoutTabInner() {
       const pending = preflight || didYouMean || applyOne || receipt;
       if (aff && pending) {
         stopSpeaking();
+        track('scout_gate_outcome', {
+          gate: preflight ? preflight.gate : didYouMean ? 'did_you_mean' : applyOne ? 'apply_one' : 'receipt',
+          outcome: aff === 'yes' ? 'run' : 'cancel',
+          method: 'voice',
+        });
         if (aff === 'yes') {
           if (preflight) {
             const it = preflight.intent;
@@ -436,6 +455,7 @@ function ScoutTabInner() {
         const it = lastDraftRef.current;
         stopSpeaking();
         setReply(null);
+        track('scout_gate', { gate: 'repeat' });
         setPreflight({
           pf: {
             interpreted: `${it.wantedSend ? 'Send' : 'Draft'} ${it.count} ${it.role}${it.company ? ` at ${it.company}` : ''}${it.location ? ` in ${it.location}` : ''} · ${it.count * 5} credits`,
@@ -444,6 +464,7 @@ function ScoutTabInner() {
             note: 'Running the same ask again.',
           },
           intent: it,
+          gate: 'repeat',
         });
         setPhase('idle');
         return;
@@ -453,6 +474,7 @@ function ScoutTabInner() {
       const nav = parseNav(clean);
       if (nav) {
         stopSpeaking();
+        track('scout_ask', { intent: 'nav', by_voice: !!meta?.byVoice });
         setPhase('idle');
         setReply({ say: `Opening ${nav.label}.`, actions: [] });
         router.push(nav.href as never);
@@ -476,6 +498,7 @@ function ScoutTabInner() {
         setClarify(null);
         const merged = parseIntent(clean);
         if (merged?.kind === 'draft') {
+          track('scout_gate_outcome', { gate: 'clarify', outcome: 'answered', method: meta?.byVoice ? 'voice' : 'tap' });
           setAsk(clean);
           void runDraftAction(merged);
           return;
@@ -487,6 +510,20 @@ function ScoutTabInner() {
 
       remember(clean);
 
+      // Ask count/day + mishear-rate inputs (SCOUT-RISK-REGISTER.md #1).
+      // Classifier re-entries get their own event so scout_ask stays
+      // one-per-utterance.
+      if (meta?.viaClassifier) {
+        track('scout_ask_classified', { intent: intent?.kind ?? 'unparsed' });
+      } else {
+        track('scout_ask', {
+          intent: intent?.kind ?? 'unparsed',
+          by_voice: !!meta?.byVoice,
+          source: meta?.source ?? (meta?.byVoice ? 'voice' : 'typed'),
+          corrected: !!norm.corrected,
+        });
+      }
+
       if (intent?.kind === 'draft') {
         // Rolling conversation: a missing company fills from recent turns
         // ("find me people at Bain" … "find two hiring managers" keeps Bain)
@@ -494,6 +531,7 @@ function ScoutTabInner() {
         if (!intent.company && ctx && ctx.age <= 3 && ctx.slots.company) {
           const inferred = { ...intent, company: ctx.slots.company, location: intent.location ?? ctx.slots.location ?? null };
           setReply(null);
+          track('scout_gate', { gate: 'context_inferred' });
           setPreflight({
             pf: {
               interpreted: `${inferred.wantedSend ? 'Send' : 'Draft'} ${inferred.count} ${inferred.role}${inferred.company ? ` at ${inferred.company}` : ''}${inferred.location ? ` in ${inferred.location}` : ''} · ${inferred.count * 5} credits`,
@@ -502,6 +540,7 @@ function ScoutTabInner() {
               note: `Using ${ctx.slots.company} from earlier in this conversation — cancel if that's not what you meant.`,
             },
             intent: inferred,
+            gate: 'context_inferred',
           });
           setPhase('idle');
           return;
@@ -509,6 +548,7 @@ function ScoutTabInner() {
         const c = clarifyFor(intent);
         if (c) {
           setReply(null);
+          track('scout_gate', { gate: 'clarify' });
           setClarify({ question: c.question, baseAsk: clean });
           setPhase('clarify');
           return;
@@ -518,6 +558,7 @@ function ScoutTabInner() {
         const suggestion = intent.company ? suggestFirm(intent.company) : null;
         if (suggestion) {
           setReply(null);
+          track('scout_gate', { gate: 'did_you_mean' });
           setDidYouMean({ intent, suggestion });
           setPhase('idle');
           return;
@@ -527,7 +568,8 @@ function ScoutTabInner() {
         const pf = preflightFor(intent, clean, meta?.heardRaw ?? (norm.corrected ? text.trim() : null), profile?.preferredLocations ?? []);
         if (pf) {
           setReply(null);
-          setPreflight({ pf, intent });
+          track('scout_gate', { gate: 'preflight_coach' });
+          setPreflight({ pf, intent, gate: 'preflight_coach' });
           setPhase('idle');
           return;
         }
@@ -538,6 +580,9 @@ function ScoutTabInner() {
         const fishy = fishyCompany(intent.company);
         if (fishy || (meta?.byVoice && swipeSettings.scoutConfirmSpend)) {
           setReply(null);
+          // The spend gate's cancel rate IS the mishear metric — the number
+          // the risk register says we're currently blind to.
+          track('scout_gate', { gate: fishy ? 'fishy_company' : 'spend' });
           setPreflight({
             pf: {
               interpreted: `${intent.wantedSend ? 'Send' : 'Draft'} ${intent.count} ${intent.role}${intent.company ? ` at ${intent.company}` : ''}${intent.location ? ` in ${intent.location}` : ''} · ${intent.count * 5} credits`,
@@ -548,6 +593,7 @@ function ScoutTabInner() {
                 : null,
             },
             intent,
+            gate: fishy ? 'fishy_company' : 'spend',
           });
           setPhase('idle');
           return;
@@ -561,6 +607,7 @@ function ScoutTabInner() {
           // Transcription debris burns a real PDL lookup even when it's free
           // to the user — refine instead of searching noise.
           setReply(null);
+          track('scout_gate', { gate: 'refine' });
           setRefine({
             heard: clean,
             options: refineOptions(clean, profile?.preferredLocations ?? []) ?? [],
@@ -628,6 +675,7 @@ function ScoutTabInner() {
           return;
         }
         setReply(null);
+        track('scout_gate', { gate: 'receipt' });
         setReceipt({ eligible, tiers, chosen: tiers[0]?.count ?? Math.min(5, eligible.length) });
         setPhase('receipt');
         return;
@@ -672,6 +720,7 @@ function ScoutTabInner() {
       const options = intent ? null : refineOptions(clean, profile?.preferredLocations ?? []);
       if (options?.length) {
         setReply(null);
+        track('scout_gate', { gate: 'refine' });
         setRefine({ heard: clean, options });
         setPhase('idle');
         return;
@@ -756,16 +805,18 @@ function ScoutTabInner() {
   }, [voiceReady, showToast, submitAsk, volume]);
 
   const orbPressed = useCallback(() => {
+    firstAction('orb');
     if (phase === 'listening') {
       stopRef.current?.(); // stop → onEnd handles the handoff
       return;
     }
     if (phase === 'thinking') return; // let it cook; Edit is the escape hatch
     void beginListening();
-  }, [phase, beginListening]);
+  }, [phase, beginListening, firstAction]);
 
   const editAsk = useCallback(() => {
     requestSeq.current += 1; // orphan any in-flight reply
+    track('scout_ask_edited', {});
     setPhase('idle');
     setTyped(ask);
     setTimeout(() => inputRef.current?.focus(), 60);
@@ -815,7 +866,10 @@ function ScoutTabInner() {
           Scout
         </Text>
         <Pressable
-          onPress={() => router.push('/notifications')}
+          onPress={() => {
+            firstAction('notifications');
+            router.push('/notifications');
+          }}
           hitSlop={10}
           style={{ width: 32, alignItems: 'flex-end' }}>
           <View>
@@ -896,6 +950,7 @@ function ScoutTabInner() {
               <Pressable
                 onPress={() => {
                   const base = clarify.baseAsk;
+                  track('scout_gate_outcome', { gate: 'clarify', outcome: 'run_anywhere', method: 'tap' });
                   setClarify(null);
                   setPhase('idle');
                   const intent = parseIntent(base);
@@ -949,6 +1004,7 @@ function ScoutTabInner() {
               <View style={{ flexDirection: 'row', gap: 9, marginTop: 3 }}>
                 <Pressable
                   onPress={() => {
+                    track('scout_gate_outcome', { gate: 'receipt', outcome: 'cancel', method: 'tap' });
                     setReceipt(null);
                     setPhase('idle');
                   }}
@@ -956,7 +1012,10 @@ function ScoutTabInner() {
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink2 }}>Not now</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => void runApplyAction(receipt.eligible.slice(0, receipt.chosen))}
+                  onPress={() => {
+                    track('scout_gate_outcome', { gate: 'receipt', outcome: 'run', method: 'tap', count: receipt.chosen });
+                    void runApplyAction(receipt.eligible.slice(0, receipt.chosen));
+                  }}
                   style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#fff' }}>
                     Apply to {receipt.chosen}
@@ -1028,7 +1087,10 @@ function ScoutTabInner() {
                   {preflight.pf.variants.map((o) => (
                     <Pressable
                       key={o}
-                      onPress={() => void submitAsk(o)}
+                      onPress={() => {
+                        track('scout_gate_outcome', { gate: preflight.gate, outcome: 'variant', method: 'tap' });
+                        void submitAsk(o, { source: 'variant' });
+                      }}
                       style={{
                         borderWidth: 1,
                         borderColor: 'rgba(91,123,255,0.5)',
@@ -1044,13 +1106,17 @@ function ScoutTabInner() {
               ) : null}
               <View style={{ flexDirection: 'row', gap: 9, marginTop: 2 }}>
                 <Pressable
-                  onPress={() => setPreflight(null)}
+                  onPress={() => {
+                    track('scout_gate_outcome', { gate: preflight.gate, outcome: 'cancel', method: 'tap' });
+                    setPreflight(null);
+                  }}
                   style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
                     const it = preflight.intent;
+                    track('scout_gate_outcome', { gate: preflight.gate, outcome: 'run', method: 'tap' });
                     setPreflight(null);
                     void runDraftAction(it);
                   }}
@@ -1116,8 +1182,10 @@ function ScoutTabInner() {
                 <Pressable
                   key={j.id}
                   onPress={() => {
-                    if (j.autoApplyEligible) setApplyOne(j);
-                    else router.push('/(tabs)/feed' as never);
+                    if (j.autoApplyEligible) {
+                      track('scout_gate', { gate: 'apply_one' });
+                      setApplyOne(j);
+                    } else router.push('/(tabs)/feed' as never);
                   }}
                   style={{
                     borderWidth: 1,
@@ -1160,13 +1228,17 @@ function ScoutTabInner() {
               </Text>
               <View style={{ flexDirection: 'row', gap: 9 }}>
                 <Pressable
-                  onPress={() => setApplyOne(null)}
+                  onPress={() => {
+                    track('scout_gate_outcome', { gate: 'apply_one', outcome: 'cancel', method: 'tap' });
+                    setApplyOne(null);
+                  }}
                   style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Not now</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
                     const j = applyOne;
+                    track('scout_gate_outcome', { gate: 'apply_one', outcome: 'run', method: 'tap' });
                     setApplyOne(null);
                     setJobPicks(null);
                     void runApplyAction([j]);
@@ -1197,7 +1269,10 @@ function ScoutTabInner() {
                 {refine.options.map((o) => (
                   <Pressable
                     key={o}
-                    onPress={() => void submitAsk(o)}
+                    onPress={() => {
+                      track('scout_gate_outcome', { gate: 'refine', outcome: 'variant', method: 'tap' });
+                      void submitAsk(o, { source: 'variant' });
+                    }}
                     style={{
                       borderWidth: 1,
                       borderColor: 'rgba(91,123,255,0.5)',
@@ -1238,6 +1313,7 @@ function ScoutTabInner() {
                 <Pressable
                   onPress={() => {
                     const it = { ...didYouMean.intent };
+                    track('scout_gate_outcome', { gate: 'did_you_mean', outcome: 'run_original', method: 'tap' });
                     setDidYouMean(null);
                     void runDraftAction(it);
                   }}
@@ -1249,6 +1325,7 @@ function ScoutTabInner() {
                 <Pressable
                   onPress={() => {
                     const it = { ...didYouMean.intent, company: didYouMean.suggestion };
+                    track('scout_gate_outcome', { gate: 'did_you_mean', outcome: 'run_suggestion', method: 'tap' });
                     setDidYouMean(null);
                     void runDraftAction(it);
                   }}
@@ -1358,6 +1435,7 @@ function ScoutTabInner() {
                   returnKeyType="send"
                   onSubmitEditing={() => {
                     const t = typed;
+                    firstAction('typed');
                     setTyped('');
                     void submitAsk(t);
                   }}
@@ -1366,6 +1444,7 @@ function ScoutTabInner() {
                 <Pressable
                   onPress={() => {
                     const t = typed;
+                    firstAction('typed');
                     setTyped('');
                     void submitAsk(t);
                   }}
@@ -1385,7 +1464,10 @@ function ScoutTabInner() {
                   return (
                     <Pressable
                       key={sug}
-                      onPress={() => void submitAsk(sug)}
+                      onPress={() => {
+                        firstAction('chip');
+                        void submitAsk(sug, { source: 'chip' });
+                      }}
                       style={{
                         borderWidth: 1,
                         borderColor: NIGHT.lineSoft,
