@@ -21,6 +21,22 @@ Status as of 2026-06-29. iOS first (bundle id `ai.offerloop.app`). TestFlight be
 
 ---
 
+## CRITICAL — voice audio privacy copy (added 2026-07-09, voice overhaul P2)
+
+Server-side voice transcription shipped founder-gated (AUDIO_UPLOAD_ALLOWLIST
+in `src/app/(tabs)/index.tsx`). Before submission, IN THE SUBMISSION BUILD:
+
+1. **Rewrite `app.json` → `speechRecognitionPermission`** — it currently
+   promises "Audio never leaves your phone", which becomes false. New copy
+   shape: "Offerloop uses your microphone so Scout can act on what you ask.
+   Voice clips may be securely transcribed by our servers for accuracy."
+   Apple reviews `NSMicrophoneUsageDescription`/speech copy accuracy.
+2. **App Store privacy nutrition label:** declare Audio Data → App
+   Functionality (not tracking).
+3. **Privacy policy:** add voice-clip transcription (processed, not retained).
+4. After that build is live, **remove the founder gate** so all users get
+   server-grade voice accuracy.
+
 ## CRITICAL — reviewer login (the real gate)
 
 The app is **email magic-link only** (no password, no Google — by design, per PAYMENTS-AND-AUTH.md).
