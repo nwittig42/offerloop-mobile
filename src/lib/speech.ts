@@ -48,6 +48,10 @@ export type SpeechEvents = {
   onEnd: () => void;
   /** Live input loudness 0..1 for the orb. */
   onVolume?: (level: number) => void;
+  /** Domain vocabulary the recognizer should favor (firm names, the user's
+   *  targets) — SFSpeechRecognitionRequest.contextualStrings on iOS. Apple
+   *  wants this list short and specific, so callers should cap it. */
+  contextualStrings?: string[];
 };
 
 /** Start listening. Returns a stop() function, or null if unavailable. */
@@ -88,6 +92,9 @@ export function startListening(events: SpeechEvents): (() => void) | null {
       requiresOnDeviceRecognition: true,
       addsPunctuation: true,
       volumeChangeEventOptions: { enabled: true, intervalMillis: 120 },
+      ...(events.contextualStrings?.length
+        ? { contextualStrings: events.contextualStrings.slice(0, 120) }
+        : {}),
     });
   } catch {
     subs.forEach((s) => s.remove());

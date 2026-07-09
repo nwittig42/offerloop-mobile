@@ -56,9 +56,11 @@ export function normalizeAsk(raw: string): { text: string; corrected: boolean } 
 }
 
 /** The firms our users actually target (IB / consulting / tech / PE-HF).
- *  Used ONLY for did-you-mean fuzzy rescue — an unknown company runs as-is
- *  (plenty of real startups aren't on any list; never block those). */
-const KNOWN_FIRMS = [
+ *  Used for did-you-mean fuzzy rescue — an unknown company runs as-is
+ *  (plenty of real startups aren't on any list; never block those) — and
+ *  exported as ASR contextual vocabulary so Apple's recognizer hears
+ *  "Moelis", not "mo lease" (SCOUT-RISK-REGISTER.md #6). */
+export const KNOWN_FIRMS = [
   'Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Bank of America', 'Citigroup',
   'Wells Fargo', 'Barclays', 'UBS', 'Deutsche Bank', 'RBC', 'Jefferies',
   'Evercore', 'Lazard', 'Centerview', 'Moelis', 'PJT Partners', 'Houlihan Lokey',

@@ -70,6 +70,13 @@ KNOWN_FIRMS + the user's target companies; cheap, do next build);
 server-Whisper fallback for final transcripts (privacy/latency tradeoff);
 Nick's brain semantic repair (already specced).
 
+**SEEDED 2026-07-08 (OTA-able — the installed 3.1.3 native module already
+accepts contextualStrings, no new build):** every listen now passes
+KNOWN_FIRMS + the user's target roles, preferred locations, and companies
+parsed from their loop briefs (capped at 120 phrases, Apple wants the list
+short). Whether it moved the needle shows up in #1's spend-gate cancel
+rate — compare before/after the OTA.
+
 ## 7. TTS in the wrong room
 Scout speaking replies aloud is delightful until it happens in a lecture.
 Current guards: only voice-initiated asks get spoken replies; new

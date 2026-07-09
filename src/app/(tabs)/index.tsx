@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -36,6 +36,7 @@ import {
   preflightFor,
   refineOptions,
   suggestFirm,
+  KNOWN_FIRMS,
   type Preflight,
   type ActionProgress,
   type DraftIntent,
@@ -225,6 +226,24 @@ function ScoutTabInner() {
   // speech module happens on the user's tap, so screen-open can never crash
   // from it (post-crash hardening, 2026-07-08).
   const voiceReady = () => speechSupported();
+
+  // ASR vocabulary (SCOUT-RISK-REGISTER.md #6): Apple's on-device model
+  // favors these exact phrases, so "Moelis" survives a loud room. The base
+  // firm list plus this user's own targets — roles, locations, and any
+  // company named in their loops.
+  const speechVocab = useMemo(() => {
+    const fromLoops = loops
+      .map((l) => extractSlots(l.brief).company)
+      .filter((c): c is string => !!c);
+    return [
+      ...new Set([
+        ...KNOWN_FIRMS,
+        ...fromLoops,
+        ...(profile?.targetRoles ?? []),
+        ...(profile?.preferredLocations ?? []),
+      ]),
+    ];
+  }, [loops, profile?.targetRoles, profile?.preferredLocations]);
 
   // The reply card excuses itself: tapping its chip clears it, and otherwise
   // it fades out after a while so the tab returns to a clean idle.
@@ -777,6 +796,7 @@ function ScoutTabInner() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     let finalText = '';
     stopRef.current = startListening({
+      contextualStrings: speechVocab,
       onTranscript: (text) => {
         finalText = text;
         setTranscript(text);
@@ -802,7 +822,7 @@ function ScoutTabInner() {
       setPhase('idle');
       showToast('Voice is unavailable right now — type below instead');
     }
-  }, [voiceReady, showToast, submitAsk, volume]);
+  }, [voiceReady, showToast, submitAsk, volume, speechVocab]);
 
   const orbPressed = useCallback(() => {
     firstAction('orb');
