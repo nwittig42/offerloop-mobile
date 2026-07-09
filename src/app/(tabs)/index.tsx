@@ -678,10 +678,21 @@ function ScoutTabInner() {
       // Voice asks now consult the server classifier unless the parse names
       // an exact known firm; the canonical result re-enters this ladder so
       // every gate still applies. Typed asks stay regex-first (no mishears).
+      // Conversational follow-ups ("associates in Los Angeles" while the
+      // Moelis card is up) stay INSTANT: when the only missing piece is the
+      // company and the rolling context can supply it, skip the server —
+      // the context-inferred confirm card guards the inference anyway.
+      const ctxCanFillCompany =
+        intent?.kind === 'draft' &&
+        !intent.company &&
+        !!ctx &&
+        ctx.age <= 3 &&
+        !!ctx.slots.company;
       if (
         meta?.byVoice &&
         !meta?.viaClassifier &&
         !meta?.localOnly &&
+        !ctxCanFillCompany &&
         !isHighConfidenceParse(intent, loopCompanies)
       ) {
         const seqU = ++requestSeq.current;
@@ -1076,7 +1087,9 @@ function ScoutTabInner() {
         });
       }
     },
-    [clarify, savedJobs, runDraftAction, loopCompanies],
+    // ctx included: the context-inference and instant-follow-up checks read
+    // it — a stale closure here would forget the firm mid-conversation.
+    [clarify, savedJobs, runDraftAction, loopCompanies, ctx],
   );
 
   const beginListening = useCallback(async () => {
