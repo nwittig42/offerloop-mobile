@@ -66,7 +66,7 @@
         "expo-speech-recognition",
         {
           "microphonePermission": "Offerloop uses the microphone so you can talk to Scout \u2014 ask for drafts, research, and applications by voice.",
-          "speechRecognitionPermission": "Offerloop transcribes your voice on this device so Scout can act on what you ask. Audio never leaves your phone."
+          "speechRecognitionPermission": "Offerloop transcribes your voice so Scout can act on what you ask. Transcription starts on your device; short clips may also be sent securely to Offerloop's servers for a more accurate read. Never used for ads, never sold."
         }
       ]
     ],

@@ -23,19 +23,21 @@ Status as of 2026-06-29. iOS first (bundle id `ai.offerloop.app`). TestFlight be
 
 ## CRITICAL — voice audio privacy copy (added 2026-07-09, voice overhaul P2)
 
-Server-side voice transcription shipped founder-gated (AUDIO_UPLOAD_ALLOWLIST
-in `src/app/(tabs)/index.tsx`). Before submission, IN THE SUBMISSION BUILD:
+**Items 1 + 4 DONE 2026-07-09** (the honest-copy build): `app.json`
+speechRecognitionPermission rewritten ("Transcription starts on your device;
+short clips may also be sent securely to Offerloop's servers for a more
+accurate read. Never used for ads, never sold."), the Meet Scout overlay's
+"on-device only" line fixed, and the AUDIO_UPLOAD_ALLOWLIST founder gate
+REMOVED. Old builds with the on-device-only promise can never receive the
+gate-lifted JS: the app.json change moved the runtime fingerprint, and OTAs
+only target their own runtime — install the new build to cross over.
 
-1. **Rewrite `app.json` → `speechRecognitionPermission`** — it currently
-   promises "Audio never leaves your phone", which becomes false. New copy
-   shape: "Offerloop uses your microphone so Scout can act on what you ask.
-   Voice clips may be securely transcribed by our servers for accuracy."
-   Apple reviews `NSMicrophoneUsageDescription`/speech copy accuracy.
+Still manual, in App Store Connect / web, before submission:
+
 2. **App Store privacy nutrition label:** declare Audio Data → App
-   Functionality (not tracking).
+   Functionality (not tracking). Also PostHog analytics went live 2026-07-09
+   (identifiers + usage data → Analytics, not tracking).
 3. **Privacy policy:** add voice-clip transcription (processed, not retained).
-4. After that build is live, **remove the founder gate** so all users get
-   server-grade voice accuracy.
 
 ## CRITICAL — reviewer login (the real gate)
 

@@ -120,16 +120,12 @@ const NO_GMAIL_POOL = [
 
 const INTRO_SEEN_KEY = 'offerloop.scoutIntro.v1';
 
-/** Voice audio-upload gate (voice overhaul P2): current builds' mic
- *  permission copy promises "Audio never leaves your phone", so server
- *  transcription runs ONLY for founder accounts until the App Store build
- *  ships honest copy (blocking item in the overhaul plan). Everyone else
- *  gets the Phase-1 path (LLM understanding of the Apple transcript). */
-const AUDIO_UPLOAD_ALLOWLIST = ['rylanbohnett@gmail.com', 'deena.bandi004@gmail.com'];
-const audioUploadAllowed = (email: string | null | undefined): boolean => {
-  const e = (email || '').toLowerCase();
-  return !!e && (AUDIO_UPLOAD_ALLOWLIST.includes(e) || e.endsWith('@offerloop.ai'));
-};
+// Voice audio-upload founder gate: LIFTED 2026-07-09. The permission copy
+// in this build's app.json is honest about server transcription ("short
+// clips may also be sent securely to Offerloop's servers"), so every user
+// gets the accurate dual-leg path. Old builds with the on-device-only
+// promise can never receive this JS: the app.json change moved the runtime
+// fingerprint, and OTAs only target their own runtime.
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -229,7 +225,6 @@ function ScoutTabInner() {
   const router = useRouter();
   const { showToast, unreadCount, savedJobs, allJobs, profile, loops, swipeSettings, bootPending, loopsReady } = useApp();
   const { user } = useAuth();
-  const serverAudioAllowed = audioUploadAllowed(user?.email);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -1226,20 +1221,16 @@ function ScoutTabInner() {
     setPhase('listening');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     let finalText = '';
-    // Ask audio for server transcription (P2). Only captured at all for
-    // allowlisted founder accounts — see AUDIO_UPLOAD_ALLOWLIST.
+    // Ask audio for server transcription (P2) — captured for everyone now
+    // that this build's permission copy is honest about it.
     let audioUri: string | null = null;
     let audioSettled = false;
     stopRef.current = startListening({
       contextualStrings: speechVocab,
-      ...(serverAudioAllowed
-        ? {
-            onAudioFile: (u: string | null) => {
-              audioUri = u;
-              audioSettled = true;
-            },
-          }
-        : {}),
+      onAudioFile: (u: string | null) => {
+        audioUri = u;
+        audioSettled = true;
+      },
       onTranscript: (text) => {
         finalText = text;
         setTranscript(text);
@@ -1256,9 +1247,7 @@ function ScoutTabInner() {
           if (finalText.trim()) {
             void submitAsk(finalText, {
               byVoice: true,
-              ...(serverAudioAllowed
-                ? { getAudio: () => ({ uri: audioUri, settled: audioSettled }) }
-                : {}),
+              getAudio: () => ({ uri: audioUri, settled: audioSettled }),
             });
             return 'thinking';
           }
@@ -1270,7 +1259,7 @@ function ScoutTabInner() {
       setPhase('idle');
       showToast('Voice is unavailable right now — type below instead');
     }
-  }, [voiceReady, showToast, submitAsk, volume, speechVocab, serverAudioAllowed]);
+  }, [voiceReady, showToast, submitAsk, volume, speechVocab]);
 
   const orbPressed = useCallback(() => {
     firstAction('orb');
@@ -2070,7 +2059,7 @@ function ScoutTabInner() {
               </Text>
             </Pressable>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: NIGHT.ink3, textAlign: 'center' }}>
-              iOS will ask to use the mic — that's Scout listening, on-device only
+              iOS will ask to use the mic — that's Scout listening so it can act on your ask
             </Text>
             <Pressable onPress={() => dismissIntro('dismiss')} hitSlop={8}>
               <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink3 }}>
