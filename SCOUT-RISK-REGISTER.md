@@ -60,6 +60,18 @@ but the magic is dimmer. **Trigger:** TestFlight feedback "what do I say?"
 permission pre-prompt; suggestion chips already rotate, lean them toward
 no-setup asks (find jobs, browse people) for users with no Gmail.
 
+**BUILT 2026-07-08 (OTA-able):** one-time "Meet Scout" overlay — Scout
+face, three tappable example asks (tap runs it for real), "Say it out
+loud" CTA (doubles as the mic pre-prompt: "iOS will ask to use the mic —
+that's Scout listening, on-device only"), and an explore-on-my-own out.
+Shows only when the account genuinely looks new: gated on a new
+`loopsReady` store flag (loops fetch settled) + zero loops + zero saved
+jobs, so established users never see it even on first OTA launch. Persists
+per-device (`offerloop.scoutIntro.v1`). Chips now draw from a no-setup
+pool (jobs / browse people / prep first) until Gmail connects. Emits
+`scout_intro_shown` / `scout_intro_outcome` (example/voice/dismiss) so #1's
+analytics answer whether the coach converts.
+
 ## 6. ASR quality ceiling
 The fix-map + fuzzy + classifier ladder handles the common damage, but
 Apple's on-device model will keep inventing phrases in loud rooms.

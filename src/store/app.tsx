@@ -227,6 +227,10 @@ type AppStore = {
    *  it were the user's data. Releases on first /me settle (data OR error; the
    *  error path hands off to the honest "sample data" banner). */
   bootPending: boolean;
+  /** Loops fleet has actually been fetched (success or error) — before this,
+   *  `loops` is the empty fixture and "user has no loops" is unknowable.
+   *  Gates first-run UI that keys off an empty Scout. */
+  loopsReady: boolean;
   /**
    * Per-screen load state for the job feed and inbox. The store falls back to
    * fixtures until each query resolves, so these let the Feed/Inbox render their
@@ -744,6 +748,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loopsQuery.data) setLoops(loopsQuery.data);
   }, [loopsQuery.data]);
+  const loopsReady = loopsQuery.isFetched;
   const [meetingPreps, setMeetingPreps] = useState<MeetingPrep[]>(MOCK_MEETING_PREPS);
   // Coffee library from GET /api/coffee-chat-prep/all; re-sync to the server.
   const meetingPrepsQuery = useQuery({
@@ -1483,6 +1488,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profile,
       connection,
       bootPending,
+      loopsReady,
       feedState,
       inboxState,
       refetchInbox,
@@ -1549,6 +1555,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profile,
       connection,
       bootPending,
+      loopsReady,
       feedState,
       inboxState,
       refetchInbox,

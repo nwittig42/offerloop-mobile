@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -95,6 +96,23 @@ const SUGGESTION_POOL = [
   'Draft someone on the deal team at Lazard',
 ];
 
+/** No-Gmail accounts get no-setup asks up front (jobs, browsing people,
+ *  prep) — drafts still work via compose links, but the magic is dimmer,
+ *  so they shouldn't be the front door for a fresh account
+ *  (SCOUT-RISK-REGISTER.md #5). */
+const NO_GMAIL_POOL = [
+  'Find me a PM role to apply to',
+  'Show me people at Goldman Sachs',
+  'Who works at McKinsey',
+  'Find me consulting roles in LA',
+  'Show me recruiters at Google',
+  'Prep me for my next coffee chat',
+  'Draft 3 IB analysts at Goldman Sachs',
+  'Analysts at Morgan Stanley in LA',
+];
+
+const INTRO_SEEN_KEY = 'offerloop.scoutIntro.v1';
+
 const THINK_WORDS = [
   'Thinking', 'Scouting', 'Charting the route', 'Reading the trail',
   'Checking the map', 'Packing the bag', 'Sniffing around',
@@ -177,7 +195,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop, swipeSettings } = useApp();
+  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop, swipeSettings, bootPending, loopsReady } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -227,6 +245,30 @@ function ScoutTabInner() {
   // from it (post-crash hardening, 2026-07-08).
   const voiceReady = () => speechSupported();
 
+  // First-run overlay (SCOUT-RISK-REGISTER.md #5): fresh signups land on an
+  // empty orb with no idea what to say. One-time, and only for accounts that
+  // actually look new (no loops, no saved jobs) — established users never
+  // see it, even after this ships OTA. null = flag not loaded yet.
+  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(INTRO_SEEN_KEY)
+      .then((v) => setIntroSeen(v === '1'))
+      .catch(() => setIntroSeen(true)); // storage broken → never block the tab
+  }, []);
+  const showIntro =
+    introSeen === false && !bootPending && loopsReady && loops.length === 0 && savedJobs.length === 0;
+  useEffect(() => {
+    if (showIntro) track('scout_intro_shown', {});
+  }, [showIntro]);
+  const dismissIntro = useCallback((outcome: string) => {
+    setIntroSeen(true);
+    AsyncStorage.setItem(INTRO_SEEN_KEY, '1').catch(() => {});
+    track('scout_intro_outcome', { outcome });
+  }, []);
+
+  // Chips lean toward no-setup asks until Gmail is connected (risk #5).
+  const suggestionPool = profile?.gmailConnected ? SUGGESTION_POOL : NO_GMAIL_POOL;
+
   // ASR vocabulary (SCOUT-RISK-REGISTER.md #6): Apple's on-device model
   // favors these exact phrases, so "Moelis" survives a loud room. The base
   // firm list plus this user's own targets — roles, locations, and any
@@ -263,9 +305,9 @@ function ScoutTabInner() {
   // Rotate the suggestion chips while the tab idles.
   useEffect(() => {
     if (phase !== 'idle') return;
-    const t = setInterval(() => setSugOffset((o) => (o + 3) % SUGGESTION_POOL.length), 8000);
+    const t = setInterval(() => setSugOffset((o) => (o + 3) % suggestionPool.length), 8000);
     return () => clearInterval(t);
-  }, [phase]);
+  }, [phase, suggestionPool.length]);
 
   // Rotate the trail vocabulary while thinking.
   useEffect(() => {
@@ -1480,7 +1522,7 @@ function ScoutTabInner() {
                 entering={FadeInDown.duration(350)}
                 style={{ display: phase === 'clarify' ? 'none' : 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
                 {[0, 1, 2].map((i) => {
-                  const sug = SUGGESTION_POOL[(sugOffset + i) % SUGGESTION_POOL.length];
+                  const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
                   return (
                     <Pressable
                       key={sug}
@@ -1541,6 +1583,101 @@ function ScoutTabInner() {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {showIntro ? (
+        <Animated.View
+          entering={FadeInDown.duration(280)}
+          exiting={FadeOut.duration(160)}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(10,17,31,0.88)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 26,
+          }}>
+          <View
+            style={{
+              width: '100%',
+              backgroundColor: NIGHT.sky,
+              borderColor: NIGHT.line,
+              borderWidth: 1,
+              borderRadius: 20,
+              padding: 22,
+              gap: 14,
+              alignItems: 'center',
+            }}>
+            <Image
+              source={require('../../../assets/images/scout-face.png')}
+              style={{ width: 64, height: 64 }}
+              resizeMode="contain"
+            />
+            <Text style={{ fontFamily: fonts.display, fontSize: 24, color: NIGHT.ink }}>
+              Meet Scout
+            </Text>
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 14,
+                lineHeight: 21,
+                color: NIGHT.ink2,
+                textAlign: 'center',
+              }}>
+              Say what you need — finding people, hunting roles, drafting outreach — and Scout
+              does it. Try one:
+            </Text>
+            <View style={{ width: '100%', gap: 8 }}>
+              {suggestionPool.slice(0, 3).map((ex) => (
+                <Pressable
+                  key={ex}
+                  onPress={() => {
+                    dismissIntro('example');
+                    void submitAsk(ex, { source: 'chip' });
+                  }}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: 'rgba(91,123,255,0.5)',
+                    backgroundColor: 'rgba(59,130,246,0.18)',
+                    borderRadius: 12,
+                    paddingVertical: 11,
+                    paddingHorizontal: 13,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>
+                    “{ex}”
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              onPress={() => {
+                dismissIntro('voice');
+                void beginListening();
+              }}
+              style={{
+                width: '100%',
+                backgroundColor: NIGHT.accent,
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: 'center',
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: '#fff' }}>
+                Say it out loud
+              </Text>
+            </Pressable>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: NIGHT.ink3, textAlign: 'center' }}>
+              iOS will ask to use the mic — that's Scout listening, on-device only
+            </Text>
+            <Pressable onPress={() => dismissIntro('dismiss')} hitSlop={8}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink3 }}>
+                I'll explore on my own
+              </Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
