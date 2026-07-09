@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -895,6 +896,23 @@ export default function ProfileScreen() {
                   }}
                 />
               ) : null}
+              {/* Which JS bundle is this phone actually running? Answers
+                  "did the OTA land" at a glance — updateId is null while on
+                  the build's embedded bundle. */}
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 11,
+                  color: colors.inkTertiary,
+                  textAlign: 'center',
+                  marginTop: 4,
+                }}>
+                {Updates.updateId
+                  ? `Update ${Updates.updateId.slice(0, 8)}${
+                      Updates.createdAt ? ` · ${new Date(Updates.createdAt).toLocaleString()}` : ''
+                    }`
+                  : 'Embedded bundle — no OTA applied yet'}
+              </Text>
             </>
           ) : null}
         </View>
