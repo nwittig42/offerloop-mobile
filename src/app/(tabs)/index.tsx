@@ -195,7 +195,7 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, toggleLoop, swipeSettings, bootPending, loopsReady } = useApp();
+  const { showToast, unreadCount, savedJobs, allJobs, profile, loops, swipeSettings, bootPending, loopsReady } = useApp();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [transcript, setTranscript] = useState('');
@@ -1546,41 +1546,11 @@ function ScoutTabInner() {
             </View>
           ) : null}
 
-          {phase === 'idle' && cards.length === 0 && loops.length > 0 ? (
-            <View style={{ width: '96%', gap: 7, marginTop: 2 }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, letterSpacing: 1.4, color: NIGHT.ink3 }}>
-                ONGOING
-              </Text>
-              {loops.slice(0, 3).map((l) => (
-                <Pressable
-                  key={l.id}
-                  onPress={() => router.push('/loops' as never)}
-                  onLongPress={() => toggleLoop(l.id)}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    borderWidth: 1,
-                    borderColor: NIGHT.lineSoft,
-                    borderRadius: 12,
-                    paddingVertical: 9,
-                    paddingHorizontal: 12,
-                    backgroundColor: 'rgba(255,255,255,0.03)',
-                    opacity: l.status === 'Paused' ? 0.55 : 1,
-                  }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#B9C8EE' }}>
-                    {l.brief}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: l.status === 'Paused' ? NIGHT.ink3 : '#22D3EE' }}>
-                    {l.status === 'Paused' ? 'Paused' : `${l.weeklyDone} / ${l.weeklyTarget}`}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
+          {/* Loops are shelved for v1 — the Ongoing section is gone (Rylan,
+              2026-07-08): one-shot asks cover the job and the night room
+              stays clean. The engine + /loops page survive for deep links
+              and a future "autopilot" revival; `loops` still feeds the ASR
+              vocabulary and the first-run gate above. */}
         </ScrollView>
       </KeyboardAvoidingView>
 

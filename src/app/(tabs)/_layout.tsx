@@ -9,8 +9,8 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Bottom navigation: Feed, Inbox, Network, Scout, Profile — the user's journey
- * (draft → replies → pipeline → assistant → account), daily-use tabs left.
+ * Bottom navigation: Feed, Inbox, Scout, Network, Profile — Scout dead
+ * center as the app's home button, daily-use tabs flanking it.
  * The bar is a liquid-glass surface (GlassTabBackground) with a hairline top
  * border and ink active state; the Scout tab overrides it with its night bar.
  * The notification hub is the header bell, not a tab. Loops became Scout's
@@ -61,27 +61,11 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="network"
-        options={{
-          title: 'Network',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="network"
-        options={{
-          title: 'Network',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Scout replaced Loops in the bar (PLAN-scout-voice.md P1); the Loops
-          screen lives on at /loops for deep links + the Ongoing section. The
-          Scout screen is a committed night room, so its bar goes dark too. */}
+      {/* Scout replaced Loops in the bar (PLAN-scout-voice.md P1) and sits
+          dead center — the orb is the app's home button. Loops are shelved
+          for v1 (one-shot Scout covers the job); the old screen survives at
+          /loops for deep links only. The Scout screen is a committed night
+          room, so its bar goes dark too. */}
       <Tabs.Screen
         name="index"
         options={{
@@ -101,6 +85,15 @@ export default function TabsLayout() {
               size={size}
               color={color}
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="network"
+        options={{
+          title: 'Network',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
           ),
         }}
       />

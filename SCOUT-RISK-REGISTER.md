@@ -104,6 +104,13 @@ brain starts emitting propose_loop. **Mitigation:** add route params to
 /loops setup (company/role/cadence prefill) — small, do it when the enum
 activates.
 
+**MOOT FOR v1 (2026-07-08):** Rylan shelved loops for the App Store push —
+one-shot Scout asks cover the job. The Ongoing section is removed from the
+Scout tab; /loops survives for deep links (voice "open loops",
+notifications) and keeps its pause/resume controls. Engine untouched —
+revive as the "autopilot" upgrade later. If propose_loop ever activates,
+this item wakes up with it.
+
 ## 9. Branch hygiene is still the prod blocker
 Everything lives on staging/mobile-field lineage; main is behind. The
 longer the divergence runs, the scarier the migration. **Trigger:**
