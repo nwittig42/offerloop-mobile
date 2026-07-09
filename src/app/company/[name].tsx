@@ -23,6 +23,7 @@ import SwipeDeck from '@/components/feed/SwipeDeck';
 import FindAnotherDialog from '@/components/FindAnotherDialog';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
+import { sameCompany } from '@/lib/company';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -79,8 +80,11 @@ export default function CompanyScreen() {
     () => (rolesQuery.data && rolesQuery.data.length ? rolesQuery.data : feedRoles),
     [rolesQuery.data, feedRoles],
   );
+  // sameCompany, not ===: PDL rows carry legal names ("Moelis & Company")
+  // while this screen's param says "Moelis" — strict equality hid contacts
+  // from Reached out (field-tested 2026-07-09).
   const reached = outreach.filter(
-    (o) => o.company === company && o.status !== 'drafting' && o.status !== 'queued',
+    (o) => sameCompany(o.company, company) && o.status !== 'drafting' && o.status !== 'queued',
   );
 
   // Per-company Roles deck: a mini-feed of this company's open roles you can

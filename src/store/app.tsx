@@ -32,6 +32,7 @@ import { isInsufficientCredits } from '@/api/errors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, track } from '@/lib/analytics';
+import { normCompanyName, sameCompany } from '@/lib/company';
 import {
   hasNotificationPermission,
   registerForPushNotificationsAsync,
@@ -618,19 +619,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // optimistic item until the server actually has it; when it does, record the
     // id swap so an open detail screen can follow it, and let the server copy win.
     // Company names arrive spelled differently per source ("Janestreet" from
-    // the job card vs "jane street" from the saved contact) — strip everything
-    // but letters/digits so the same person+company always matches, otherwise
-    // the optimistic row and the server row both render (duplicate people in
-    // the Inbox, field-tested 2026-07-07).
-    const normCo = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const keyOf = (o: OutreachItem) =>
-      `${(o.contact?.name || '').toLowerCase().trim()}|${normCo(o.company || '')}`;
+    // the job card vs "jane street" from the saved contact; the app says
+    // "Moelis" while PDL returns the legal "Moelis & Company" — field-tested
+    // 2026-07-09: both rows rendered and the ghost had no LinkedIn/prep).
+    // Shared normalizer in lib/company.ts; the company screen filters with it too.
+    const normName = (o: OutreachItem) => (o.contact?.name || '').toLowerCase().trim();
+    const keyOf = (o: OutreachItem) => `${normName(o)}|${normCompanyName(o.company || '')}`;
     setOutreach((prev) => {
       const serverByKey = new Map(server.map((s) => [keyOf(s), s] as const));
       const keptOptimistic: OutreachItem[] = [];
       for (const o of prev) {
         if (!o.id.startsWith('out-new-')) continue; // stale server rows are replaced by the fresh list
-        const match = serverByKey.get(keyOf(o));
+        let match = serverByKey.get(keyOf(o));
+        if (!match) {
+          // Fallback: same person, prefix-related company names ("Meta" vs
+          // "Meta Platforms") — merging errs toward no-duplicates.
+          const oName = normName(o);
+          match = server.find((s) => normName(s) === oName && sameCompany(s.company || '', o.company || ''));
+        }
         if (match && o.status !== 'drafting' && o.status !== 'queued') {
           reconciledIds.current[o.id] = match.id; // remember the swap; drop the optimistic
         } else {
