@@ -230,6 +230,13 @@ function ScoutTabInner() {
   const [ask, setAsk] = useState('');
   const [typed, setTyped] = useState('');
   const [reply, setReply] = useState<{ say: string; actions: ScoutAction[] } | null>(null);
+  // Session transcript: every ask and every reply, reviewable behind the
+  // header button. The live stage still shows one exchange at a time (the
+  // voice-first identity), but nothing Scout says vanishes anymore — long
+  // answers and Scout's own questions used to auto-clear after 20s with no
+  // way back (parity audit's top UX gap).
+  const [thread, setThread] = useState<{ from: 'user' | 'scout'; text: string }[]>([]);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
@@ -326,16 +333,19 @@ function ScoutTabInner() {
     ];
   }, [loopCompanies, profile?.targetRoles, profile?.preferredLocations]);
 
-  // The reply card excuses itself: tapping its chip clears it, and otherwise
-  // it fades out after a while so the tab returns to a clean idle.
+  // The reply card stays until the next ask replaces it (every ask path
+  // clears it on entry) — the old 20s auto-clear erased long answers and
+  // Scout's own questions mid-read. Every reply also lands in the session
+  // transcript so it stays reviewable after the stage moves on.
   useEffect(() => {
     if (!reply) return;
     ageContext();
     // Spoken asks get spoken replies (the full assistant loop); typed asks
     // stay silent — gyms and lectures are why the type bar exists.
     if (askByVoice.current) speak(reply.say);
-    const t = setTimeout(() => setReply(null), 20_000);
-    return () => clearTimeout(t);
+    if (reply.say) {
+      setThread((t) => [...t.slice(-79), { from: 'scout', text: reply.say }]);
+    }
   }, [reply]);
 
   // Leaving the tab silences Scout mid-sentence.
@@ -529,6 +539,12 @@ function ScoutTabInner() {
       let clean = norm.text;
       if (!clean) return;
       askByVoice.current = !!meta?.byVoice;
+      // Transcript: record what the user actually asked. Classifier
+      // re-entries re-speak the SAME ask in canonical form — the human's
+      // words are already on the thread, so skip the echo.
+      if (!meta?.viaClassifier) {
+        setThread((t) => [...t.slice(-79), { from: 'user', text: clean }]);
+      }
 
       // Spoken confirmation/dismissal drives whatever card is waiting.
       const aff = parseAffirmation(clean);
@@ -1259,7 +1275,20 @@ function ScoutTabInner() {
           flexDirection: 'row',
           alignItems: 'center',
         }}>
-        <View style={{ width: 32 }} />
+        <Pressable
+          onPress={() => {
+            if (thread.length) setTranscriptOpen(true);
+          }}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Conversation transcript"
+          style={{ width: 32, alignItems: 'flex-start' }}>
+          <Ionicons
+            name="chatbubbles-outline"
+            size={22}
+            color={thread.length ? NIGHT.ink : NIGHT.ink3}
+          />
+        </Pressable>
         <Text
           style={{
             flex: 1,
@@ -1996,6 +2025,91 @@ function ScoutTabInner() {
               </Text>
             </Pressable>
           </View>
+        </Animated.View>
+      ) : null}
+
+      {transcriptOpen ? (
+        <Animated.View
+          entering={FadeInDown.duration(180)}
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: 'rgba(10,13,22,0.97)',
+          }}>
+          <View
+            style={{
+              paddingTop: insets.top + 12,
+              paddingHorizontal: 22,
+              paddingBottom: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}>
+            <View style={{ width: 32 }} />
+            <Text
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                fontFamily: fonts.display,
+                fontSize: 22,
+                color: NIGHT.ink,
+              }}>
+              This conversation
+            </Text>
+            <Pressable
+              onPress={() => setTranscriptOpen(false)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Close transcript"
+              style={{ width: 32, alignItems: 'flex-end' }}>
+              <Ionicons name="close" size={23} color={NIGHT.ink} />
+            </Pressable>
+          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, gap: 9 }}
+            // Latest exchange is what you came to re-read.
+            ref={(r) => r?.scrollToEnd({ animated: false })}>
+            {thread.map((m, i) =>
+              m.from === 'user' ? (
+                <View
+                  key={i}
+                  style={{
+                    alignSelf: 'flex-end',
+                    maxWidth: '85%',
+                    backgroundColor: 'rgba(59,130,246,0.28)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(91,123,255,0.45)',
+                    borderRadius: 13,
+                    paddingVertical: 9,
+                    paddingHorizontal: 13,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: NIGHT.ink }}>
+                    {m.text}
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  key={i}
+                  style={{
+                    alignSelf: 'flex-start',
+                    maxWidth: '88%',
+                    backgroundColor: 'rgba(255,255,255,0.07)',
+                    borderWidth: 1,
+                    borderColor: NIGHT.lineSoft,
+                    borderRadius: 13,
+                    paddingVertical: 9,
+                    paddingHorizontal: 13,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: NIGHT.ink }}>
+                    {m.text}
+                  </Text>
+                </View>
+              ),
+            )}
+          </ScrollView>
         </Animated.View>
       ) : null}
     </View>
