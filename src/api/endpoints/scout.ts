@@ -4,10 +4,15 @@ import { USE_MOCKS } from '@/api/config';
 /**
  * Scout assistant — the real backend (POST /api/scout-assistant/chat). No credit
  * cost; it answers with the user's resume, pipeline, and live data via the same
- * service the web app uses. The backend also returns `navigate_to` /
- * `action_buttons` as WEB routes, which we translate to mobile routes here and
- * surface as tappable actions (web-only destinations are dropped, never shown as
- * dead buttons).
+ * one-tool-per-turn orchestrator the web app uses (SCOUT_BACKEND_HANDOFF.md).
+ *
+ * Per the handoff: chips arrive in `cta` / `ctas` on the LIVE success path —
+ * `action_buttons` / `navigate_to` exist only in stale docstrings and the error
+ * fallback (kept here as a legacy fallback only). Chips carry WEB routes,
+ * translated to mobile routes below; a `chat_message` chip means "send this as
+ * the next chat message" rather than navigate. Always echo `chat_id` back or
+ * every turn starts a fresh server conversation and clarifies never resolve
+ * (handoff checklist #8).
  */
 
 export type ScoutTurn = { role: 'user' | 'assistant'; content: string };
@@ -19,8 +24,9 @@ export type ScoutUserInfo = {
   max_credits?: number;
 };
 
-/** A Scout action already translated to a real mobile destination. */
-export type ScoutAction = { label: string; href: string };
+/** A Scout action already translated to a real mobile destination — either a
+ *  screen to open (href) or a message to send back into the chat. */
+export type ScoutAction = { label: string; href?: string; chatMessage?: string };
 
 export type ScoutReply = {
   message: string;
@@ -77,22 +83,40 @@ export async function sendScoutMessage(args: {
     },
   });
 
-  // Translate the backend's web action_buttons + navigate_to into mobile actions,
-  // de-duped by destination, dropping anything with no mobile home.
+  // Translate chips into mobile actions, de-duped, dropping anything with no
+  // mobile home. Live path: `ctas` (draft turns carry two) then `cta`; a chip
+  // with chat_message runs in chat instead of navigating. `action_buttons` /
+  // `navigate_to` only ever appear on the legacy/error path — checked last.
   const actions: ScoutAction[] = [];
   const seen = new Set<string>();
-  const buttons = Array.isArray(r?.action_buttons) ? r.action_buttons : [];
-  for (const b of buttons) {
-    const href = mapScoutRoute(b?.route);
+  const addChip = (b: any) => {
     const label = typeof b?.label === 'string' ? b.label.trim() : '';
-    if (href && label && !seen.has(href)) {
+    if (!label) return;
+    const chatMessage = typeof b?.chat_message === 'string' ? b.chat_message.trim() : '';
+    if (chatMessage) {
+      if (!seen.has(`m:${chatMessage}`)) {
+        seen.add(`m:${chatMessage}`);
+        actions.push({ label, chatMessage });
+      }
+      return;
+    }
+    const href = mapScoutRoute(b?.route);
+    if (href && !seen.has(href)) {
       seen.add(href);
       actions.push({ label, href });
     }
-  }
+  };
+  for (const b of Array.isArray(r?.ctas) ? r.ctas : []) addChip(b);
+  if (r?.cta) addChip(r.cta);
+  for (const b of Array.isArray(r?.action_buttons) ? r.action_buttons : []) addChip(b);
   if (!actions.length && r?.navigate_to) {
     const href = mapScoutRoute(r.navigate_to);
     if (href) actions.push({ label: 'Take me there', href });
+  }
+  // navigate turns: the destination is a plan the user approves by tapping.
+  if (r?.tool === 'navigate' && r?.navigate?.route) {
+    const href = mapScoutRoute(r.navigate.route);
+    if (href && !seen.has(href)) actions.push({ label: 'Take me there', href });
   }
 
   return {

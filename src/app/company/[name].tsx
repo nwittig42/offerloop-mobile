@@ -250,10 +250,32 @@ export default function CompanyScreen() {
             }}>
             <Ionicons name="person-add" size={17} color={colors.paper} />
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.paper }}>
-              Find a contact here
+              Find my next contact
             </Text>
+            <View
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.22)',
+                borderRadius: 999,
+                paddingVertical: 2,
+                paddingHorizontal: 8,
+                marginLeft: 2,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11.5, color: colors.paper }}>
+                −{profile.creditsPerSwipe} cr
+              </Text>
+            </View>
           </LinearGradient>
         </Pressable>
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 11.5,
+            color: colors.inkTertiary,
+            textAlign: 'center',
+            marginTop: 6,
+          }}>
+          Always someone new — anyone you've already reached is skipped
+        </Text>
       </View>
 
       <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline }}>
@@ -515,6 +537,42 @@ export default function CompanyScreen() {
               </Pressable>
               ))
             )}
+            {reached.length > 0 ? (
+              // The add-another tile lives at the end of the list — the action
+              // sits exactly where the eye is when reviewing who you've reached.
+              <Pressable onPress={() => setDialogOpen(true)} accessibilityRole="button">
+                <Card
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderStyle: 'dashed',
+                    borderColor: colors.accent,
+                    backgroundColor: 'transparent',
+                  }}>
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="person-add" size={17} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.accent }}>
+                      Find another contact
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      Someone new at {company} · {profile.creditsPerSwipe} credits
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+            ) : null}
             {/* You already know someone here — apply to their open roles in a tap. */}
             {renderOpenRoles('Apply to open roles here')}
           </>

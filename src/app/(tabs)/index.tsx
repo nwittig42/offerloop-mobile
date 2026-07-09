@@ -252,6 +252,10 @@ function ScoutTabInner() {
     chosen: number;
   } | null>(null);
   const historyRef = useRef<ScoutTurn[]>([]);
+  // Server-side conversation id (SCOUT_BACKEND_HANDOFF.md): echo it back every
+  // turn or the backend starts a fresh chat each time — server memory, clarify
+  // resolution, and titling all hang off it. Session-scoped like historyRef.
+  const chatIdRef = useRef<string | null>(null);
   const requestSeq = useRef(0);
   const askByVoice = useRef(false);
   const lastDraftRef = useRef<DraftIntent | null>(null);
@@ -1068,8 +1072,10 @@ function ScoutTabInner() {
           message: clean,
           history: historyRef.current,
           currentPage: '/scout',
+          chatId: chatIdRef.current,
         });
         if (seq !== requestSeq.current) return; // edited/superseded — drop it
+        if (res.chatId) chatIdRef.current = res.chatId;
         historyRef.current = [
           ...historyRef.current.slice(-8),
           { role: 'user', content: clean },
@@ -1712,7 +1718,14 @@ function ScoutTabInner() {
                       key={a.label}
                       onPress={() => {
                         setReply(null);
-                        router.push(a.href as never);
+                        // chat_message chips run in the conversation (e.g.
+                        // company intel → "Find people at X"); route chips
+                        // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
+                        if (a.chatMessage) {
+                          void submitAsk(a.chatMessage, { source: 'chip' });
+                        } else if (a.href) {
+                          router.push(a.href as never);
+                        }
                       }}
                       style={{
                         borderRadius: 999,
