@@ -35,8 +35,10 @@ export type ScoutReply = {
 };
 
 /** Translate a web route Scout returns into a mobile route, or null if it has no
- *  mobile home (those buttons are dropped rather than shown broken). */
-function mapScoutRoute(route?: string): string | null {
+ *  mobile home (those buttons are dropped rather than shown broken). Exported:
+ *  the ask-envelope translator on the Scout tab maps `navigate` actions
+ *  through the same table. */
+export function mapScoutRoute(route?: string): string | null {
   if (!route || typeof route !== 'string') return null;
   const r = route.toLowerCase().split('?')[0].replace(/\/+$/, '');
   // Find / job board / company + hiring-manager tabs all live in the feed.

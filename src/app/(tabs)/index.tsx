@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOut, LinearTransition, useSharedValue } from 'react-native-reanimated';
 
 import { apiFetch } from '@/api/client';
-import { sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
+import { mapScoutRoute, sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
 import {
   ackFor,
   applyScope,
@@ -44,7 +44,7 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
-import { askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutBrain, askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { useAuth } from '@/auth/AuthProvider';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
@@ -1062,26 +1062,73 @@ function ScoutTabInner() {
         return;
       }
 
-      // No action intent — regular Scout conversation (P1 behavior).
+      // No action intent — the real brain (Phase 2, SCOUT-ACTION-CONTRACT
+      // action='ask'): one full server tool-loop turn. Receipts arrive as
+      // typed actions and render natively — contact cards, prep jobRefs,
+      // Inbox links — instead of prose-only chat. Falls back to the chat
+      // endpoint (same brain, prose dialect) if the ask path is unavailable
+      // (older backend build or transient failure).
       const seq = ++requestSeq.current;
       setReply(null);
       setPhase('thinking');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
-        const res = await sendScoutMessage({
-          message: clean,
-          history: historyRef.current,
-          currentPage: '/scout',
-          chatId: chatIdRef.current,
-        });
-        if (seq !== requestSeq.current) return; // edited/superseded — drop it
-        if (res.chatId) chatIdRef.current = res.chatId;
+        let say = '';
+        let actions: ScoutAction[] = [];
+        try {
+          const env = await askScoutBrain({
+            ask: clean,
+            askId: `ask-${Date.now()}`,
+            conversationId: chatIdRef.current,
+            source: meta?.byVoice ? 'voice' : 'typed',
+          });
+          if (seq !== requestSeq.current) return; // edited/superseded — drop it
+          if (env.conversationId) chatIdRef.current = env.conversationId;
+          say = env.say || "I didn't catch that — try asking again?";
+          for (const a of env.actions || []) {
+            if (
+              (a.type === 'find_contacts' || a.type === 'find_hiring_managers') &&
+              a.results?.items?.length
+            ) {
+              // Brain-executed searches CHARGED and saved to My Network (the
+              // say text lists the people) — the receipt chip goes to where
+              // they now live, never the free-preview card whose copy would
+              // mislabel a paid result.
+              const n = a.results.items.length;
+              actions.push({ label: `View ${n} in your Network`, href: '/(tabs)/network' });
+            } else if (a.type === 'navigate') {
+              const href = mapScoutRoute(String(a.params?.route || ''));
+              if (href) actions.push({ label: String(a.params?.label || '') || 'Take me there', href });
+            } else if (a.type === 'meeting_prep' && a.jobRef?.id) {
+              actions.push({ label: 'Watch the prep build', href: `/meeting-prep/${a.jobRef.id}` });
+            } else if (a.type === 'draft_outreach' && a.results?.items?.length) {
+              const n = a.results.items.length;
+              actions.push({ label: `Open Inbox — ${n} draft${n === 1 ? '' : 's'} ready`, href: '/(tabs)/inbox' });
+            }
+          }
+          // error.code affordances (contract Errors section) — say already
+          // speaks the problem in user words; the chip is the next move.
+          if (env.error && (env.error.code === 'insufficient_credits' || env.error.code === 'cap_reached')) {
+            actions.push({ label: 'Get more credits', href: '/credits' });
+          }
+        } catch {
+          const res = await sendScoutMessage({
+            message: clean,
+            history: historyRef.current,
+            currentPage: '/scout',
+            chatId: chatIdRef.current,
+          });
+          if (seq !== requestSeq.current) return;
+          if (res.chatId) chatIdRef.current = res.chatId;
+          say = res.message;
+          actions = res.actions;
+        }
         historyRef.current = [
           ...historyRef.current.slice(-8),
           { role: 'user', content: clean },
-          { role: 'assistant', content: res.message },
+          { role: 'assistant', content: say },
         ];
-        setReply({ say: res.message, actions: res.actions });
+        setReply({ say, actions });
         setPhase('idle');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {

@@ -14,18 +14,26 @@ export type ContactPreview = {
   title: string;
   company: string;
   linkedinUrl: string;
+  /** Present only on brain-executed (charged) searches — the paid reveal. */
+  email?: string;
+  contactId?: string;
+};
+
+export type ScoutAskAction = {
+  type: string;
+  params: Record<string, unknown>;
+  needsConfirm: boolean | Record<string, unknown>;
+  jobRef: { kind: string; id: string } | null;
+  results: { kind: string; items: ContactPreview[] } | null;
 };
 
 export type ScoutAskEnvelope = {
   say: string;
-  actions: {
-    type: string;
-    params: Record<string, unknown>;
-    needsConfirm: boolean | Record<string, unknown>;
-    jobRef: { kind: string; id: string } | null;
-    results: { kind: string; items: ContactPreview[] } | null;
-  }[];
+  actions: ScoutAskAction[];
   askId: string;
+  /** Brain path only: the persisted server chat thread. Send it back on the
+   *  next ask for multi-turn memory (same threads web Scout uses). */
+  conversationId?: string | null;
   error?: { code: string; detail: string };
 };
 
@@ -77,6 +85,31 @@ export async function transcribeAsk(args: {
     method: 'POST',
     body: form,
     timeoutMs: 15_000,
+  });
+}
+
+/** Phase 2 (2026-07-09): the REAL brain — action='ask' runs the full Scout
+ *  tool loop server-side (find/draft/prep/apply/company intel/workflow
+ *  reads) and returns the contract envelope with typed receipt actions.
+ *  This is what the v0 dialect above was always a placeholder for; the
+ *  legacy calls stay for the fast client paths until they're retired. */
+export async function askScoutBrain(args: {
+  ask: string;
+  askId: string;
+  conversationId?: string | null;
+  source?: 'voice' | 'typed' | 'chip';
+}): Promise<ScoutAskEnvelope> {
+  return apiFetch<ScoutAskEnvelope>('/api/mobile/scout/ask', {
+    method: 'POST',
+    body: {
+      ask: args.ask,
+      askId: args.askId,
+      source: args.source || 'typed',
+      action: 'ask',
+      conversationId: args.conversationId || undefined,
+      params: {},
+    },
+    timeoutMs: 45_000,
   });
 }
 

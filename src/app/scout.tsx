@@ -70,8 +70,11 @@ export default function ScoutScreen() {
     const trimmed = text.trim();
     if (!trimmed || thinking) return;
 
-    // History = the conversation so far, minus the synthetic greeting (index 0).
-    const history: ScoutTurn[] = messages.slice(1).map((m) => ({
+    // History = the conversation so far, minus the synthetic greeting
+    // (index 0), capped at the last 8 turns like the Scout tab — the server
+    // reloads the full thread from chat_id anyway; resending everything just
+    // bloats the request.
+    const history: ScoutTurn[] = messages.slice(1).slice(-16).map((m) => ({
       role: m.from === 'user' ? 'user' : 'assistant',
       content: m.text,
     }));
@@ -218,9 +221,17 @@ export default function ScoutScreen() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginLeft: 34 }}>
                   {msg.actions.map((a) => (
                     <Pressable
-                      key={a.href}
+                      key={a.href ?? `m:${a.chatMessage ?? a.label}`}
                       onPress={() => {
-                        // Close the Scout sheet, then go where it pointed.
+                        // chat_message chips run in the conversation (e.g.
+                        // "Find people at X"); route chips close the sheet
+                        // and navigate. a.href is optional — never push
+                        // undefined (pre-fix these chips were dead buttons).
+                        if (a.chatMessage) {
+                          void send(a.chatMessage);
+                          return;
+                        }
+                        if (!a.href) return;
                         router.back();
                         router.push(a.href as never);
                       }}
