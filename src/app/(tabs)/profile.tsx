@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
@@ -843,11 +844,21 @@ export default function ProfileScreen() {
                       </Text>
                     </View>
                   </View>
-                  <Chip
-                    label={profile.gmailConnected ? 'Connected' : 'Connect'}
-                    tone={profile.gmailConnected ? 'positive' : 'accent'}
-                    dot={profile.gmailConnected}
-                  />
+                  {/* Gmail OAuth lives on the website; the chip opens it
+                      there instead of sitting dead (sweep blocker #3). */}
+                  <Pressable
+                    onPress={() => {
+                      if (!profile.gmailConnected) {
+                        void Linking.openURL('https://offerloop.ai/account-settings');
+                      }
+                    }}
+                    disabled={profile.gmailConnected}>
+                    <Chip
+                      label={profile.gmailConnected ? 'Connected' : 'Connect on offerloop.ai'}
+                      tone={profile.gmailConnected ? 'positive' : 'accent'}
+                      dot={profile.gmailConnected}
+                    />
+                  </Pressable>
                 </View>
                 <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -875,14 +886,20 @@ export default function ProfileScreen() {
                   }
                 />
               </Card>
-              <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
+              {__DEV__ ? (
+                <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
+              ) : null}
               {/* P0 prototype for the voice tab (PLAN-scout-voice.md) — here so
-                  the orb can be felt on-device before the design locks. */}
-              <Button
-                label="Scout orb preview"
-                variant="outline"
-                onPress={() => router.push('/dev/scout-orb' as never)}
-              />
+                  the orb can be felt on-device before the design locks. Dev
+                  builds only: both screens carry placeholder fixture content
+                  (Apple 2.2 risk in a store build; sweep blocker #2). */}
+              {__DEV__ ? (
+                <Button
+                  label="Scout orb preview"
+                  variant="outline"
+                  onPress={() => router.push('/dev/scout-orb' as never)}
+                />
+              ) : null}
               {__DEV__ ? (
                 <Button
                   label="Replay onboarding"

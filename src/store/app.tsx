@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { USE_MOCKS } from '@/api/config';
 import { fetchFeed, rankJobsByLocation } from '@/api/endpoints/feed';
 import { fetchInbox } from '@/api/endpoints/inbox';
 import { createLoop, fetchLoops, setLoopPaused, type LoopPeople } from '@/api/endpoints/loops';
@@ -318,9 +319,12 @@ const AppContext = createContext<AppStore | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
   const [deckSeeded, setDeckSeeded] = useState(false);
-  const [outreach, setOutreach] = useState<OutreachItem[]>(MOCK_OUTREACH_SEED);
+  // Fixtures ONLY in mock mode: a fresh real account (the Apple reviewer)
+  // must never see fake replies, badge counts, or "Taylor Test" activity
+  // (no-fake-numbers rule; launch sweep blocker #1).
+  const [outreach, setOutreach] = useState<OutreachItem[]>(USE_MOCKS ? MOCK_OUTREACH_SEED : []);
   const [notifications, setNotifications] = useState<NotificationItem[]>(
-    MOCK_NOTIFICATIONS_SEED,
+    USE_MOCKS ? MOCK_NOTIFICATIONS_SEED : [],
   );
   // Profile + credits are now server-backed: GET /api/mobile/me via React Query.
   // Falls back to the fixture until the first fetch resolves (or offline mocks).
@@ -492,7 +496,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     queryFn: fetchFeed,
     enabled: authStatus === 'signedIn',
   });
-  const allJobs = feedQuery.data ?? MOCK_JOBS;
+  // Never fall back to fixture jobs for REAL flows: Scout job-matching reads
+  // allJobs, and a fixture pick could fire a real auto-apply against a fake
+  // job id (sweep blocker #10). Mock mode keeps the offline demo alive.
+  const allJobs = feedQuery.data ?? (USE_MOCKS ? MOCK_JOBS : []);
   useEffect(() => {
     // Wait for the passed cache so a just-relaunched deck doesn't briefly show
     // jobs the user already swiped away this session.
@@ -755,7 +762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (loopsQuery.data) setLoops(loopsQuery.data);
   }, [loopsQuery.data]);
   const loopsReady = loopsQuery.isFetched;
-  const [meetingPreps, setMeetingPreps] = useState<MeetingPrep[]>(MOCK_MEETING_PREPS);
+  const [meetingPreps, setMeetingPreps] = useState<MeetingPrep[]>(USE_MOCKS ? MOCK_MEETING_PREPS : []);
   // Coffee library from GET /api/coffee-chat-prep/all; re-sync to the server.
   const meetingPrepsQuery = useQuery({
     queryKey: qk.meetingPreps,

@@ -85,7 +85,7 @@ export default function NewMeetingPrepScreen() {
     } catch (e) {
       setBusy(false);
       showToast(
-        isInsufficientCredits(e) ? 'Not enough credits for a prep (15)' : 'Could not start the prep',
+        isInsufficientCredits(e) ? 'You have hit this month\'s prep limit — it resets on the 1st' : 'Could not start the prep',
       );
     }
   };

@@ -204,7 +204,7 @@ export default function MeetingPrepDetailScreen() {
             This prep didn't finish
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, textAlign: 'center' }}>
-            Your credits were refunded. Try again from the Network tab.
+            Nothing was charged — preps are free. Try again from the Network tab.
           </Text>
         </View>
       </View>

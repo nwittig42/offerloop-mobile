@@ -620,7 +620,7 @@ function ScoutTabInner() {
                   setReply(
                     st === 'completed' || st === 'complete'
                       ? { say: 'Your meeting prep is ready.', actions: [{ label: 'Open the prep', href: `/meeting-prep/${id}` }] }
-                      : { say: "That meeting prep didn't finish — your credits were refunded if it failed. Ask me to run it again.", actions: [] },
+                      : { say: "That meeting prep didn't finish — nothing extra was charged. Ask me to run it again.", actions: [] },
                   );
                   return;
                 }

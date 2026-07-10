@@ -137,7 +137,6 @@ export default function ShareScreen() {
 
         <Button label="Share" icon="share-outline" size="lg" fullWidth onPress={onShare} />
         <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
-          Preview. Sharing the card as an image lands with real wiring in Phase 3.
         </Text>
       </ScrollView>
     </View>

@@ -73,13 +73,6 @@ export default function AttachmentsScreen() {
           <Chip label="Resume" tone="accent" />
         </Card>
 
-        <Button
-          label="Add attachment"
-          variant="outline"
-          fullWidth
-          icon="add"
-          onPress={() => showToast('The attachment picker arrives with real wiring')}
-        />
 
         <Text
           style={{
