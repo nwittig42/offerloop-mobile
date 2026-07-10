@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
+import { Alert } from 'react-native';
 import {
   isSignInWithEmailLink,
   onIdTokenChanged,
@@ -82,10 +83,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completeSignInFromUrl = useCallback(async (url: string): Promise<boolean> => {
-    if (!isSignInWithEmailLink(auth, url)) return false;
+    // The finish-signin web page hands the app the ORIGINAL magic-link URL
+    // wrapped as offerloop://finish-signin?link=<encoded>. The Firebase SDK
+    // historically unwraps a `link` param itself (dynamic-link format), but
+    // don't bet sign-in on SDK internals: unwrap explicitly and try both.
+    let candidate = url;
+    if (!isSignInWithEmailLink(auth, candidate)) {
+      try {
+        const wrapped = /[?&]link=([^&]+)/.exec(url)?.[1];
+        if (wrapped) candidate = decodeURIComponent(wrapped);
+      } catch {
+        /* fall through with the raw url */
+      }
+      if (!isSignInWithEmailLink(auth, candidate)) return false;
+    }
     const email = (await getPendingEmail()) || '';
-    if (!email) return false;
-    await signInWithEmailLink(auth, email, url);
+    if (!email) {
+      // Link opened on a device that never started sign-in (or after a
+      // reinstall) — the stashed email is gone. Surface it instead of the
+      // old silent false: the sign-in screen tells them to re-enter the
+      // email and send a fresh link.
+      Alert.alert(
+        'Almost there',
+        'This sign-in link was started on a different device or the app was reinstalled. Enter your email again and send a fresh link.',
+      );
+      return false;
+    }
+    try {
+      await signInWithEmailLink(auth, email, candidate);
+    } catch {
+      Alert.alert(
+        'Sign-in link expired',
+        'That link is no longer valid - links are single-use and expire. Send yourself a fresh one.',
+      );
+      return false;
+    }
     await clearPendingEmail();
     return true;
   }, []);
