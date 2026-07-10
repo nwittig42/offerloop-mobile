@@ -6,10 +6,13 @@ Status as of 2026-06-29. iOS first (bundle id `ai.offerloop.app`). TestFlight be
 
 ## Fixed in code/config (done)
 
-- [x] **API base URL for real builds** — `eas.json` preview + production now set
-  `EXPO_PUBLIC_API_BASE_URL=https://offerloop.ai`. Previously prod fell through to
-  `app.json extra.apiBaseUrl` = a **LAN IP** (`192.168.4.62:5001`), which would be dead +
-  cleartext for reviewers. (Dev / `expo start` still uses the LAN IP from app.json.)
+- [x] **API base URL for real builds** — DECIDED 2026-07-09 (submission night): the
+  mobile API lives on the staging service, NOT offerloop.ai (origin/main has no
+  /api/mobile/* routes — a prod build pointed there is a dead app). Production
+  channel now hardcodes https://offerloop-staging.onrender.com in src/api/config.ts
+  (same env-inlining rationale as the preview hardcode) and eas.json production env
+  matches. Graduation path: pinned prod/mobile Render service + an OTA swapping the
+  constant. IMPLICATION: staging is code-frozen for risky pushes while Apple reviews.
 - [x] **Splash screen** — was the default Expo white-on-white logo (effectively blank); now uses
   the Offerloop mark (`icon.png`, 1024²) at imageWidth 200 on a white bg.
 - [x] App icon: `icon.png` is 1024×1024, opaque, branded. Good.
@@ -75,8 +78,10 @@ This connects to the deferred **auth deep-link handoff** — the cleanest long-t
 
 ## Optional / nice-to-have
 
-- [ ] PostHog analytics is OFF (`extra.posthogKey` empty). To get launch-day analytics, set the
-      key via `EXPO_PUBLIC_POSTHOG_KEY` in the eas production env.
+- [x] PostHog analytics LIVE 2026-07-09 (app.json extra.posthogKey, host =
+      data.offerloop.ai reverse proxy, unified with web). Declare in nutrition
+      labels: identifiers + usage data -> Analytics (not tracking). Mark founder
+      uids as internal users in PostHog before launch metrics.
 - [ ] Gmail/Google data use: if Gmail is linked in-app, App Review may ask about Google API
       Services User Data Policy compliance — have the justification ready (drafts/sends on the
       user's behalf, disclosed).

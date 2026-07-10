@@ -37,8 +37,18 @@ function devApiBaseFromMetro(): string | null {
  */
 const PREVIEW_API_BASE_URL = 'https://offerloop-staging.onrender.com';
 
+/**
+ * Production (App Store) builds: same host, same hardcode rationale. The
+ * mobile API surface (/api/mobile/*) lives on the staging service — NOT on
+ * offerloop.ai, whose backend deploys from origin/main and has no mobile
+ * routes (submission decision, 2026-07-09; graduation path is a pinned
+ * prod/mobile Render service + an OTA that swaps this constant).
+ */
+const PRODUCTION_API_BASE_URL = 'https://offerloop-staging.onrender.com';
+
 export const API_BASE_URL: string =
   (!__DEV__ && Updates.channel === 'preview' ? PREVIEW_API_BASE_URL : null) ||
+  (!__DEV__ && Updates.channel === 'production' ? PRODUCTION_API_BASE_URL : null) ||
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   (__DEV__ ? devApiBaseFromMetro() : null) ||
   extra.apiBaseUrl ||
