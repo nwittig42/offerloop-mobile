@@ -217,6 +217,9 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+const REVIEWER_REPLAY_EMAILS = (process.env.EXPO_PUBLIC_REVIEWER_EMAILS || '')
+  .toLowerCase().split(',').map((e) => e.trim()).filter(Boolean);
+
 export default function ProfileScreen() {
   const router = useRouter();
   const colors = useColors();
@@ -236,7 +239,7 @@ export default function ProfileScreen() {
     resetOnboarding,
     showToast,
   } = useApp();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   const [tab, setTab] = useState<TabKey>('personal');
   const [parseOpen, setParseOpen] = useState(false);
@@ -911,14 +914,16 @@ export default function ProfileScreen() {
                   onPress={() => router.push('/dev/scout-orb' as never)}
                 />
               ) : null}
-              {__DEV__ ? (
+              {__DEV__ ||
+              REVIEWER_REPLAY_EMAILS.includes((user?.email || '').toLowerCase()) ? (
                 <Button
                   label="Replay onboarding"
                   variant="outline"
                   onPress={() => {
                     // Onboarding is opt-in now (not force-gated), so enter it
                     // explicitly. resetOnboarding clears the completion flag so
-                    // a future new-user gate would show it again.
+                    // a future new-user gate would show it again. Exposed for
+                    // reviewer/founder accounts to re-test without a reinstall.
                     resetOnboarding();
                     router.push('/(onboarding)');
                   }}
