@@ -17,7 +17,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationQueriesSchemes": [
           "googlegmail"
-        ]
+        ],
+        "NSPhotoLibraryUsageDescription": "Offerloop only accesses photos you explicitly choose to attach (for example a profile image). It never scans or uploads your photo library."
       }
     },
     "android": {
