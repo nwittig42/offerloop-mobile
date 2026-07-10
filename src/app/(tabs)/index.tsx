@@ -127,6 +127,29 @@ const INTRO_SEEN_KEY = 'offerloop.scoutIntro.v1';
 // promise can never receive this JS: the app.json change moved the runtime
 // fingerprint, and OTAs only target their own runtime.
 
+
+/** Raw pipeline stage keys (filling_form, inspecting_page...) read like a
+ *  stack trace on a card. Map the known ones, prettify the rest. */
+const STAGE_LABELS: Record<string, string> = {
+  queued: 'Queued…',
+  running: 'Working…',
+  filling_form: 'Filling out the form…',
+  inspecting_page: 'Reading the application page…',
+  answering_questions: 'Answering screening questions…',
+  submitting: 'Submitting…',
+  uploading_resume: 'Attaching your resume…',
+};
+const humanStage = (raw?: string | null): string => {
+  const key = (raw || '').trim();
+  if (!key) return 'Working…';
+  if (STAGE_LABELS[key]) return STAGE_LABELS[key];
+  if (/^[a-z0-9_]+$/.test(key)) {
+    const words = key.replace(/_/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1) + '…';
+  }
+  return key;
+};
+
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const THINK_WORDS = [
@@ -522,7 +545,7 @@ function ScoutTabInner() {
             // application survived the app kill invisibly. Poll the real
             // status doc until a terminal state, no invented numbers.
             const cardId = `aa-${id}`;
-            upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: item.stageLabel || 'Submitting…' });
+            upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: humanStage(item.stageLabel) });
             void (async () => {
               for (let i = 0; i < 45 && alive; i += 1) {
                 await new Promise((res) => setTimeout(res, 4000));
@@ -546,7 +569,7 @@ function ScoutTabInner() {
                   );
                   return;
                 }
-                upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: doc.stage || 'Submitting…' });
+                upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: humanStage(doc.stage) });
               }
               // Poll budget spent (~3 min) — server zombie-filters at 8; let it go quietly.
               if (alive) dropCard(cardId);
