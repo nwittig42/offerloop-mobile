@@ -142,11 +142,11 @@ export default function Onboarding() {
       locations: locations.length,
       drafted,
     });
+    // Navigate via the auth gate, NOT a direct router.replace here: the gate
+    // already routes onboardingDone + inOnboarding -> /(tabs). Two navigations
+    // firing at once (this replace + the gate's) crashed react-native-screens
+    // mid-transition. Setting the flag lets the gate own the single move.
     completeOnboarding();
-    // Explicit /(tabs) — bare '/' is ambiguous (both the feed and this screen
-    // are group indexes at '/'), and from inside this group it resolves back
-    // to the onboarding start, causing the "completed → back to start" loop.
-    router.replace('/(tabs)');
   };
 
   const chooseTrack = () => {

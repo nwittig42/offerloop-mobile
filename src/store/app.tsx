@@ -553,16 +553,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // user: hasn't completed it AND the real /me has no profile data yet. Gated on
   // meQuery.isSuccess so we never force-redirect on the mock fallback (which
   // would trap established users). FORCE_ONBOARDING (dev) overrides for testing.
-  // A confirmed-empty SERVER profile means genuinely new — even if the local
-  // "onboarding done" flag is set (stale from a prior install, or the account
-  // was reset). Trust the server: an empty account should re-onboard without a
-  // reinstall. The local flag only suppresses onboarding when the server can't
-  // confirm (mock fallback / offline), so established users are never trapped.
-  const serverSaysNew = meQuery.isSuccess && !profile.hasServerProfile;
+  // Onboarding-done flag is authoritative: forcing onboarding when the SERVER
+  // looks empty raced the finish() navigation (the /me query is stale right
+  // after onboarding, so the gate yanked the user back to /(onboarding) mid
+  // transition to /(tabs) — two competing navigations crashed
+  // react-native-screens). A fresh install always has the flag unset, so a
+  // brand-new user (and the reviewer) still onboards; re-testing on the same
+  // install clears the flag via reinstall.
   const needsOnboarding =
-    FORCE_ONBOARDING ||
-    serverSaysNew ||
-    (onboardingDone === false && meQuery.isSuccess && !profile.hasServerProfile);
+    onboardingDone === false &&
+    (FORCE_ONBOARDING || (meQuery.isSuccess && !profile.hasServerProfile));
 
   // PostHog identity: point analytics at the signed-in user (Firebase uid =
   // the web's distinct_id), and set person properties once /me resolves so the
