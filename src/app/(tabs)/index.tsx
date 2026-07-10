@@ -597,6 +597,42 @@ function ScoutTabInner() {
               // Poll budget spent (~3 min) — server zombie-filters at 8; let it go quietly.
               if (alive) dropCard(cardId);
             })();
+          } else if (item.jobRef.kind === 'meeting_prep') {
+            // A prep started from Scout chat survived the app kill. Preps
+            // build in ~60s; poll the same doc the Meeting Prep screen
+            // reads, no invented progress.
+            const cardId = `prep-${id}`;
+            upsertCard({ id: cardId, title: item.title || 'Building your meeting prep', stageLabel: humanStage(item.stageLabel) });
+            void (async () => {
+              for (let i = 0; i < 36 && alive; i += 1) {
+                await new Promise((res) => setTimeout(res, 5000));
+                if (!alive) return;
+                let doc: { status?: string; stageLabel?: string; progressPct?: number };
+                try {
+                  doc = await apiFetch(`/api/coffee-chat-prep/${encodeURIComponent(id)}`, { timeoutMs: 15_000 });
+                } catch {
+                  continue; // transient — keep the card, try again
+                }
+                if (!alive) return;
+                const st = (doc.status || '').toLowerCase();
+                if (st && st !== 'processing') {
+                  dropCard(cardId);
+                  setReply(
+                    st === 'completed' || st === 'complete'
+                      ? { say: 'Your meeting prep is ready.', actions: [{ label: 'Open the prep', href: `/meeting-prep/${id}` }] }
+                      : { say: "That meeting prep didn't finish — your credits were refunded if it failed. Ask me to run it again.", actions: [] },
+                  );
+                  return;
+                }
+                upsertCard({
+                  id: cardId,
+                  title: item.title || 'Building your meeting prep',
+                  stageLabel: humanStage(doc.stageLabel),
+                  progressPct: typeof doc.progressPct === 'number' ? doc.progressPct : undefined,
+                });
+              }
+              if (alive) dropCard(cardId);
+            })();
           }
         }
       } catch {
