@@ -100,24 +100,50 @@ export const KNOWN_FIRMS = [...FINANCE_FIRMS, ...CONSULTING_FIRMS, ...TECH_FIRMS
  *  banking" — shells, stale accounts, dead links — and five junk drafts
  *  shipped). Maps each industry to real firms so the rescue card offers
  *  complete, answerable asks. */
-const INDUSTRY_FIRM_MAP: [RegExp, string[]][] = [
-  [/^(investment banking|invest?ment banks?|ib|banking)$/i,
-   ['Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore', 'Moelis']],
-  [/^(finance|financial services)$/i,
-   ['Goldman Sachs', 'JPMorgan', 'BlackRock', 'Morgan Stanley']],
-  [/^(private equity|pe)$/i, ['Blackstone', 'KKR', 'Apollo', 'Carlyle']],
-  [/^(hedge funds?|hf)$/i, ['Citadel', 'Point72', 'Millennium', 'Two Sigma']],
-  [/^(consulting|management consulting)$/i, ['McKinsey', 'Bain', 'BCG', 'Deloitte']],
-  [/^(tech|technology|software|big tech)$/i, ['Google', 'Meta', 'Stripe', 'Anthropic']],
+const INDUSTRY_FIRM_MAP: { phrases: string[]; firms: string[] }[] = [
+  { phrases: ['investment banking', 'investment banks', 'investment bank', 'ib', 'banking'],
+    firms: ['Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore', 'Moelis'] },
+  { phrases: ['finance', 'financial services'],
+    firms: ['Goldman Sachs', 'JPMorgan', 'BlackRock', 'Morgan Stanley'] },
+  { phrases: ['private equity', 'pe'], firms: ['Blackstone', 'KKR', 'Apollo', 'Carlyle'] },
+  { phrases: ['hedge funds', 'hedge fund', 'hf'], firms: ['Citadel', 'Point72', 'Millennium', 'Two Sigma'] },
+  { phrases: ['consulting', 'management consulting'], firms: ['McKinsey', 'Bain', 'BCG', 'Deloitte'] },
+  { phrases: ['tech', 'technology', 'software', 'big tech'], firms: ['Google', 'Meta', 'Stripe', 'Anthropic'] },
 ];
+
+/** "the tech industry" / "tech sector" / "the world of finance" all mean the
+ *  same industry — strip the dressing before matching. */
+const stripIndustryDressing = (s: string): string =>
+  s.toLowerCase().replace(/\s+/g, ' ').trim()
+    .replace(/^the\s+/, '')
+    .replace(/^world of\s+/, '')
+    .replace(/\s+(industry|sector|space|field|world)$/, '')
+    .trim();
 
 /** Firms to suggest when the "company" is actually an industry, or null when
  *  it's a legitimate company name. */
 export function industryFirmsFor(company: string | null | undefined): string[] | null {
-  const c = (company || '').trim().replace(/\s+/g, ' ');
+  const c = stripIndustryDressing(company || '');
   if (!c) return null;
-  for (const [re, firms] of INDUSTRY_FIRM_MAP) {
-    if (re.test(c)) return firms;
+  for (const { phrases, firms } of INDUSTRY_FIRM_MAP) {
+    if (phrases.includes(c)) return firms;
+  }
+  return null;
+}
+
+/** Scan a whole ask for an industry mention — the company-less broad ask
+ *  ("find me five employees in the tech industry in LA") names no firm at
+ *  all, so the picker has to key off the sentence, not the company slot.
+ *  Short abbreviations (ib, pe, hf) are skipped here: too collision-prone
+ *  as free-text substrings. */
+export function industryFirmsInText(text: string): string[] | null {
+  const t = (text || '').toLowerCase().replace(/\s+/g, ' ');
+  if (!t) return null;
+  for (const { phrases, firms } of INDUSTRY_FIRM_MAP) {
+    for (const p of phrases) {
+      if (p.length <= 2) continue;
+      if (new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '')}\\b`).test(t)) return firms;
+    }
   }
   return null;
 }
@@ -129,13 +155,16 @@ const normFirm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim(
  *  title boutique banks barely use; titles are industry-specific). Unknown
  *  firms get the generic-safe pair. */
 export function titleFamiliesFor(company: string | null): string[] {
-  if (!company) return ['Analysts', 'Recruiters'];
+  if (!company) return ['Analysts', 'Associates'];
   const c = normFirm(company);
   const has = (list: string[]) => list.some((f) => normFirm(f) === c);
   if (has(FINANCE_FIRMS)) return ['Analysts', 'Associates'];
   if (has(CONSULTING_FIRMS)) return ['Consultants', 'Associates'];
-  if (has(TECH_FIRMS)) return ['Recruiters', 'Engineers'];
-  return ['Analysts', 'Recruiters'];
+  if (has(TECH_FIRMS)) return ['Engineers', 'Product managers'];
+  // Unknown firm: employee titles only (targeting doctrine 2026-07-09 -
+  // recruiters are never a default suggestion; explicit HM asks have their
+  // own path, and the database fills employee queries far better).
+  return ['Analysts', 'People on the team'];
 }
 
 function editDistance(a: string, b: string): number {

@@ -36,6 +36,7 @@ import {
   parseNav,
   preflightFor,
   industryFirmsFor,
+  industryFirmsInText,
   refineOptions,
   suggestFirm,
   findFirmInText,
@@ -45,6 +46,7 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
+import { ApiError } from '@/api/errors';
 import { askScoutBrain, askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
 import { useIsFocused } from '@react-navigation/native';
@@ -93,12 +95,12 @@ const NIGHT = {
  *  the door never looks the same twice (all real, runnable asks). */
 const SUGGESTION_POOL = [
   'Draft 3 IB analysts at Goldman Sachs',
-  'Find hiring managers at Stripe',
+  'Draft 2 engineers at Stripe',
   'Prep me for my next coffee chat',
   'Find me a PM role to apply to',
   'Analysts at Morgan Stanley in LA',
   'Draft 2 consultants at McKinsey',
-  'Recruiters at Google',
+  'Engineers at Google',
   'Apply to my saved jobs',
   'Associates at Evercore in New York',
   'Draft someone on the deal team at Lazard',
@@ -113,7 +115,7 @@ const NO_GMAIL_POOL = [
   'Show me people at Goldman Sachs',
   'Who works at McKinsey',
   'Find me consulting roles in LA',
-  'Show me recruiters at Google',
+  'Show me engineers at Google',
   'Prep me for my next coffee chat',
   'Draft 3 IB analysts at Goldman Sachs',
   'Analysts at Morgan Stanley in LA',
@@ -470,6 +472,26 @@ function ScoutTabInner() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (e: unknown) {
         dropCard(id);
+        // Backend industry guard (INDUSTRY_NOT_COMPANY): the server refused
+        // to search an industry as an employer. Recover with the firm
+        // picker instead of a generic failure - same card the client-side
+        // guard shows, so the two layers feel like one behavior.
+        const bodyCode = e instanceof ApiError ? ((e.body as { code?: string } | null)?.code ?? '') : '';
+        if (bodyCode === 'INDUSTRY_NOT_COMPANY') {
+          const firms = industryFirmsFor(intent.company)
+            ?? industryFirmsInText(intent.company || '')
+            ?? ['Goldman Sachs', 'JPMorgan', 'McKinsey', 'Google'];
+          const loc = intent.location ? ` in ${intent.location}` : '';
+          const role = intent.hm ? 'hiring managers' : (intent.role || 'people on the team');
+          track('scout_gate', { gate: 'industry_not_company', from: 'server' });
+          setRefine({
+            heard: `${intent.role || 'people'} at ${intent.company}`,
+            options: firms.slice(0, 4).map((f) =>
+              intent.count > 1 ? `Draft ${intent.count} ${role} at ${f}${loc}` : `${role} at ${f}${loc}`),
+          });
+          setPhase('idle');
+          return;
+        }
         const msg = e instanceof Error ? e.message : '';
         const noCredits = /credit/i.test(msg);
         track('scout_action_completed', { action: 'draft', ok: false, no_credits: noCredits });
@@ -768,12 +790,26 @@ function ScoutTabInner() {
       // links; five junk drafts shipped tonight). Offer real firms in that
       // industry instead — complete asks carrying the count, role, and
       // location the user already gave. Catches classifier re-entries too.
-      if ((intent?.kind === 'draft' || intent?.kind === 'find_people') && intent.company) {
-        const firms = industryFirmsFor(intent.company);
+      if (intent?.kind === 'draft' || intent?.kind === 'find_people') {
+        // Fires two ways: the industry landed in the company slot, OR the
+        // ask named no firm at all but talks about an industry ("find me
+        // five employees in the tech industry in LA" — the classifier now
+        // correctly leaves company empty for those).
+        const firms = industryFirmsFor(intent.company)
+          ?? (!intent.company ? industryFirmsInText(clean) : null);
         if (firms) {
           const n = intent.kind === 'draft' ? intent.count : 0;
-          const role = (intent.kind === 'draft' && intent.hm) ? 'hiring managers'
-            : intent.role || 'analysts';
+          // Targeting doctrine: employees are the default. Only an explicit
+          // hiring-manager ask keeps that targeting; generic words
+          // ("employees", "people") and industry-words-as-role become the
+          // pipeline's employee-shaped phrasing.
+          const rawRole = (intent.role || '').trim();
+          const roleIsGeneric =
+            !rawRole || /^(employees?|people|someone|anyone|workers?)$/i.test(rawRole) ||
+            !!industryFirmsFor(rawRole);
+          const role = (intent.kind === 'draft' && intent.hm)
+            ? 'hiring managers'
+            : roleIsGeneric ? 'people on the team' : rawRole;
           const loc = intent.location ? ` in ${intent.location}` : '';
           setReply(null);
           track('scout_gate', { gate: 'industry_not_company' });
