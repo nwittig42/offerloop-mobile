@@ -7,6 +7,7 @@ import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'reac
 import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
 import { enrichLinkedin } from '@/api/endpoints/profile';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
+import { matchCities } from '@/data/cities';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import SnakeBorder from '@/components/ui/SnakeBorder';
@@ -341,25 +342,40 @@ export default function Onboarding() {
         {/* Free-text entry: the six chips cover a fraction of where students
             recruit (Houston, Charlotte, Atlanta, London...). Type-and-add so
             nobody's city is unrepresentable. */}
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+        <View style={{ marginBottom: 12 }}>
           <TextInput
             value={locQuery}
             onChangeText={setLocQuery}
-            onSubmitEditing={() => {
-              const v = locQuery.trim();
-              if (v && !locations.includes(v)) {
-                Haptics.selectionAsync();
-                setLocations((prev) => [...prev, v]);
-              }
-              setLocQuery('');
-            }}
             returnKeyType="done"
-            placeholder="Add a city"
+            placeholder="Search a city"
             placeholderTextColor={colors.inkTertiary}
             autoCapitalize="words"
             autoCorrect={false}
-            style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
+            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
           />
+          {/* Only real cities from the curated list can be added — typing
+              "Bosto" no longer saves a fake place (no-fake-data rule). */}
+          {locQuery.trim().length > 0 ? (
+            <View style={{ marginTop: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, overflow: 'hidden' }}>
+              {matchCities(locQuery).filter((c) => !locations.includes(c)).map((c, i, arr) => (
+                <Pressable
+                  key={c}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setLocations((prev) => [...prev, c]);
+                    setLocQuery('');
+                  }}
+                  style={{ paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: colors.hairlineLight }}>
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>{c}</Text>
+                </Pressable>
+              ))}
+              {matchCities(locQuery).filter((c) => !locations.includes(c)).length === 0 ? (
+                <Text style={{ paddingVertical: 12, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
+                  No match — try a major metro or Remote.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {locations
@@ -633,7 +649,7 @@ export default function Onboarding() {
             <Ionicons name="rocket-outline" size={42} color={colors.marketing} />
           </View>
           <View style={{ gap: 10, width: '100%' }}>
-            {['Swipe right on a job → we draft the intro', 'Replies land in your Inbox for fast follow-ups', 'Loops keep finding people on autopilot'].map((t) => (
+            {['Swipe right on a job → we draft the intro', 'Ask Scout to find people and write outreach', 'Replies land in your Inbox for fast follow-ups'].map((t) => (
               <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
                 <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.ink }}>{t}</Text>
