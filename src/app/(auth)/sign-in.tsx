@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +31,11 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<'enter' | 'sending' | 'sent'>('enter');
   const [error, setError] = useState<string | null>(null);
+  // Resend: the link can land in spam or never arrive, and the only way
+  // out used to be 'Use a different email'. Cooldown stops rapid taps
+  // (each one invalidates the previous link).
+  const [resendIn, setResendIn] = useState(0);
+  const [resendNote, setResendNote] = useState<string | null>(null);
 
   // Password sign-in for dev + internal (preview-channel) field builds, since the
   // magic-link universal-link hand-back isn't built yet. Hidden on the production
@@ -58,6 +63,24 @@ export default function SignInScreen() {
     }
   };
 
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const resend = async () => {
+    if (resendIn > 0) return;
+    setResendNote(null);
+    try {
+      await sendSignInLink(email);
+      setResendIn(30);
+      setResendNote('Sent again — check your inbox and spam.');
+    } catch (e: any) {
+      setResendNote(e?.message || 'Could not resend. Try again in a moment.');
+    }
+  };
+
   const valid = /\S+@\S+\.\S+/.test(email.trim());
 
   const send = async () => {
@@ -67,6 +90,7 @@ export default function SignInScreen() {
     try {
       await sendSignInLink(email);
       setPhase('sent');
+      setResendIn(30);
     } catch (e: any) {
       setError(e?.message || 'Could not send the link. Try again.');
       setPhase('enter');
@@ -120,6 +144,24 @@ export default function SignInScreen() {
             }}>
             <Ionicons name="mail-unread-outline" size={30} color={colors.accent} />
           </View>
+          <Button
+            label={resendIn > 0 ? `Resend link (${resendIn}s)` : 'Resend link'}
+            variant="outline"
+            disabled={resendIn > 0}
+            onPress={resend}
+          />
+          {resendNote ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                color: colors.inkTertiary,
+                textAlign: 'center',
+                maxWidth: 280,
+              }}>
+              {resendNote}
+            </Text>
+          ) : null}
           <Button label="Use a different email" variant="ghost" onPress={() => setPhase('enter')} />
         </View>
       ) : (

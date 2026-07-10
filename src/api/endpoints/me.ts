@@ -69,6 +69,11 @@ export async function fetchMe(): Promise<Profile> {
     creditsPerSwipe: me.creditsPerSwipe || 5,
     gmailConnected: me.gmailConnected,
     gmailAddress: me.gmailAddress || '',
+    // hasResume is the truth; `resume` keeps a placeholder object so the card
+    // can render an empty state. Never derive "has a resume" from resume.name
+    // — the placeholder is truthy (fresh accounts showed an "Attached" chip
+    // and a completion ring crediting a resume they never uploaded).
+    hasResume: !!me.resume,
     resume: me.resume
       ? { name: me.resume.name, updatedLabel: 'On file' }
       : { name: 'No resume yet', updatedLabel: 'Add on offerloop.ai' },

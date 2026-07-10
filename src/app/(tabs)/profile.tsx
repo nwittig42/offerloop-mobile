@@ -75,7 +75,7 @@ function ProfileCompletion({
     profile.industries.length > 0,
     !!profile.gradYear?.trim(),
     !!profile.about?.trim(),
-    !!profile.resume?.name,
+    profile.hasResume,
     profile.gmailConnected,
   ];
   const done = checks.filter(Boolean).length;
@@ -622,7 +622,11 @@ export default function ProfileScreen() {
                     {profile.resume.updatedLabel}
                   </Text>
                 </View>
-                <Chip label="Attached" tone="positive" dot />
+                {profile.hasResume ? (
+                  <Chip label="Attached" tone="positive" dot />
+                ) : (
+                  <Chip label="Not added" tone="neutral" />
+                )}
               </Card>
 
               {/* LinkedIn, the second source we gather from, above the parse.
