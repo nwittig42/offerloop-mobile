@@ -23,7 +23,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://offerloop-staging.onrender.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://offerloop-staging.onrender.com",
+        "EXPO_PUBLIC_REVIEWER_EMAILS": "applereview@offerloop.ai"
       },
       "channel": "production"
     }

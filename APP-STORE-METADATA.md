@@ -84,17 +84,25 @@ data brokers, no cross-app tracking):
 
 ## App Review Information (the reviewer-login gate)
 
-- Sign-in required: YES. Demo account: [reviewer email — Nick sets up the
-  inbox; see auth-audit output for the exact retrieval flow].
-- Notes for reviewer (draft):
-  "Offerloop signs in via email magic link (passwordless). Use the demo
-  account [email]. Retrieve the sign-in link at [inbox access instructions —
-  e.g. mail-tester inbox URL or credentials]. The account is pre-loaded with
-  a connected profile so Feed, Scout, Inbox, and Meeting Prep are all
-  populated. Voice features: tap the center Scout orb and speak; audio may
-  be transcribed server-side as disclosed in the permission dialog. Gmail
-  connection is optional; the demo account has it linked so drafts are
-  visible in the Inbox tab."
+- Sign-in required: YES.
+- Demo account (CREATED 2026-07-09, uid DPiaCKOnHghLl4CwzrCZd2N7cOp2):
+  - Email: applereview@offerloop.ai
+  - Password: Offerloop-Review-2026!
+  - Mechanism: production builds show a password panel when this exact email
+    is typed in the sign-in field (build-time allowlist
+    EXPO_PUBLIC_REVIEWER_EMAILS in eas.json production env). Normal users
+    never see it; magic link remains the consumer path.
+- Notes for reviewer (paste-ready):
+  "Offerloop normally signs in via email magic link. For review: on the
+  sign-in screen, type applereview@offerloop.ai in the email field - a
+  PASSWORD SIGN-IN panel appears below. Enter the same email and password
+  Offerloop-Review-2026! there and tap sign in. Voice features: tap the
+  center Scout orb and speak; audio may be transcribed on Offerloop servers
+  as disclosed in the permission dialog. Gmail connection is optional and
+  not required to evaluate the app."
+- TODO before submit: sign into the demo account once on a test device and
+  complete onboarding so the reviewer lands on a populated app (or verify
+  the onboarding flow itself is the intended first-run experience).
 
 ## Screenshot shot list (6.7" required = iPhone 15/16 Pro Max; 6.5" optional)
 

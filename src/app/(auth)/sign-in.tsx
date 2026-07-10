@@ -14,6 +14,15 @@ import { fonts } from '@/theme/tokens';
  * opens the app signed in. No passwords, no social buttons (so no Sign in with
  * Apple requirement). Same account as the website, matched by email.
  */
+const REVIEWER_EMAILS = (process.env.EXPO_PUBLIC_REVIEWER_EMAILS || '')
+  .toLowerCase()
+  .split(',')
+  .map((e) => e.trim())
+  .filter(Boolean);
+
+const isReviewerEmail = (email: string): boolean =>
+  REVIEWER_EMAILS.includes(email.trim().toLowerCase());
+
 export default function SignInScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -25,8 +34,13 @@ export default function SignInScreen() {
 
   // Password sign-in for dev + internal (preview-channel) field builds, since the
   // magic-link universal-link hand-back isn't built yet. Hidden on the production
-  // channel so store builds stay passwordless. Prefilled from
-  // EXPO_PUBLIC_DEV_EMAIL / EXPO_PUBLIC_DEV_PASSWORD if set.
+  // channel so store builds stay passwordless — with ONE exception: App Review.
+  // Apple reviewers must be able to sign in (submission gate, 2026-07-09); when
+  // the email typed in the MAIN field matches the build-time reviewer allowlist
+  // (EXPO_PUBLIC_REVIEWER_EMAILS, comma-separated, set in eas.json production
+  // env), the password panel appears for that account only. First-party
+  // email+password does not trigger the Sign-in-with-Apple rule (4.8 covers
+  // third-party/social login). Invisible to every normal user.
   const [devEmail, setDevEmail] = useState(process.env.EXPO_PUBLIC_DEV_EMAIL || '');
   const [devPassword, setDevPassword] = useState(process.env.EXPO_PUBLIC_DEV_PASSWORD || '');
   const [devError, setDevError] = useState<string | null>(null);
@@ -158,7 +172,7 @@ export default function SignInScreen() {
         </View>
       )}
 
-      {(__DEV__ || Updates.channel === 'preview') && phase !== 'sent' ? (
+      {(__DEV__ || Updates.channel === 'preview' || isReviewerEmail(email)) && phase !== 'sent' ? (
         <View
           style={{
             marginTop: 28,
@@ -170,7 +184,7 @@ export default function SignInScreen() {
             backgroundColor: colors.paper,
           }}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 1, color: colors.inkTertiary }}>
-            DEV SIGN-IN (TEST ACCOUNT)
+            {__DEV__ || Updates.channel === 'preview' ? 'DEV SIGN-IN (TEST ACCOUNT)' : 'PASSWORD SIGN-IN'}
           </Text>
           <TextInput
             value={devEmail}
