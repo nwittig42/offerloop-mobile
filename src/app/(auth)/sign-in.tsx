@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
-import { Image, Text, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -47,6 +47,11 @@ export default function SignInScreen() {
   // email+password does not trigger the Sign-in-with-Apple rule (4.8 covers
   // third-party/social login). Invisible to every normal user.
   const [devEmail, setDevEmail] = useState(process.env.EXPO_PUBLIC_DEV_EMAIL || '');
+  // Reviewer types their address once, in the main field: mirror it down so
+  // the panel only needs the password.
+  useEffect(() => {
+    if (isReviewerEmail(email)) setDevEmail(email.trim().toLowerCase());
+  }, [email]);
   const [devPassword, setDevPassword] = useState(process.env.EXPO_PUBLIC_DEV_PASSWORD || '');
   const [devError, setDevError] = useState<string | null>(null);
   const [devBusy, setDevBusy] = useState(false);
@@ -98,14 +103,20 @@ export default function SignInScreen() {
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.surface,
-        paddingTop: insets.top + 40,
-        paddingHorizontal: 28,
-        paddingBottom: insets.bottom + 24,
-      }}>
+    // Keyboard-aware + scrollable: the password panel renders BELOW the send
+    // button, and with the keyboard up it used to sit off-screen entirely —
+    // the reviewer (and we) could never reach it.
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.surface }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + 40,
+          paddingHorizontal: 28,
+          paddingBottom: insets.bottom + 24,
+        }}>
       <View style={{ alignItems: 'center', gap: 10, marginBottom: 28 }}>
         <Image
           source={require('../../../assets/images/offerloop-mark.png')}
@@ -192,13 +203,26 @@ export default function SignInScreen() {
           {error ? (
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative }}>{error}</Text>
           ) : null}
-          <Button
-            label={phase === 'sending' ? 'Sending...' : 'Email me a sign-in link'}
-            variant="brand"
-            fullWidth
-            disabled={!valid || phase === 'sending'}
-            onPress={send}
-          />
+          {isReviewerEmail(email) ? (
+            <Text
+              style={{
+                fontFamily: fonts.sansMedium,
+                fontSize: 12.5,
+                color: colors.accent,
+                textAlign: 'center',
+                lineHeight: 18,
+              }}>
+              Review account detected — use the password panel below.
+            </Text>
+          ) : (
+            <Button
+              label={phase === 'sending' ? 'Sending...' : 'Email me a sign-in link'}
+              variant="brand"
+              fullWidth
+              disabled={!valid || phase === 'sending'}
+              onPress={send}
+            />
+          )}
           <Text
             style={{
               fontFamily: fonts.sans,
@@ -280,6 +304,7 @@ export default function SignInScreen() {
           />
         </View>
       ) : null}
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
