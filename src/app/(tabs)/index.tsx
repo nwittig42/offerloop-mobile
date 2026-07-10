@@ -742,6 +742,24 @@ function ScoutTabInner() {
       }
 
       const intent = parseIntent(clean);
+      // Slot inheritance (the JPMorgan bug, 2026-07-09): a refine or
+      // did-you-mean tap re-parses a SHORT variant ("Analysts at JPMorgan")
+      // while fresh context still holds what the user actually asked for
+      // ("draft five … in Los Angeles"). The ctx pill showed 5 · Los Angeles
+      // as the job quietly ran 1 · anywhere. Inherit missing count/location
+      // from fresh context — every confirm card downstream renders the
+      // inherited values, so nothing spends invisibly. Count only inherits
+      // when THIS ask names no number (an explicit "draft one analyst"
+      // always wins).
+      if (intent?.kind === 'draft' && ctx && ctx.age <= 3) {
+        const namesCount = /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(clean);
+        if (!namesCount && intent.count <= 1 && (ctx.slots.count ?? 0) > 1) {
+          intent.count = Math.min(ctx.slots.count as number, 5);
+        }
+        if (!intent.location && ctx.slots.location) {
+          intent.location = ctx.slots.location;
+        }
+      }
       setAsk(clean);
 
       remember(clean);

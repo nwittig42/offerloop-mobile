@@ -565,16 +565,32 @@ export function refineOptions(ask: string, preferredLocations: string[]): string
   const heardLoc = ask.match(/\bin\s+([A-Za-z .\-]{2,32})[,.!?]?$/i)?.[1]?.trim() ?? null;
   const browsey = /(show me|who works|people at|look up|browse)/i.test(ask);
   const tail = heardLoc ? ` in ${heardLoc}` : '';
+  // Honor the heard COUNT too (the JPMorgan bug, 2026-07-09): "draft five
+  // emails to people at JPMorgan in LA" refined to options like "Analysts
+  // at JPMorgan" — tapping one re-parsed WITHOUT the five and one email
+  // went out. Options are complete asks; a variant that drops a slot the
+  // user said runs a different ask than the one they approved.
+  let heardCount = 0;
+  const cd = ask.match(/\b(\d{1,2})\b/);
+  if (cd) heardCount = parseInt(cd[1], 10);
+  else {
+    const cw = ask.match(/\b(two|three|four|five|six|seven|eight|nine|ten)\b/i);
+    if (cw) heardCount = NUM_WORDS[cw[1].toLowerCase()] ?? 0;
+  }
+  heardCount = Math.min(heardCount, 5);
+  const lead = heardCount > 1 ? `Draft ${heardCount} ` : '';
   // Industry-aware titles (chips must be answerable) + a can't-miss door.
   const fams = titleFamiliesFor(company);
   const opts: string[] = [];
   if (browsey) opts.push(`Show me people at ${company}${tail}`);
-  opts.push(`${fams[0]} at ${company}${tail}`);
-  if (fams[1]) opts.push(`${fams[1]} at ${company}${tail}`);
-  opts.push(`Draft someone on the team at ${company}${tail}`);
+  opts.push(`${lead}${fams[0]} at ${company}${tail}`);
+  if (fams[1]) opts.push(`${lead}${fams[1]} at ${company}${tail}`);
+  opts.push(heardCount > 1
+    ? `Draft ${heardCount} people on the team at ${company}${tail}`
+    : `Draft someone on the team at ${company}${tail}`);
   if (!browsey && !heardLoc && opts.length < 4) {
     const loc = (preferredLocations || []).find((l) => l && l.length < 24);
-    if (loc) opts.push(`${fams[0]} at ${company} in ${loc}`);
+    if (loc) opts.push(`${lead}${fams[0]} at ${company} in ${loc}`);
   }
   return opts.slice(0, 4);
 }
