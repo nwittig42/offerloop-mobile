@@ -32,6 +32,24 @@ import { resolveSchool } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
 
+// TEMP DIAGNOSTIC (crash-loop hunt 2026-07-10): surface the real JS fatal in an
+// Alert before Expo's error recovery converts it to a silent native abort. The
+// crash .ips strips the JS message, so this makes the next reproduce SHOW us the
+// error. Remove once the crash is fixed.
+if (typeof ErrorUtils !== 'undefined' && (ErrorUtils as any)?.setGlobalHandler) {
+  const prev = (ErrorUtils as any).getGlobalHandler?.();
+  (ErrorUtils as any).setGlobalHandler((err: any, isFatal?: boolean) => {
+    try {
+      const { Alert } = require('react-native');
+      Alert.alert(
+        isFatal ? 'Fatal JS error' : 'JS error',
+        String(err?.message || err) + '\n\n' + String(err?.stack || '').split('\n').slice(0, 6).join('\n'),
+      );
+    } catch {}
+    prev?.(err, isFatal);
+  });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
