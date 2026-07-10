@@ -37,16 +37,19 @@ SplashScreen.preventAutoHideAsync();
 // crash .ips strips the JS message, so this makes the next reproduce SHOW us the
 // error. Remove once the crash is fixed.
 if (typeof ErrorUtils !== 'undefined' && (ErrorUtils as any)?.setGlobalHandler) {
-  const prev = (ErrorUtils as any).getGlobalHandler?.();
   (ErrorUtils as any).setGlobalHandler((err: any, isFatal?: boolean) => {
+    // SWALLOW the fatal: do NOT call the previous (Expo) handler, so Expo's
+    // error recovery never aborts and the Alert stays on screen to be read.
+    // The app may be in a degraded state after, but we get the message.
     try {
       const { Alert } = require('react-native');
-      Alert.alert(
-        isFatal ? 'Fatal JS error' : 'JS error',
-        String(err?.message || err) + '\n\n' + String(err?.stack || '').split('\n').slice(0, 6).join('\n'),
-      );
+      const msg = String(err?.message || err);
+      const stk = String(err?.stack || '').split('\n').slice(0, 8).join('\n');
+      Alert.alert(isFatal ? 'FATAL JS ERROR (diag)' : 'JS error (diag)', msg + '\n\n' + stk);
+      // Persist as backup so it survives even if the alert is missed.
+      const AS = require('@react-native-async-storage/async-storage').default;
+      AS.setItem('__lastFatal', msg + '\n' + stk).catch(() => {});
     } catch {}
-    prev?.(err, isFatal);
   });
 }
 
