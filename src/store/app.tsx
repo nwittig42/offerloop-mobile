@@ -33,6 +33,7 @@ import { isInsufficientCredits } from '@/api/errors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, track } from '@/lib/analytics';
+import { safeStringify } from '@/lib/safeJson';
 import { normCompanyName, sameCompany } from '@/lib/company';
 import {
   hasNotificationPermission,
@@ -400,7 +401,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Persist on every change (after the initial load), keyed per-user.
   useEffect(() => {
     if (!uid || !passedLoaded) return;
-    AsyncStorage.setItem(passedJobsStorageKey(uid), JSON.stringify(passedEntries)).catch(() => {});
+    { const j = safeStringify(passedEntries); if (j) AsyncStorage.setItem(passedJobsStorageKey(uid), j).catch(() => {}); }
   }, [uid, passedEntries, passedLoaded]);
 
   // The real job card the user swiped, per company (see key above). Persisted so
@@ -442,7 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [uid]);
   useEffect(() => {
     if (!uid || !swipedLoadedRef.current) return;
-    AsyncStorage.setItem(swipedCardsStorageKey(uid), JSON.stringify(swipedCards)).catch(() => {});
+    { const j = safeStringify(swipedCards); if (j) AsyncStorage.setItem(swipedCardsStorageKey(uid), j).catch(() => {}); }
   }, [uid, swipedCards]);
   const recordSwipedCard = useCallback((job: Job) => {
     const k = companyKey(job.company);
@@ -488,7 +489,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [uid]);
   useEffect(() => {
     if (!uid || !savedLoadedRef.current) return;
-    AsyncStorage.setItem(savedJobsStorageKey(uid), JSON.stringify(savedJobs)).catch(() => {});
+    { const j = safeStringify(savedJobs); if (j) AsyncStorage.setItem(savedJobsStorageKey(uid), j).catch(() => {}); }
   }, [uid, savedJobs]);
 
   const feedQuery = useQuery({
@@ -611,7 +612,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!name) return;
       const data = q.state.data;
       if (data != null) {
-        AsyncStorage.setItem(cacheStorageKey(uid, name), JSON.stringify(data)).catch(() => {});
+        const j = safeStringify(data);
+        if (j) AsyncStorage.setItem(cacheStorageKey(uid, name), j).catch(() => {});
       }
     });
   }, [uid, queryClient]);

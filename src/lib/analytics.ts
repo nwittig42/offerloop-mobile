@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+import { safeStringify } from '@/lib/safeJson';
+
 /**
  * Lightweight PostHog client — fetch to the capture API, no native module (so it
  * runs on the current dev build with no rebuild). Use the SAME project key + host
@@ -33,10 +35,13 @@ let distinctId: string | null = null;
 function post(payload: Record<string, unknown>) {
   if (!KEY) return;
   // Fire-and-forget; analytics must never throw into the UI or block a tap.
+  // safeStringify: a circular/pathological property can't SIGSEGV Hermes.
+  const body = safeStringify({ api_key: KEY, ...payload });
+  if (!body) return;
   fetch(`${HOST}/capture/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: KEY, ...payload }),
+    body,
   }).catch(() => {});
 }
 

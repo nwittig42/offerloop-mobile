@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/api/config';
+import { safeStringify } from '@/lib/safeJson';
 import { getIdToken, handleUnauthorized } from '@/api/authToken';
 import { ApiError } from '@/api/errors';
 
@@ -79,7 +80,7 @@ export async function apiFetch<T = any>(path: string, opts: FetchOptions = {}): 
     return fetch(url, {
       method,
       headers,
-      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? (body as FormData) : (safeStringify(body) ?? '{}'),
       signal: effectiveSignal,
     });
   };
