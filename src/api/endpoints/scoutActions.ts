@@ -93,6 +93,35 @@ const TECH_FIRMS = [
 
 export const KNOWN_FIRMS = [...FINANCE_FIRMS, ...CONSULTING_FIRMS, ...TECH_FIRMS];
 
+/** Industry phrases that must NEVER run as a company (the JPMorgan-adjacent
+ *  "investment banking" bug, 2026-07-09: "find five hiring managers in
+ *  investment banking in LA" put the INDUSTRY in the company slot, PDL
+ *  matched the only profiles whose employer literally says "investment
+ *  banking" — shells, stale accounts, dead links — and five junk drafts
+ *  shipped). Maps each industry to real firms so the rescue card offers
+ *  complete, answerable asks. */
+const INDUSTRY_FIRM_MAP: [RegExp, string[]][] = [
+  [/^(investment banking|invest?ment banks?|ib|banking)$/i,
+   ['Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore', 'Moelis']],
+  [/^(finance|financial services)$/i,
+   ['Goldman Sachs', 'JPMorgan', 'BlackRock', 'Morgan Stanley']],
+  [/^(private equity|pe)$/i, ['Blackstone', 'KKR', 'Apollo', 'Carlyle']],
+  [/^(hedge funds?|hf)$/i, ['Citadel', 'Point72', 'Millennium', 'Two Sigma']],
+  [/^(consulting|management consulting)$/i, ['McKinsey', 'Bain', 'BCG', 'Deloitte']],
+  [/^(tech|technology|software|big tech)$/i, ['Google', 'Meta', 'Stripe', 'Anthropic']],
+];
+
+/** Firms to suggest when the "company" is actually an industry, or null when
+ *  it's a legitimate company name. */
+export function industryFirmsFor(company: string | null | undefined): string[] | null {
+  const c = (company || '').trim().replace(/\s+/g, ' ');
+  if (!c) return null;
+  for (const [re, firms] of INDUSTRY_FIRM_MAP) {
+    if (re.test(c)) return firms;
+  }
+  return null;
+}
+
 const normFirm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
 
 /** Titles that actually EXIST at this kind of firm — suggestion chips must

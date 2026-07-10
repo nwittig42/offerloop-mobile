@@ -35,6 +35,7 @@ import {
   parseIntent,
   parseNav,
   preflightFor,
+  industryFirmsFor,
   refineOptions,
   suggestFirm,
   findFirmInText,
@@ -758,6 +759,31 @@ function ScoutTabInner() {
         }
         if (!intent.location && ctx.slots.location) {
           intent.location = ctx.slots.location;
+        }
+      }
+      // Industry-as-company guard (2026-07-09): "hiring managers in
+      // investment banking" must never search PDL with the INDUSTRY in the
+      // company slot — the only matches are profiles whose employer field
+      // literally says "investment banking" (shells, stale accounts, dead
+      // links; five junk drafts shipped tonight). Offer real firms in that
+      // industry instead — complete asks carrying the count, role, and
+      // location the user already gave. Catches classifier re-entries too.
+      if ((intent?.kind === 'draft' || intent?.kind === 'find_people') && intent.company) {
+        const firms = industryFirmsFor(intent.company);
+        if (firms) {
+          const n = intent.kind === 'draft' ? intent.count : 0;
+          const role = (intent.kind === 'draft' && intent.hm) ? 'hiring managers'
+            : intent.role || 'analysts';
+          const loc = intent.location ? ` in ${intent.location}` : '';
+          setReply(null);
+          track('scout_gate', { gate: 'industry_not_company' });
+          setRefine({
+            heard: clean,
+            options: firms.slice(0, 4).map((f) =>
+              n > 1 ? `Draft ${n} ${role} at ${f}${loc}` : `${role} at ${f}${loc}`),
+          });
+          setPhase('idle');
+          return;
         }
       }
       setAsk(clean);
