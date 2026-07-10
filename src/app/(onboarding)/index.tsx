@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
 
 import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
+import { enrichLinkedin } from '@/api/endpoints/profile';
+import { useGmailConnect } from '@/hooks/useGmailConnect';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import SnakeBorder from '@/components/ui/SnakeBorder';
@@ -16,7 +18,7 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
-const STEP_NAMES = ['welcome', 'goal', 'plan', 'demo', 'referral', 'notifications', 'done'];
+const STEP_NAMES = ['welcome', 'goal', 'linkedin', 'plan', 'demo', 'gmail', 'referral', 'notifications', 'done'];
 
 /**
  * First-run onboarding — ONE screen, internal step state (no routing between
@@ -25,7 +27,7 @@ const STEP_NAMES = ['welcome', 'goal', 'plan', 'demo', 'referral', 'notification
  * paywall. Reached opt-in via the dev Replay button; never force-traps.
  */
 
-const TOTAL = 7;
+const TOTAL = 9;
 
 // Acquisition channels — tuned to how students actually find Offerloop (referral,
 // social, Reddit, on-campus clubs). Drives marketing attribution.
@@ -108,6 +110,15 @@ export default function Onboarding() {
   const [drafted, setDrafted] = useState(false);
   const [referral, setReferral] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // LinkedIn: the one profile input a student can actually produce on a phone
+  // (nobody has a resume handy). It powers the personalization the whole
+  // product sells, so we ask for it BEFORE the demo draft is written.
+  const [linkedin, setLinkedin] = useState(profile.linkedinUrl ?? '');
+  const [enriching, setEnriching] = useState(false);
+  const [linkedinError, setLinkedinError] = useState<string | null>(null);
+  const [locQuery, setLocQuery] = useState('');
+  const { connect: connectGmail, connecting: gmailConnecting } = useGmailConnect();
+  const [gmailError, setGmailError] = useState<string | null>(null);
 
   const firstName = (profile.name || '').trim().split(/\s+/)[0] || 'there';
   const school = (profile.school || '').trim();
@@ -238,14 +249,78 @@ export default function Onboarding() {
   }
 
   // ── Step 2: confirm + locations ────────────────────────────────────────
+  // ── Step 2: LinkedIn — the personalization engine's fuel ───────────────
   if (step === 2) {
+    const clean = linkedin.trim();
+    const looksValid = /linkedin\.com\/in\//i.test(clean);
+    const submit = async () => {
+      if (!looksValid) {
+        setLinkedinError('Paste the full URL of your LinkedIn profile.');
+        return;
+      }
+      setLinkedinError(null);
+      setEnriching(true);
+      // Enrich in the background — never block the flow on a scrape. Whatever
+      // lands by the time the demo draft writes makes it sharper; the rest
+      // arrives before their first real send.
+      void enrichLinkedin(clean)
+        .catch(() => {})
+        .finally(() => setEnriching(false));
+      updateProfile({ linkedinUrl: clean });
+      next();
+    };
+    return (
+      <OnboardingScaffold
+        step={3}
+        total={TOTAL}
+        onBack={back}
+        title="Paste your LinkedIn"
+        subtitle="This is what makes your intros sound like you — your school, your roles, your story. It takes one paste."
+        footer={
+          <>
+            <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={submit} />
+            <Button label="I'll add it later" variant="ghost" fullWidth onPress={next} />
+          </>
+        }>
+        <TextInput
+          value={linkedin}
+          onChangeText={(t) => {
+            setLinkedin(t);
+            if (linkedinError) setLinkedinError(null);
+          }}
+          placeholder="linkedin.com/in/yourname"
+          placeholderTextColor={colors.inkTertiary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          style={{ height: 52, borderRadius: 12, borderWidth: 1, borderColor: linkedinError ? colors.negative : colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 16, fontFamily: fonts.sans, fontSize: 15, color: colors.ink }}
+        />
+        {linkedinError ? (
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, marginTop: 8 }}>{linkedinError}</Text>
+        ) : null}
+        <Card style={{ gap: 6, marginTop: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="sparkles-outline" size={16} color={colors.marketing} />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Why this matters</Text>
+          </View>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
+            Generic cold emails get ignored. We read your background and find the
+            overlap with the person you're writing to. Add your resume anytime in
+            Profile for even sharper drafts.
+          </Text>
+        </Card>
+      </OnboardingScaffold>
+    );
+  }
+
+  if (step === 3) {
     const toggle = (loc: string) => {
       Haptics.selectionAsync();
       setLocations((p) => (p.includes(loc) ? p.filter((l) => l !== loc) : [...p, loc]));
     };
     return (
       <OnboardingScaffold
-        step={3}
+        step={4}
         total={TOTAL}
         onBack={back}
         title="Here's the plan"
@@ -262,8 +337,39 @@ export default function Onboarding() {
           </Text>
         </Card>
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, marginBottom: 4 }}>Where do you want to land?</Text>
-        <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, marginBottom: 12 }}>Optional — nudges your feed toward those cities.</Text>
+        <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, marginBottom: 12 }}>Type any city, or tap a shortcut. This steers your feed.</Text>
+        {/* Free-text entry: the six chips cover a fraction of where students
+            recruit (Houston, Charlotte, Atlanta, London...). Type-and-add so
+            nobody's city is unrepresentable. */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          <TextInput
+            value={locQuery}
+            onChangeText={setLocQuery}
+            onSubmitEditing={() => {
+              const v = locQuery.trim();
+              if (v && !locations.includes(v)) {
+                Haptics.selectionAsync();
+                setLocations((prev) => [...prev, v]);
+              }
+              setLocQuery('');
+            }}
+            returnKeyType="done"
+            placeholder="Add a city"
+            placeholderTextColor={colors.inkTertiary}
+            autoCapitalize="words"
+            autoCorrect={false}
+            style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
+          />
+        </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {locations
+            .filter((l) => !SUGGESTED_LOCS.includes(l))
+            .map((loc) => (
+              <Pressable key={loc} onPress={() => toggle(loc)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1.5, borderColor: colors.marketing, backgroundColor: colors.marketing + '12', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.marketing }}>{loc}</Text>
+                <Ionicons name="close" size={13} color={colors.marketing} />
+              </Pressable>
+            ))}
           {SUGGESTED_LOCS.map((loc) => {
             const on = locations.includes(loc);
             return (
@@ -278,7 +384,7 @@ export default function Onboarding() {
   }
 
   // ── Step 3: aha demo swipe ─────────────────────────────────────────────
-  if (step === 3) {
+  if (step === 4) {
     if (drafted) {
       // Don't reveal here — keep the draft "behind the curtain" while it writes
       // in the background. The reveal lands on the final step, by which point the
@@ -287,7 +393,7 @@ export default function Onboarding() {
       const who = outreach[0]?.contact?.name || (job?.company ? `someone at ${job.company}` : 'your contact');
       return (
         <OnboardingScaffold
-          step={4}
+          step={5}
           total={TOTAL}
           canBack={false}
           title="That's the magic"
@@ -310,7 +416,7 @@ export default function Onboarding() {
     }
     return (
       <OnboardingScaffold
-        step={4}
+        step={5}
         total={TOTAL}
         onBack={back}
         title="Try one swipe"
@@ -331,10 +437,85 @@ export default function Onboarding() {
   }
 
   // ── Step 4: how did you hear about us? (attribution) ───────────────────
-  if (step === 4) {
+  // ── Step 5: connect Gmail — the product runs ON their inbox ────────────
+  if (step === 5) {
+    const already = profile.gmailConnected;
+    const doConnect = async () => {
+      setGmailError(null);
+      const res = await connectGmail();
+      if (res === 'connected') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        next();
+      } else if (res === 'failed') {
+        setGmailError("That didn't go through. You can connect Gmail anytime from Profile.");
+      }
+    };
     return (
       <OnboardingScaffold
-        step={5}
+        step={6}
+        total={TOTAL}
+        onBack={back}
+        title={already ? 'Gmail is connected' : 'Send from your own Gmail'}
+        subtitle={
+          already
+            ? 'Drafts land in your Gmail and replies come back here. You are all set.'
+            : 'Offerloop writes the email. You send it from your address, so it lands like a real message and replies come back to you.'
+        }
+        footer={
+          already ? (
+            <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />
+          ) : (
+            <>
+              <Button
+                label={gmailConnecting ? 'Opening Google...' : 'Connect Gmail'}
+                variant="brand"
+                size="lg"
+                fullWidth
+                icon="mail-outline"
+                disabled={gmailConnecting}
+                onPress={doConnect}
+              />
+              <Button label="Not now" variant="ghost" fullWidth onPress={next} />
+            </>
+          )
+        }>
+        <View style={{ alignItems: 'center', paddingTop: 4, paddingBottom: 18 }}>
+          {gmailConnecting ? (
+            <ActivityIndicator size="small" color={colors.marketing} />
+          ) : (
+            <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: colors.marketing + '14', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={already ? 'checkmark-circle' : 'mail-outline'} size={38} color={already ? colors.positive : colors.marketing} />
+            </View>
+          )}
+        </View>
+        <View style={{ gap: 12 }}>
+          {[
+            { icon: 'send-outline' as const, text: 'Send real emails from your address, not ours' },
+            { icon: 'file-tray-full-outline' as const, text: 'Every draft waits in your Gmail drafts for approval' },
+            { icon: 'chatbubble-ellipses-outline' as const, text: 'Replies are tracked so you never miss a follow-up' },
+          ].map((row) => (
+            <View key={row.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.marketing + '12', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name={row.icon} size={18} color={colors.marketing} />
+              </View>
+              <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>{row.text}</Text>
+            </View>
+          ))}
+        </View>
+        {gmailError ? (
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, textAlign: 'center', marginTop: 16 }}>{gmailError}</Text>
+        ) : null}
+        <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center', marginTop: 16, lineHeight: 17 }}>
+          Google's screen will ask you to allow drafting and sending. Nothing sends without you tapping send.
+        </Text>
+      </OnboardingScaffold>
+    );
+  }
+
+  if (step === 6) {
+    return (
+      <OnboardingScaffold
+        step={7}
         total={TOTAL}
         onBack={back}
         title="How'd you find Offerloop?"
@@ -364,14 +545,14 @@ export default function Onboarding() {
   }
 
   // ── Step 5: notification priming ───────────────────────────────────────
-  if (step === 5) {
+  if (step === 7) {
     const enable = () => {
       setNotificationsEnabled(true);
       next();
     };
     return (
       <OnboardingScaffold
-        step={6}
+        step={8}
         total={TOTAL}
         onBack={back}
         title="Know the moment they reply"
@@ -415,7 +596,7 @@ export default function Onboarding() {
   const demoWho = demo?.contact?.name || 'your first contact';
   return (
     <OnboardingScaffold
-      step={7}
+      step={9}
       total={TOTAL}
       canBack={false}
       title={firstName ? `You're set, ${firstName}` : "You're set"}

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useGmailConnect } from '@/hooks/useGmailConnect';
 import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -219,6 +220,7 @@ type TabKey = (typeof TABS)[number]['key'];
 export default function ProfileScreen() {
   const router = useRouter();
   const colors = useColors();
+  const { connect: connectGmail, connecting: gmailConnecting } = useGmailConnect();
   const {
     profile,
     connection,
@@ -848,17 +850,22 @@ export default function ProfileScreen() {
                       </Text>
                     </View>
                   </View>
-                  {/* Gmail OAuth lives on the website; the chip opens it
-                      there instead of sitting dead (sweep blocker #3). */}
+                  {/* Real in-app OAuth: the product runs on the user's Gmail
+                      (sends, drafts, reply tracking), so connecting must never
+                      require a detour to the website. */}
                   <Pressable
                     onPress={() => {
-                      if (!profile.gmailConnected) {
-                        void Linking.openURL('https://offerloop.ai/account-settings');
-                      }
+                      if (!profile.gmailConnected && !gmailConnecting) void connectGmail();
                     }}
-                    disabled={profile.gmailConnected}>
+                    disabled={profile.gmailConnected || gmailConnecting}>
                     <Chip
-                      label={profile.gmailConnected ? 'Connected' : 'Connect on offerloop.ai'}
+                      label={
+                        profile.gmailConnected
+                          ? 'Connected'
+                          : gmailConnecting
+                            ? 'Connecting...'
+                            : 'Connect'
+                      }
                       tone={profile.gmailConnected ? 'positive' : 'accent'}
                       dot={profile.gmailConnected}
                     />
