@@ -14,11 +14,10 @@ import { fonts } from '@/theme/tokens';
  * opens the app signed in. No passwords, no social buttons (so no Sign in with
  * Apple requirement). Same account as the website, matched by email.
  */
-const REVIEWER_EMAILS = (process.env.EXPO_PUBLIC_REVIEWER_EMAILS || '')
-  .toLowerCase()
-  .split(',')
-  .map((e) => e.trim())
-  .filter(Boolean);
+// Hardcoded, NOT an env var: EXPO_PUBLIC_* is inlined by `eas build` but NOT
+// by `eas update`, so an OTA stripped the allowlist and the reviewer panel
+// vanished. This is the demo account email (not a secret), safe to hardcode.
+const REVIEWER_EMAILS = ['applereview@offerloop.ai'];
 
 const isReviewerEmail = (email: string): boolean =>
   REVIEWER_EMAILS.includes(email.trim().toLowerCase());

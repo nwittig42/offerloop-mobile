@@ -217,8 +217,7 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
-const REVIEWER_REPLAY_EMAILS = (process.env.EXPO_PUBLIC_REVIEWER_EMAILS || '')
-  .toLowerCase().split(',').map((e) => e.trim()).filter(Boolean);
+const REVIEWER_REPLAY_EMAILS = ['applereview@offerloop.ai'];
 
 export default function ProfileScreen() {
   const router = useRouter();
