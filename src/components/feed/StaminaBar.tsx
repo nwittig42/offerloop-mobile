@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -56,11 +56,6 @@ export function StaminaBar({
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Pressable onPress={() => Linking.openURL('https://offerloop.ai')}>
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.accent }}>
-              Keep going on offerloop.ai
-            </Text>
-          </Pressable>
           <Pressable onPress={onRecharge}>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
               Recharge now (demo)

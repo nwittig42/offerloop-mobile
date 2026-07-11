@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Card from '@/components/ui/Card';
@@ -10,10 +10,10 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Credits, web-first (Flo model). The app sells nothing through Apple IAP: it
- * reflects the real balance + plan from /api/mobile/me and links out to
- * offerloop.ai to manage the plan or buy credits. The website owns checkout;
- * whatever the user buys there shows up here automatically.
+ * Credits — a read-only balance display. It reflects the real balance + plan
+ * from /api/mobile/me. The app sells nothing and links nowhere to purchase:
+ * no IAP, no outbound checkout. Credits refresh on their own each month; this
+ * screen just shows where you stand.
  */
 export default function CreditsScreen() {
   const router = useRouter();
@@ -97,47 +97,17 @@ export default function CreditsScreen() {
           <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#DCE6FB' }}>
             of {profile.maxCredits.toLocaleString()} a month · {profile.resetLabel}
           </Text>
-
-          <Pressable
-            onPress={() => Linking.openURL('https://offerloop.ai/account-settings')}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              backgroundColor: 'rgba(255,255,255,0.16)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.28)',
-              borderRadius: 10,
-              paddingVertical: 11,
-            }}>
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.paper }}>
-              Manage credits & plan on offerloop.ai
-            </Text>
-            <Ionicons name="open-outline" size={15} color={colors.paper} />
-          </Pressable>
         </LinearGradient>
 
         <Card style={{ gap: 8 }}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-            More credits, more reach
+            How credits work
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Credits power your swipes, drafts, and meeting preps. Manage your plan and credits on
-            offerloop.ai and it updates here right away.
+            Credits power your swipes, drafts, and meeting preps. Your balance refreshes
+            automatically each month — {profile.resetLabel || 'at the start of your cycle'}.
           </Text>
         </Card>
-
-        <Text
-          style={{
-            fontFamily: fonts.sans,
-            fontSize: 11.5,
-            color: colors.inkTertiary,
-            textAlign: 'center',
-            lineHeight: 17,
-          }}>
-          Plans and credits are managed on offerloop.ai.
-        </Text>
       </ScrollView>
     </View>
   );

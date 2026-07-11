@@ -498,8 +498,8 @@ function ScoutTabInner() {
         setReply(
           noCredits
             ? {
-                say: "You're out of credits for this one — nothing was charged. Top up and I'll pick it right back up.",
-                actions: [{ label: 'Get credits', href: '/credits' }],
+                say: "You're out of credits for this one — nothing was charged. They refresh each month, and I'll pick this right back up then.",
+                actions: [{ label: 'View credits', href: '/credits' }],
               }
             : {
                 say: "That one didn't finish — nothing was charged for anyone I couldn't draft. Ask me again.",
@@ -1309,7 +1309,7 @@ function ScoutTabInner() {
           // error.code affordances (contract Errors section) — say already
           // speaks the problem in user words; the chip is the next move.
           if (env.error && (env.error.code === 'insufficient_credits' || env.error.code === 'cap_reached')) {
-            actions.push({ label: 'Get more credits', href: '/credits' });
+            actions.push({ label: 'View credits', href: '/credits' });
           }
         } catch {
           const res = await sendScoutMessage({

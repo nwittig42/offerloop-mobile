@@ -1,6 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, Linking, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -84,26 +83,6 @@ export function CooldownView({
         Scout is lining up your next batch. We space your outreach out so it lands in
         inboxes, not spam.
       </Text>
-
-      <Pressable onPress={() => Linking.openURL('https://offerloop.ai')} accessibilityRole="button">
-        <LinearGradient
-          colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            borderRadius: 12,
-            paddingHorizontal: 20,
-            paddingVertical: 12,
-          }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: '#FFFFFF' }}>
-            Keep going on offerloop.ai
-          </Text>
-          <Ionicons name="open-outline" size={15} color="#FFFFFF" />
-        </LinearGradient>
-      </Pressable>
 
       <Pressable onPress={onRecharge} style={{ padding: 6 }}>
         <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.inkTertiary }}>

@@ -354,7 +354,7 @@ export default function ProfileScreen() {
                   ) : null}
                 </View>
                 <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#DCE6FB' }}>
-                  {swipesLabel} · Get more credits
+                  {swipesLabel} · View credits
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#DCE6FB" />

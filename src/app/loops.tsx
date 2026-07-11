@@ -331,22 +331,12 @@ export default function LoopsScreen() {
               </View>
             </Card>
           ) : (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="New Loop"
-                  variant="accent"
-                  fullWidth
-                  onPress={() => setComposing(true)}
-                />
-              </View>
-              <Button
-                label="Open on web"
-                variant="outline"
-                icon="open-outline"
-                onPress={() => Linking.openURL('https://offerloop.ai')}
-              />
-            </View>
+            <Button
+              label="New Loop"
+              variant="accent"
+              fullWidth
+              onPress={() => setComposing(true)}
+            />
           )}
 
           {loops.map((loop) => {
@@ -443,35 +433,6 @@ export default function LoopsScreen() {
             );
           })}
 
-          <Card style={{ gap: 12, borderColor: colors.accent + '40', borderWidth: 1.5, marginTop: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  backgroundColor: colors.accent + '14',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                <Ionicons name="rocket-outline" size={19} color={colors.accent} />
-              </View>
-              <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-                Run Loops at full power on the web
-              </Text>
-            </View>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
-              Mobile keeps Loops simple. On offerloop.ai you get custom schedules, bigger
-              weekly targets, send rules and budgets, multi-step sequences, and full
-              control over who each Loop targets.
-            </Text>
-            <GradientButton
-              label="Open offerloop.ai"
-              icon="open-outline"
-              fullWidth
-              onPress={() => Linking.openURL('https://offerloop.ai')}
-            />
-          </Card>
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 48 }}>
