@@ -63,7 +63,10 @@ export default function FeedScreen() {
   const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
-  const canAutoApply = profile.plan === 'Pro' || profile.plan === 'Elite';
+  // App limit-model (2026-07-10): every tier can auto-apply, bounded by credits
+  // (AUTO_APPLY_CREDITS each), not walled by plan. The backend allows all tiers;
+  // this used to be Pro/Elite-only and silently no-op'd auto-apply for free.
+  const canAutoApply = true;
 
   // Application-profile readiness — gates auto-apply. Only fetched when the user
   // has auto-apply on and the tier for it; cached so the swipe path is instant.

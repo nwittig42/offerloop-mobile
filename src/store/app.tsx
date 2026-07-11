@@ -1324,7 +1324,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             showToast('Set up your application profile to auto-apply');
           } else if (r.code === 'INSUFFICIENT_CREDITS') {
             showToast('Not enough credits to auto-apply');
-          } else if (r.code !== 'INELIGIBLE') {
+          } else if (r.code === 'INELIGIBLE') {
+            // The server couldn't detect a supported application system for this
+            // role. Say so honestly instead of showing the optimistic
+            // "Auto-applying…" toast and then silently doing nothing.
+            showToast(`${job.title} can't be auto-applied — apply on the company site`);
+          } else {
             showToast('Could not auto-apply, try again');
           }
         })
