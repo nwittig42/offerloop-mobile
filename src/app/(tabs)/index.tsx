@@ -1191,9 +1191,17 @@ function ScoutTabInner() {
           });
           setJobPicks({ query: intent.query, jobs: picks });
         } else {
+          // Jobs come from the daily feed, but people come from the full contact
+          // database — so an empty job feed shouldn't dead-end. Offer to search
+          // the wider database for people in that role to reach out to (re-runs
+          // as a brain ask via chatMessage → full PDL, not the local feed).
+          const peopleAsk = `Find people who are ${intent.query}${intent.location ? ` in ${intent.location}` : ''}`;
           setReply({
-            say: `Nothing matching “${intent.query}${intent.location ? ` in ${intent.location}` : ''}” in your feed right now — the Feed refreshes daily, or try a broader role.`,
-            actions: [{ label: 'Open the Feed', href: '/(tabs)/feed' }],
+            say: `No ${intent.query} roles in today's job feed${intent.location ? ` for ${intent.location}` : ''} — it refreshes daily. Jobs come from your feed, but I can search the full database for people in that role to reach out to.`,
+            actions: [
+              { label: 'Find people instead', chatMessage: peopleAsk },
+              { label: 'Open the Feed', href: '/(tabs)/feed' },
+            ],
           });
         }
         setPhase('idle');
