@@ -369,6 +369,20 @@ export default function NetworkScreen() {
               }}>
               Loading your applications…
             </Text>
+          ) : appliedQuery.isError ? (
+            <Card>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
+                Couldn't load your applications right now.
+              </Text>
+              <Pressable
+                onPress={() => appliedQuery.refetch()}
+                accessibilityRole="button"
+                style={{ marginTop: 12, alignSelf: 'flex-start' }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, fontWeight: '600', color: colors.accent }}>
+                  Tap to retry
+                </Text>
+              </Pressable>
+            </Card>
           ) : appliedJobs.length === 0 ? (
             <Card>
               <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>

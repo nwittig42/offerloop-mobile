@@ -276,7 +276,12 @@ export function appliedRelativeTime(j: AppliedJob): string {
  *  filtered out here — they're previews, not real applications, so they don't
  *  belong in a "jobs I applied to" view. */
 export async function listAppliedJobs(): Promise<AppliedJob[]> {
-  const r = await apiFetch<{ items?: AppliedJob[] }>('/api/job-board/auto-apply/list');
+  // timeoutMs is required — fetch has no default timeout on iOS release builds,
+  // so a slow/hanging endpoint would leave the Applications tab spinning
+  // "Loading your applications…" forever instead of settling to an error state.
+  const r = await apiFetch<{ items?: AppliedJob[] }>('/api/job-board/auto-apply/list', {
+    timeoutMs: 15000,
+  });
   const sorted = (r.items || [])
     .filter((j) => !j.dry_run)
     .sort((a, b) => parseServerTs(lastActivityAt(b)) - parseServerTs(lastActivityAt(a)));

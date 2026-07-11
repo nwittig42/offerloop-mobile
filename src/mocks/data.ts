@@ -441,7 +441,7 @@ export const MOCK_PROFILE = {
   resetLabel: '',
   dailyDraftsUsed: 0,
   dailyDraftCap: 10,
-  creditsPerSwipe: 5,
+  creditsPerSwipe: 10,
   gmailConnected: false,
   gmailAddress: '',
   hasResume: false,

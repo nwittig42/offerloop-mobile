@@ -66,7 +66,7 @@ export async function fetchMe(): Promise<Profile> {
     credits: me.credits,
     maxCredits: me.maxCredits,
     resetLabel: me.resetLabel,
-    creditsPerSwipe: me.creditsPerSwipe || 5,
+    creditsPerSwipe: me.creditsPerSwipe || 10,
     gmailConnected: me.gmailConnected,
     gmailAddress: me.gmailAddress || '',
     // hasResume is the truth; `resume` keeps a placeholder object so the card

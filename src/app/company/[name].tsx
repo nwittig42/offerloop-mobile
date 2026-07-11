@@ -51,20 +51,38 @@ export default function CompanyScreen() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tab, setTab] = useState<'overview' | 'reached' | 'applied' | 'roles'>('overview');
 
-  const { data: infoData, isLoading: companyInfoLoading } = useQuery({
+  // ~40s of 2.5s polls before we stop waiting on background research. Bounded
+  // so an uncached company whose research never lands can't spin "Gathering
+  // company details…" forever — it falls back to the honest empty state.
+  const COMPANY_POLL_CAP = 16;
+  const companyQuery = useQuery({
     queryKey: qk.company(company),
     queryFn: () => fetchCompany(company),
     enabled: !!company,
     staleTime: 30 * 60 * 1000,
     // First visit to an uncached company: the server answers instantly with
     // "pending" and researches in the background — poll until the profile
-    // lands (or the server reports an honest empty).
-    refetchInterval: (q) => (q.state.data === 'pending' ? 2500 : false),
+    // lands (or the server reports an honest empty), then give up.
+    refetchInterval: (q) =>
+      q.state.data === 'pending' && q.state.dataUpdateCount < COMPANY_POLL_CAP ? 2500 : false,
   });
+  const infoData = companyQuery.data;
   // Downstream code keeps the old contract: `info` is data-or-null, and the
-  // background research window counts as loading.
+  // background research window counts as loading — until the poll budget runs
+  // out (~40s), after which we render the fallback instead of a perpetual
+  // spinner. Track when 'pending' started; each poll bumps dataUpdatedAt.
+  const pendingSinceRef = useRef<number | null>(null);
+  if (infoData === 'pending') {
+    if (pendingSinceRef.current == null) pendingSinceRef.current = companyQuery.dataUpdatedAt || Date.now();
+  } else {
+    pendingSinceRef.current = null;
+  }
+  const pollExhausted =
+    infoData === 'pending' &&
+    pendingSinceRef.current != null &&
+    (companyQuery.dataUpdatedAt || Date.now()) - pendingSinceRef.current > COMPANY_POLL_CAP * 2500;
   const info: CompanyInfo | null = infoData && infoData !== 'pending' ? infoData : null;
-  const companyLoading = companyInfoLoading || infoData === 'pending';
+  const companyLoading = (companyQuery.isLoading || infoData === 'pending') && !pollExhausted;
   // Open roles at this company. Fetched from the backend (search-by-company) so
   // the Roles deck + Overview have content for ANY company, not just ones that
   // happen to be in the feed. Lazy: only fetched on the Overview/Roles tabs. Feed
