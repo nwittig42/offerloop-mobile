@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
 import GlassTabBackground from '@/components/GlassTabBackground';
+import NotificationsGate from '@/components/NotificationsGate';
 import { needsAttention } from '@/app/(tabs)/inbox';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -24,7 +25,12 @@ export default function TabsLayout() {
   const badgeValue = attentionCount > 99 ? '99+' : attentionCount;
 
   return (
-    <Tabs
+    <>
+      {/* Notification priming. Lives here (not just onboarding) so it fires on
+          every app open after sign-in until the user actually turns pushes on —
+          "Not now" is per-launch only. Renders nothing once permission is granted. */}
+      <NotificationsGate />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.navy,
@@ -106,6 +112,7 @@ export default function TabsLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </>
   );
 }

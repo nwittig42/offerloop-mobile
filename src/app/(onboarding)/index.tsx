@@ -588,9 +588,10 @@ export default function Onboarding() {
         </View>
         <View style={{ gap: 12 }}>
           {[
-            { icon: 'chatbubble-ellipses-outline' as const, text: 'A contact replied — reply back while you’re top of mind' },
+            { icon: 'chatbubble-ellipses-outline' as const, text: 'A contact replied — follow up while you’re top of mind' },
             { icon: 'document-text-outline' as const, text: 'Your draft is ready to review and send' },
-            { icon: 'sync-outline' as const, text: 'A Loop found new people overnight' },
+            { icon: 'flash-outline' as const, text: 'An auto-apply finished — or needs a decision from you' },
+            { icon: 'sync-outline' as const, text: 'A Loop found new people while you were away' },
           ].map((row) => (
             <View key={row.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.marketing + '12', alignItems: 'center', justifyContent: 'center' }}>
