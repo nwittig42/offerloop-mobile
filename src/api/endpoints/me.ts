@@ -76,7 +76,7 @@ export async function fetchMe(): Promise<Profile> {
     hasResume: !!me.resume,
     resume: me.resume
       ? { name: me.resume.name, updatedLabel: 'On file' }
-      : { name: 'No resume yet', updatedLabel: 'Add on offerloop.ai' },
+      : { name: 'No resume yet', updatedLabel: 'Add one in the app' },
     linkedinUrl: me.linkedinUrl || '',
     phone: me.phone || '',
     preferredLocations: me.preferredLocations || [],

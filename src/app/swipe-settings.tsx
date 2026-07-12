@@ -380,7 +380,7 @@ export default function SwipeSettingsScreen() {
                   {profile.resume.name || 'No resume yet'}
                 </Text>
                 <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                  {profile.resume.updatedLabel || 'Add on offerloop.ai'}
+                  {profile.resume.updatedLabel || 'Tap to add one'}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />

@@ -17,7 +17,11 @@ import {
   View,
 } from 'react-native';
 
+import { useQueryClient } from '@tanstack/react-query';
+
 import { saveTargetTrack } from '@/api/endpoints/preferences';
+import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
@@ -242,6 +246,32 @@ export default function ProfileScreen() {
   const { signOut, user } = useAuth();
 
   const [tab, setTab] = useState<TabKey>('personal');
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const queryClient = useQueryClient();
+
+  // The Resume tab used to only DISPLAY a parse and tell people to upload on
+  // offerloop.ai — so the app could never actually take a resume, and every
+  // auto-apply left the Greenhouse "Resume" field empty. Pick + upload here.
+  const onPickResume = async () => {
+    if (resumeBusy) return;
+    try {
+      const file = await pickResume();
+      if (!file) return; // cancelled
+      setResumeBusy(true);
+      showToast('Uploading your resume…');
+      await uploadResume(file);
+      await queryClient.invalidateQueries({ queryKey: qk.me });
+      showToast('Resume saved');
+    } catch (e) {
+      showToast(
+        e instanceof Error && e.message.includes('10MB')
+          ? e.message
+          : "Couldn't read that file. Try a PDF.",
+      );
+    } finally {
+      setResumeBusy(false);
+    }
+  };
   const [parseOpen, setParseOpen] = useState(false);
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [enriching, setEnriching] = useState(false);
@@ -635,12 +665,23 @@ export default function ProfileScreen() {
                     {profile.resume.updatedLabel}
                   </Text>
                 </View>
-                {profile.hasResume ? (
+                {resumeBusy ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : profile.hasResume ? (
                   <Chip label="Attached" tone="positive" dot />
                 ) : (
                   <Chip label="Not added" tone="neutral" />
                 )}
               </Card>
+
+              <Button
+                label={profile.hasResume ? 'Replace resume' : 'Upload resume'}
+                variant={profile.hasResume ? 'outline' : 'brand'}
+                fullWidth
+                icon="cloud-upload-outline"
+                disabled={resumeBusy}
+                onPress={onPickResume}
+              />
 
               {/* LinkedIn, the second source we gather from, above the parse.
                   Only expandable when we actually have gathered highlights —
@@ -703,8 +744,7 @@ export default function ProfileScreen() {
                       color: colors.inkTertiary,
                       lineHeight: 18,
                     }}>
-                    No resume on file yet. Upload one on offerloop.ai and the parse shows up
-                    here.
+                    No resume on file yet. Upload one above and the parse shows up here.
                   </Text>
                 </Card>
               ) : null}
