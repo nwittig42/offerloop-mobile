@@ -75,3 +75,8 @@ export async function uploadResume(file: PickedResume): Promise<ResumeUploadResu
     timeoutMs: 60_000,
   });
 }
+
+/** Remove the resume on file (deletes the stored file + the parsed data). */
+export async function deleteResume(): Promise<void> {
+  await apiFetch('/api/resume', { method: 'DELETE', timeoutMs: 20_000 });
+}

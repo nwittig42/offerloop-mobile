@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { qk } from '@/api/queryKeys';
-import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { deleteResume, pickResume, uploadResume } from '@/api/endpoints/resume';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
@@ -33,6 +33,20 @@ export default function AttachmentsScreen() {
   const [busy, setBusy] = useState(false);
 
   const hasResume = profile.hasResume;
+
+  const onRemove = async () => {
+    if (busy) return;
+    try {
+      setBusy(true);
+      await deleteResume();
+      await queryClient.invalidateQueries({ queryKey: qk.me });
+      showToast('Resume removed');
+    } catch {
+      showToast("Couldn't remove that. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onPick = async () => {
     if (busy) return;
@@ -130,6 +144,21 @@ export default function AttachmentsScreen() {
           disabled={busy}
           onPress={onPick}
         />
+
+        {hasResume ? (
+          <Pressable onPress={onRemove} disabled={busy} accessibilityRole="button">
+            <Text
+              style={{
+                fontFamily: fonts.sansMedium,
+                fontSize: 13.5,
+                color: colors.negative,
+                textAlign: 'center',
+                paddingVertical: 8,
+              }}>
+              Remove resume
+            </Text>
+          </Pressable>
+        ) : null}
 
         <Text
           style={{
