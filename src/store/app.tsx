@@ -262,10 +262,10 @@ type AppStore = {
   savedJobs: Job[];
   swipeSettings: SwipeSettings;
   updateSwipeSettings: (patch: Partial<SwipeSettings>) => void;
-  swipesAvailable: number;
-  swipeBatchSize: number;
-  cooldownSecondsLeft: number;
-  rechargeNow: () => void;
+  /** How many drafts the user can still afford. Credits are the only meter. */
+  draftsLeft: number;
+  /** Credits one swipe costs, given how many people it reaches. */
+  costPerSwipe: number;
   notificationsEnabled: boolean;
   notifPromptDismissed: boolean;
   /** False until the async OS permission read resolves. The prompt must not
@@ -839,10 +839,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const trackerRows = useMemo(() => outreachToTrackerRows(outreach), [outreach]);
   const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
 
-  const swipeBatchSize = BATCH_BY_PLAN[profile.plan];
-  const [swipesAvailable, setSwipesAvailable] = useState(swipeBatchSize);
-  const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // Credits are the ONLY meter (2026-07-14). The old model ran a swipe-stamina
+  // batch with a multi-hour cooldown ALONGSIDE credits, and the two contradicted
+  // each other: Free's stamina offered 5 swipes every 5h (up to ~24/day) while
+  // Free's 300 credits fund ~30 drafts a MONTH — about one a day. So the bar
+  // dangled a rhythm the wallet could never pay for, and locked users out
+  // mid-session anyway. It was also client-only state: force-quitting the app
+  // handed you a fresh batch, so it protected nothing. One honest number instead.
   // Off at launch (mock), so the prompt shows like a fresh login. Real push
   // permission wires in Phase 3.
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
@@ -866,70 +869,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toastTimer.current = setTimeout(() => setToast(null), 3200);
   }, []);
 
-  // Tick every second while a cooldown is running, so the countdown updates.
-  useEffect(() => {
-    if (cooldownEndsAt === null) return;
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [cooldownEndsAt]);
-
-  // The plan (and thus batch size) resolves after the mock default — e.g. an
-  // Elite user starts seeded at the Pro number. Keep the available count in
-  // lockstep when the batch grows, but never while a cooldown is running (so it
-  // doesn't skip the recharge wait). Fires only when the batch size changes, so
-  // mid-session spends aren't clobbered.
-  useEffect(() => {
-    if (cooldownEndsAt === null) {
-      setSwipesAvailable((prev) => (prev < swipeBatchSize ? swipeBatchSize : prev));
-    }
-  }, [swipeBatchSize, cooldownEndsAt]);
-
-  // When the cooldown elapses, refill the batch and ping the user.
-  useEffect(() => {
-    if (cooldownEndsAt !== null && nowMs >= cooldownEndsAt) {
-      setSwipesAvailable(swipeBatchSize);
-      setCooldownEndsAt(null);
-      idCounter.current += 1;
-      setNotifications((prev) => [
-        {
-          id: `n-recharge-${idCounter.current}`,
-          kind: 'loop',
-          text: `Your swipes recharged. ${swipeBatchSize} ready to send.`,
-          timeLabel: 'Just now',
-          read: false,
-        },
-        ...prev,
-      ]);
-      showToast(`Swipes recharged, ${swipeBatchSize} ready`);
-    }
-  }, [nowMs, cooldownEndsAt, swipeBatchSize, showToast]);
-
-  // One swipe spends one swipe-token, regardless of how many contacts it
-  // reaches. The contact count is paid in credits, not stamina.
-  const spendSwipes = useCallback(() => {
-    setSwipesAvailable((prev) => {
-      const next = Math.max(0, prev - 1);
-      if (next === 0 && prev > 0) {
-        setCooldownEndsAt(Date.now() + MOCK_COOLDOWN_SECONDS * 1000);
-      }
-      return next;
-    });
-  }, []);
-
-  const rechargeNow = useCallback(() => {
-    setSwipesAvailable(swipeBatchSize);
-    setCooldownEndsAt(null);
-  }, [swipeBatchSize]);
-
   // Give a swipe-token back when a swipe finds no contact (nothing was actually
   // reached, so it shouldn't cost stamina or trip the cooldown).
-  const refundSwipe = useCallback(() => {
-    setSwipesAvailable((prev) => Math.min(swipeBatchSize, prev + 1));
-    setCooldownEndsAt(null);
-  }, [swipeBatchSize]);
+  // A swipe that finds nobody costs nothing: the server refunds the credits and
+  // /me reconciles them, so there is no token to hand back any more.
+  const refundSwipe = useCallback(() => {}, []);
 
-  const cooldownSecondsLeft =
-    cooldownEndsAt !== null ? Math.max(0, Math.ceil((cooldownEndsAt - nowMs) / 1000)) : 0;
+  // The one honest number. A swipe costs creditsPerSwipe per person it reaches,
+  // so what a user really has is "how many drafts can I still afford".
+  const costPerSwipe = profile.creditsPerSwipe * swipeSettings.contacts;
+  const draftsLeft = Math.max(0, Math.floor(profile.credits / Math.max(1, costPerSwipe)));
+
 
   const passJob = useCallback((id: string) => {
     setJobs((prev) => {
@@ -1260,7 +1210,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const base = prev ?? MOCK_PROFILE;
         return { ...base, credits: base.credits - base.creditsPerSwipe * count };
       });
-      spendSwipes();
 
       const peopleWord = count === 1 ? 'person' : 'people';
       if (offHoursDeferred) {
@@ -1311,7 +1260,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Auto-apply submission is handled on the feed screen via the review
       // sheet (real Browserbase submit), not faked here.
     },
-    [queryClient, showToast, spendSwipes, executeDraft],
+    [queryClient, showToast, executeDraft],
   );
 
   /**
@@ -1647,10 +1596,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       savedJobs,
       swipeSettings,
       updateSwipeSettings,
-      swipesAvailable,
-      swipeBatchSize,
-      cooldownSecondsLeft,
-      rechargeNow,
+      draftsLeft,
+      costPerSwipe,
       notificationsEnabled,
       notifPromptDismissed,
       notifPermissionResolved,
@@ -1705,9 +1652,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       passedJobs,
       savedJobs,
       swipeSettings,
-      swipesAvailable,
-      swipeBatchSize,
-      cooldownSecondsLeft,
+      draftsLeft,
+      costPerSwipe,
       notificationsEnabled,
       notifPromptDismissed,
       notifPermissionResolved,
@@ -1724,7 +1670,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rememberSwipedCard,
       autoApplyJob,
       updateSwipeSettings,
-      rechargeNow,
       setNotificationsEnabled,
       dismissNotifPrompt,
       undoLastPass,

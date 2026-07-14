@@ -233,9 +233,8 @@ export default function ProfileScreen() {
     connection,
     resumeExperiences,
     unreadCount,
-    swipesAvailable,
-    swipeBatchSize,
-    cooldownSecondsLeft,
+    draftsLeft,
+    costPerSwipe,
     notificationsEnabled,
     setNotificationsEnabled,
     updateProfile,
@@ -307,10 +306,12 @@ export default function ProfileScreen() {
     }
   };
 
+  // Credits are the only meter — there is no stamina batch and no recharge timer
+  // to count down. Say what's actually true: how many drafts the wallet affords.
   const swipesLabel =
-    swipesAvailable > 0
-      ? `${swipesAvailable} of ${swipeBatchSize} swipes ready`
-      : `Recharging · ${Math.floor(cooldownSecondsLeft / 60)}:${String(cooldownSecondsLeft % 60).padStart(2, '0')}`;
+    draftsLeft > 0
+      ? `${draftsLeft} ${draftsLeft === 1 ? 'draft' : 'drafts'} left · ${costPerSwipe} credits each`
+      : 'Out of credits';
 
   const dirty =
     linkedinUrl !== profile.linkedinUrl ||

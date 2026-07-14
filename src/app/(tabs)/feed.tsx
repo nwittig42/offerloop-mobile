@@ -18,10 +18,8 @@ import { APP_DOWNLOAD_URL } from '@/lib/links';
 import GlassBar from '@/components/GlassBar';
 import Header from '@/components/Header';
 import PlanBorder from '@/components/PlanBorder';
-import CooldownView from '@/components/feed/CooldownView';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
-import StaminaBar from '@/components/feed/StaminaBar';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
 import { ActionCircle } from '@/components/ui/Button';
@@ -71,10 +69,8 @@ export default function FeedScreen() {
     canUndo,
     swipeSettings,
     updateSwipeSettings,
-    swipesAvailable,
-    swipeBatchSize,
-    cooldownSecondsLeft,
-    rechargeNow,
+    draftsLeft,
+    costPerSwipe,
     passJob,
     saveJob,
     draftJob,
@@ -107,8 +103,10 @@ export default function FeedScreen() {
     swipeSettings.autoApply && canAutoApply && !!appProfileQuery.data && !profileReady;
 
   const top = jobs[0];
-  const canDraft = swipesAvailable >= 1;
-  const outOfSwipes = swipesAvailable === 0;
+  // Credits are the only meter now — a swipe is affordable, or it isn't. There
+  // is no separate stamina token and no cooldown to wait out.
+  const canDraft = draftsLeft >= 1;
+  const outOfCredits = draftsLeft === 0;
 
   // The liquid-glass action bar shrinks and settles down when the job card
   // is enlarged, giving the reader room, then springs back on collapse.
@@ -153,7 +151,7 @@ export default function FeedScreen() {
       if (!canDraft) {
         // Out of swipes: bounce, don't spend. The card snaps back.
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        showToast('Out of swipes, recharging');
+        showToast('Out of credits — drafts resume when your credits reset');
         return;
       }
       // A punchy double-buzz on the commit so the draft feels real.
@@ -251,14 +249,24 @@ export default function FeedScreen() {
         />
       ) : top ? (
         <View style={{ flex: 1, paddingHorizontal: 18 }}>
-          {!outOfSwipes ? (
-            <StaminaBar
-              available={swipesAvailable}
-              batchSize={swipeBatchSize}
-              secondsLeft={cooldownSecondsLeft}
-              onRecharge={rechargeNow}
-            />
-          ) : null}
+          {/* One number, and it's true: what the wallet can still pay for. The
+              old stamina bar counted a token that no server enforced and that a
+              force-quit reset anyway. */}
+          <Pressable onPress={() => router.push('/credits')}>
+            <Text
+              style={{
+                fontFamily: fonts.sansMedium,
+                fontSize: 12,
+                color: colors.inkSecondary,
+                textAlign: 'center',
+                paddingTop: 6,
+              }}>
+              {draftsLeft} {draftsLeft === 1 ? 'draft' : 'drafts'} left
+              <Text style={{ color: colors.inkTertiary }}>
+                {'  ·  '}{costPerSwipe} credits each
+              </Text>
+            </Text>
+          </Pressable>
 
           {/* Auto-apply is on but the application profile isn't set up, so a
               right swipe can't actually apply yet — point them to finish it. */}
@@ -287,9 +295,11 @@ export default function FeedScreen() {
             </Pressable>
           ) : null}
 
-          <View
-            style={{ flex: 1, marginTop: 8, paddingBottom: 56, opacity: outOfSwipes ? 0.3 : 1 }}
-            pointerEvents={outOfSwipes ? 'none' : 'auto'}>
+          {/* Out of credits used to grey out and DISABLE the whole deck. But
+              passing and saving cost nothing, and browsing is how you line up
+              tomorrow's targets — only DRAFTING is unaffordable. Keep the deck
+              live; the right-swipe bounces on its own via canDraft. */}
+          <View style={{ flex: 1, marginTop: 8, paddingBottom: 56 }}>
             <SwipeDeck
               ref={deckRef}
               jobs={jobs}
@@ -322,9 +332,7 @@ export default function FeedScreen() {
             ) : null}
           </View>
 
-          {outOfSwipes ? (
-            <CooldownView secondsLeft={cooldownSecondsLeft} onRecharge={rechargeNow} />
-          ) : (
+          {outOfCredits ? null : (
             <Animated.View
               pointerEvents="box-none"
               style={[
