@@ -706,10 +706,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const oName = normName(o);
           match = server.find((s) => normName(s) === oName && sameCompany(s.company || '', o.company || ''));
         }
-        if (match && o.status !== 'drafting' && o.status !== 'queued') {
+        // If the SERVER has this person, the server row wins — full stop.
+        //
+        // This used to also require the optimistic item not be 'drafting'/'queued',
+        // which conflated two opposite cases the `else` comment ran together:
+        // "still drafting" and "the server doesn't have it yet". When the server
+        // DOES have them but our local copy still said drafting (the poll hadn't
+        // landed, or the app was backgrounded mid-swipe), we kept the ghost AND
+        // rendered the server row — the same person twice in the Inbox. That's
+        // the duplicate Rylan saw on a batch: one row showing the email body, one
+        // showing the subject, "Palantir" vs "Palantir Technologies".
+        //
+        // The backend writes the contact row only after the draft exists, so a
+        // match means the draft is genuinely done and the local 'drafting' status
+        // is just stale. Keep the optimistic ONLY while the server has never
+        // heard of them.
+        if (match) {
           reconciledIds.current[o.id] = match.id; // remember the swap; drop the optimistic
         } else {
-          keptOptimistic.push(o); // still drafting, or the server doesn't have it yet
+          keptOptimistic.push(o); // the server doesn't have it yet — keep showing progress
         }
       }
       return [...keptOptimistic, ...server];

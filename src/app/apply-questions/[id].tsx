@@ -54,10 +54,27 @@ const MAX_VISIBLE_MATCHES = 30;
 function FieldLabel({ q }: { q: PendingQuestion }) {
   const colors = useColors();
   return (
-    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
-      {q.label}
-      {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
-    </Text>
+    <View style={{ gap: 4 }}>
+      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
+        {q.label}
+        {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
+      </Text>
+      {/* The employer's own help text. Without it, a bare "Additional Information"
+          is unanswerable — all the meaning lives in the paragraph the form prints
+          under the question, and we were dropping it before asking the user to
+          fill in the blank. */}
+      {q.description ? (
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            color: colors.inkSecondary,
+            lineHeight: 17,
+          }}>
+          {q.description}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

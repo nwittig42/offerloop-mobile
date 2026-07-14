@@ -165,6 +165,10 @@ export type PendingQuestion = {
   field_id?: string;
   question_id?: string;
   label: string;
+  /** The employer's own help text for this question. A label like "Additional
+   *  Information" is unanswerable alone — all the meaning lives in the paragraph
+   *  the form renders under it, which we used to throw away before asking. */
+  description?: string;
   field_type?: string; // 'text' | 'textarea' | 'select'
   options?: Array<string | { label?: string; value?: string }>;
   required?: boolean;
