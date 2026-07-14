@@ -830,6 +830,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     queryKey: qk.meetingPreps,
     queryFn: fetchMeetingPreps,
     enabled: authStatus === 'signedIn',
+    // Poll while any prep is still building. This list was invalidated exactly
+    // once — when a prep was CREATED — and never again. So the card said
+    // "processing", the prep finished on the server two minutes later, and the
+    // list never heard about it: it sat stale until the app was killed. A prep is
+    // an async job; the list that shows it has to actually watch it.
+    refetchInterval: (query) => {
+      const building = (query.state.data ?? []).some((p) => p.status === 'processing');
+      return building ? 5000 : false;
+    },
   });
   useEffect(() => {
     if (meetingPrepsQuery.data) setMeetingPreps(meetingPrepsQuery.data);

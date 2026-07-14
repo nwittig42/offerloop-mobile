@@ -714,9 +714,26 @@ export default function NetworkScreen() {
                     <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
                       {prep.title} at {prep.company}
                     </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                      {prep.createdLabel}
-                    </Text>
+                    {/* A prep is a ~2min async job, but this card showed no status
+                        at all — and createdLabel is hardcoded "Prepped", so one
+                        that was still building already claimed to be done, and a
+                        failed one looked finished too. Say what it actually is. */}
+                    {prep.status === 'processing' ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                        <ActivityIndicator size="small" color={colors.coffee} />
+                        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.coffee }}>
+                          Prepping… we’ll notify you
+                        </Text>
+                      </View>
+                    ) : prep.status === 'failed' ? (
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.negative }}>
+                        Didn’t finish — tap to retry
+                      </Text>
+                    ) : (
+                      <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                        {prep.createdLabel}
+                      </Text>
+                    )}
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
                 </Card>

@@ -65,6 +65,20 @@ function PrepLoadingCard({ company }: { company?: string }) {
       <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.coffee, textAlign: 'center' }}>
         {phrases[pi]}…
       </Text>
+      {/* This takes ~2 minutes and it runs on the server — nothing about it needs
+          the app open. Say so. Watching a spinner because nobody told you that you
+          could leave is the worst version of a two-minute wait. */}
+      <Text
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 12,
+          color: colors.inkTertiary,
+          textAlign: 'center',
+          lineHeight: 17,
+        }}>
+        This takes a couple of minutes. Close the app if you like —{'\n'}we’ll notify you the
+        moment it’s ready.
+      </Text>
     </View>
   );
 }
