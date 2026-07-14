@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchMeetingPrep } from '@/api/endpoints/meetingPreps';
@@ -175,8 +175,21 @@ export default function MeetingPrepDetailScreen() {
     </View>
   );
 
-  // Still working (or first load): show the snake-bordered preparing card.
-  if (!prep || prep.status === 'processing') {
+  // The backend streams each section into the doc the moment it's written, so a
+  // prep in flight usually has something real to read well before it's "done".
+  // Show it. Hiding finished work behind a spinner is what made a 2-minute build
+  // feel like a dead app — and then dumped the whole brief at once.
+  const hasContent = !!(
+    prep &&
+    (prep.commonGround ||
+      prep.talkingPoints.length > 0 ||
+      prep.companyCheatSheet ||
+      prep.conversationStrategy)
+  );
+  const stillBuilding = !!prep && prep.status === 'processing';
+
+  // Only the true empty state gets the spinner: no prep yet, or nothing written.
+  if (!prep || (prep.status === 'processing' && !hasContent)) {
     const failedToLoad = prepQuery.isError;
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -215,6 +228,39 @@ export default function MeetingPrepDetailScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       {Header}
       <ScrollView contentContainerStyle={{ padding: 20, gap: 14, paddingBottom: insets.bottom + 32 }}>
+        {/* A partial prep has to say so, or the user reads a half-built brief and
+            assumes that's all there is. Sections keep landing underneath this. */}
+        {stillBuilding ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              paddingVertical: 10,
+              paddingHorizontal: 14,
+              borderRadius: 12,
+              backgroundColor: colors.accent + '14',
+              borderWidth: 1,
+              borderColor: colors.accent + '33',
+            }}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+                {prep.stageLabel || 'Still building the rest…'}
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkSecondary }}>
+                Sections appear as they’re ready — you can start reading now, or
+                close this and we’ll notify you.
+              </Text>
+            </View>
+            {typeof prep.progressPct === 'number' ? (
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.accent }}>
+                {prep.progressPct}%
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <View
             style={{

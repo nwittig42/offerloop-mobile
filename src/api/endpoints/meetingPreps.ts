@@ -65,6 +65,11 @@ function mapDetailPrep(id: string, p: RawPrep): MeetingPrep {
     },
     createdLabel: 'Prepped',
     status: normStatus(p.status),
+    // The backend streams each section into the doc as it lands, so a prep in
+    // flight already has real content to show. Carry the progress through so the
+    // screen can reveal what's ready instead of hiding it behind a spinner.
+    progressPct: typeof p.progressPct === 'number' ? p.progressPct : undefined,
+    stageLabel: p.stageLabel || undefined,
     pdfUrl: p.pdfUrl || undefined,
   };
 }

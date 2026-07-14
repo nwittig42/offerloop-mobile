@@ -104,8 +104,12 @@ export default function CreditsScreen() {
             How credits work
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Credits power your swipes, drafts, and meeting preps. Your balance refreshes
-            automatically each month — {profile.resetLabel || 'at the start of your cycle'}.
+            {/* Meeting preps are FREE (COFFEE_CHAT_CREDITS = 0, since 2026-07-07) —
+                they're capped per month, not priced in credits. Saying credits pay
+                for them made Rylan think a prep had charged him when it hadn't. */}
+            Credits power your drafts and applications. Meeting preps are free. Your
+            balance refreshes automatically each month —{' '}
+            {profile.resetLabel || 'at the start of your cycle'}.
           </Text>
         </Card>
       </ScrollView>

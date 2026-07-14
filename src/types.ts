@@ -185,4 +185,8 @@ export type MeetingPrep = {
     personMentions: string[];
     industryTrends: string[];
   };
+  /** Streaming progress while the prep builds (sections land one at a time). */
+  progressPct?: number;
+  stageLabel?: string;
+
 };
