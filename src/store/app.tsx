@@ -13,7 +13,7 @@ import {
 } from 'react';
 
 import { USE_MOCKS } from '@/api/config';
-import { fetchFeed, rankJobsByLocation } from '@/api/endpoints/feed';
+import { fetchFeedPage, rankJobsByLocation, sendJobFeedback } from '@/api/endpoints/feed';
 import { fetchInbox } from '@/api/endpoints/inbox';
 import { createLoop, fetchLoops, setLoopPaused, type LoopPeople } from '@/api/endpoints/loops';
 import { fetchMe } from '@/api/endpoints/me';
@@ -268,6 +268,9 @@ type AppStore = {
   rechargeNow: () => void;
   notificationsEnabled: boolean;
   notifPromptDismissed: boolean;
+  /** False until the async OS permission read resolves. The prompt must not
+   *  render before this is true, or it flashes in on every launch. */
+  notifPermissionResolved: boolean;
   setNotificationsEnabled: (value: boolean) => void;
   dismissNotifPrompt: () => void;
   passJob: (id: string) => void;
@@ -285,6 +288,10 @@ type AppStore = {
   unsaveJob: (id: string) => void;
   restoreSavedJob: (id: string) => void;
   resetDeck: () => void;
+  /** Fetch a fresh, deeper slice of the ranked pool — new/adjacent roles. */
+  rerollFeed: () => void;
+  /** True while a rerollFeed() fetch is in flight (for button state). */
+  rerolling: boolean;
   updateOutreach: (id: string, patch: Partial<OutreachItem>) => void;
   /** Map a stale optimistic outreach id to its real server id once reconciled. */
   resolveOutreachId: (id: string) => string;
@@ -494,13 +501,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const feedQuery = useQuery({
     queryKey: qk.feed,
-    queryFn: fetchFeed,
+    queryFn: () => fetchFeedPage(),
     enabled: authStatus === 'signedIn',
   });
+  // Paging state. The feed now serves a page at a time (see FEED_PAGE_SIZE)
+  // instead of shipping the entire ~420-card deck on open. `loadedJobs`
+  // accumulates every page we've pulled this session — Scout's job-matching
+  // reads it, so it must keep growing as the user swipes, not just hold page 0.
+  const [loadedJobs, setLoadedJobs] = useState<Job[]>([]);
+  const [feedCursor, setFeedCursor] = useState<number | null>(null);
+  const loadingMoreRef = useRef(false);
+
   // Never fall back to fixture jobs for REAL flows: Scout job-matching reads
   // allJobs, and a fixture pick could fire a real auto-apply against a fake
   // job id (sweep blocker #10). Mock mode keeps the offline demo alive.
-  const allJobs = feedQuery.data ?? (USE_MOCKS ? MOCK_JOBS : []);
+  const allJobs = loadedJobs.length
+    ? loadedJobs
+    : (feedQuery.data?.jobs ?? (USE_MOCKS ? MOCK_JOBS : []));
+
   useEffect(() => {
     // Wait for the passed cache so a just-relaunched deck doesn't briefly show
     // jobs the user already swiped away this session.
@@ -508,11 +526,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Lean the freshly-seeded deck toward the user's preferred locations
       // (with wildcards for volume), and drop anything passed within the TTL.
       // Done once at seed so the order doesn't reshuffle mid-swipe.
-      const fresh = feedQuery.data.filter((j) => !passedIds.has(j.id));
+      const fresh = feedQuery.data.jobs.filter((j) => !passedIds.has(j.id));
       setJobs(rankJobsByLocation(fresh, meQuery.data?.preferredLocations ?? []));
+      setLoadedJobs(feedQuery.data.jobs);
+      setFeedCursor(feedQuery.data.nextCursor);
       setDeckSeeded(true);
     }
   }, [feedQuery.data, passedLoaded, passedIds, deckSeeded, meQuery.data?.preferredLocations]);
+
+  /** Pull the next page and append it to the deck. */
+  const loadMoreJobs = useCallback(async () => {
+    if (loadingMoreRef.current || feedCursor == null || USE_MOCKS) return;
+    loadingMoreRef.current = true;
+    try {
+      const page = await fetchFeedPage({ cursor: feedCursor });
+      setFeedCursor(page.nextCursor);
+      if (page.jobs.length) {
+        setLoadedJobs((prev) => {
+          const seen = new Set(prev.map((j) => j.id));
+          return [...prev, ...page.jobs.filter((j) => !seen.has(j.id))];
+        });
+        setJobs((prev) => {
+          const seen = new Set(prev.map((j) => j.id));
+          const add = page.jobs.filter((j) => !seen.has(j.id) && !passedIds.has(j.id));
+          return [...prev, ...rankJobsByLocation(add, meQuery.data?.preferredLocations ?? [])];
+        });
+      }
+    } catch {
+      /* transient — we'll try again on the next swipe that drops us under the mark */
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [feedCursor, passedIds, meQuery.data?.preferredLocations]);
+
+  // Prefetch the next page BEFORE the deck runs out, so paging is invisible: the
+  // user should never watch a spinner mid-swipe. 15 cards of runway at a page
+  // size of 60 is plenty of time for the request to land.
+  useEffect(() => {
+    if (!deckSeeded || feedCursor == null) return;
+    if (jobs.length <= 15) void loadMoreJobs();
+  }, [jobs.length, deckSeeded, feedCursor, loadMoreJobs]);
 
   // First-run onboarding flag, loaded per-user from disk. `null` until resolved
   // so the auth gate doesn't flash the feed before deciding. FORCE_ONBOARDING
@@ -794,6 +847,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // permission wires in Phase 3.
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
   const [notifPromptDismissed, setNotifPromptDismissed] = useState(false);
+  /** Has the async OS permission read come back yet? Until it has, we know
+   *  nothing and must not render the prompt (see the effect below). */
+  const [notifPermissionResolved, setNotifPermissionResolved] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 
   const idCounter = useRef(0);
@@ -881,6 +937,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (job) setPassedEntries((p) => [...p, { job, ts: Date.now() }]);
       return prev.filter((j) => j.id !== id);
     });
+    // Tell the server. Without this the pass was local-only: the backend kept
+    // re-serving jobs the user had already rejected and the deck could only
+    // shrink, never refill — you could swipe left on everything and hit a wall
+    // with thousands of unseen jobs still in the catalog. Recording it lets the
+    // next rerank drop this job and pull an unseen one into its place.
+    // Fire-and-forget; a swipe must never wait on the network.
+    void sendJobFeedback(id, 'negative');
   }, []);
 
   const undoLastPass = useCallback(() => {
@@ -922,8 +985,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const resetDeck = useCallback(() => {
     setPassedEntries([]);
-    setJobs(feedQuery.data ?? MOCK_JOBS);
-  }, [feedQuery.data]);
+    // Everything pulled this session, not just page 0 — otherwise "restart deck"
+    // would silently throw away every page the user had paged in.
+    setJobs(loadedJobs.length ? loadedJobs : (feedQuery.data?.jobs ?? MOCK_JOBS));
+  }, [loadedJobs, feedQuery.data]);
+
+  // "Show me new roles." Pulls a fresh, deeper slice of the ranked pool
+  // (?refresh=true rotates the server-side offset), so the deck refills with
+  // jobs the user hasn't seen — including adjacent-field/other-city roles that
+  // sit below the default 300-job window. Keeps personalization as the lane
+  // while giving an explicit way to reach range. The cache is updated too so
+  // Scout's job-matching (reads allJobs) stays in sync with what's on screen.
+  const [rerolling, setRerolling] = useState(false);
+  const rerollFeed = useCallback(async () => {
+    if (rerolling || USE_MOCKS) return;
+    setRerolling(true);
+    try {
+      const page = await fetchFeedPage({ refresh: true });
+      if (page.jobs.length === 0) {
+        showToast('No new roles right now — check back soon');
+        return;
+      }
+      // A reroll rotates the server-side offset to a different slice, so the old
+      // cursor points into the previous slice — reset paging to page 0 of the new
+      // one, or loadMoreJobs would append cards from the slice we just left.
+      queryClient.setQueryData(qk.feed, page);
+      setLoadedJobs(page.jobs);
+      setFeedCursor(page.nextCursor);
+      setPassedEntries([]);
+      setJobs(rankJobsByLocation(page.jobs, meQuery.data?.preferredLocations ?? []));
+    } catch {
+      showToast('Could not load new roles, try again');
+    } finally {
+      setRerolling(false);
+    }
+  }, [rerolling, queryClient, meQuery.data?.preferredLocations, showToast]);
 
   const updateOutreach = useCallback(
     (id: string, patch: Partial<OutreachItem>) => {
@@ -1382,15 +1478,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Returning users who already granted permission: silently re-register the
   // push token each launch (Expo tokens can rotate) and suppress the prompt.
+  //
+  // `notifPermissionResolved` exists because reading the OS permission is ASYNC.
+  // notificationsEnabled starts false, so on the very first render the prompt's
+  // `!enabled && !dismissed` was already true and the modal painted — then this
+  // resolved a beat later, flipped both flags, and yanked it away. Result: the
+  // prompt flashed in on EVERY launch for users who had already enabled
+  // notifications. Nothing may render until we actually know the answer.
   useEffect(() => {
     if (authStatus !== 'signedIn') return;
     let cancelled = false;
-    hasNotificationPermission().then((granted) => {
-      if (cancelled || !granted) return;
-      setNotificationsEnabledState(true);
-      setNotifPromptDismissed(true);
-      registerForPushNotificationsAsync().catch(() => {});
-    });
+    hasNotificationPermission()
+      .then((granted) => {
+        if (cancelled) return;
+        if (granted) {
+          setNotificationsEnabledState(true);
+          setNotifPromptDismissed(true);
+          registerForPushNotificationsAsync().catch(() => {});
+        }
+        // Resolved either way — a genuine not-yet-granted user still gets asked.
+        setNotifPermissionResolved(true);
+      })
+      .catch(() => {
+        if (!cancelled) setNotifPermissionResolved(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -1542,6 +1653,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rechargeNow,
       notificationsEnabled,
       notifPromptDismissed,
+      notifPermissionResolved,
       setNotificationsEnabled,
       dismissNotifPrompt,
       passJob,
@@ -1556,6 +1668,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       undoLastPass,
       restorePassedJob,
       resetDeck,
+      rerollFeed,
+      rerolling,
       updateOutreach,
       resolveOutreachId,
       swipedCardForCompany,
@@ -1596,6 +1710,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cooldownSecondsLeft,
       notificationsEnabled,
       notifPromptDismissed,
+      notifPermissionResolved,
       toast,
       unreadCount,
       draftJustCompleted,
@@ -1615,6 +1730,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       undoLastPass,
       restorePassedJob,
       resetDeck,
+      rerollFeed,
+      rerolling,
       updateOutreach,
       resolveOutreachId,
       swipedCardForCompany,

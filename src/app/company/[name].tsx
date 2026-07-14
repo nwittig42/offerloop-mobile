@@ -445,7 +445,7 @@ export default function CompanyScreen() {
         {tab === 'applied' ? (
           <>
             {applied.map((j) => {
-              const meta = appliedStatusMeta(j.status);
+              const meta = appliedStatusMeta(j.status, j.stage, { canOpenSite: !!j.apply_url });
               const when = appliedRelativeTime(j);
               const toneColor =
                 meta.tone === 'positive'

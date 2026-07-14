@@ -141,6 +141,7 @@ const STAGE_LABELS: Record<string, string> = {
   answering_questions: 'Answering screening questions…',
   submitting: 'Submitting…',
   uploading_resume: 'Attaching your resume…',
+  awaiting_verification: 'Filled — finishing up…',
 };
 const humanStage = (raw?: string | null): string => {
   const key = (raw || '').trim();

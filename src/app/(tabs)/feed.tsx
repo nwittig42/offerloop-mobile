@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Share, Text, View } from 'react-native';
+import { Image, Platform, Pressable, Share, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -14,6 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { APP_DOWNLOAD_URL } from '@/lib/links';
 import GlassBar from '@/components/GlassBar';
 import Header from '@/components/Header';
 import PlanBorder from '@/components/PlanBorder';
@@ -38,6 +39,29 @@ import type { Job } from '@/types';
  * above the tab bar: undo, pass, draft, attach. Tapping anywhere on the
  * card expands it. Every number comes from store state, never inline.
  */
+/** The same brand watercolor ridgeline as the Scout tab, but the DAY art — the
+ *  original light periwinkle wash, not the night-tinted variant. Scout's version
+ *  is baked dark for its deep-blue canvas; the feed's canvas is light, so the
+ *  night art would read as a bruise across the bottom of the deck. Sits behind
+ *  everything, purely decorative, and never eats a touch. */
+const FEED_RIDGES = require('../../../assets/images/ridges-day.png');
+
+function FeedRidgeline() {
+  return (
+    <View
+      pointerEvents="none"
+      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '38%' }}>
+      <Image
+        source={FEED_RIDGES}
+        resizeMode="cover"
+        // Held back so it stays atmosphere, not decoration competing with the
+        // card the user is actually reading.
+        style={{ width: '100%', height: '100%', opacity: 0.55 }}
+      />
+    </View>
+  );
+}
+
 export default function FeedScreen() {
   const router = useRouter();
   const {
@@ -57,6 +81,8 @@ export default function FeedScreen() {
     autoApplyJob,
     undoLastPass,
     resetDeck,
+    rerollFeed,
+    rerolling,
     showToast,
     feedState,
   } = useApp();
@@ -146,34 +172,64 @@ export default function FeedScreen() {
   }, [canDraft, draftJob, passJob, saveJob, autoApplyJob, swipeSettings.autoApply, canAutoApply, showToast]);
 
   // Share the top card (native share sheet).
+  //
+  // This used to send a bare sentence with NO link — the most viral moment in
+  // the app ("look at this role") and it handed the recipient nowhere to go.
+  // Now it carries the job (title, company, location, comp) and a link to get
+  // the app, so a share can actually become a user.
   const shareTopJob = useCallback(() => {
     const job = jobs[0];
     if (!job) return;
+    const facts = [job.location, job.compensation, job.workArrangement]
+      .filter(Boolean)
+      .join(' · ');
+    const message = [
+      `${job.title} at ${job.company}`,
+      facts,
+      '',
+      'Found it on Offerloop — it finds real people at the company and drafts your intro for you.',
+      APP_DOWNLOAD_URL,
+    ]
+      .filter((l) => l !== undefined && l !== null)
+      .join('\n');
     Share.share({
-      message: `${job.title} at ${job.company}${job.location ? ` — ${job.location}` : ''} (found on Offerloop)`,
+      message,
+      // iOS renders a rich preview for the url and appends it; Android folds it
+      // into the message above.
+      ...(Platform.OS === 'ios' ? { url: APP_DOWNLOAD_URL } : {}),
     }).catch(() => {});
   }, [jobs]);
 
+  // The pill was an outline around empty space — a plan border with nothing
+  // inside it, which read as unfinished rather than minimal. Fill it with a soft
+  // brand wash so it has presence at a glance without shouting over the deck.
+  // The PlanBorder still carries the tier; this just gives the card a body.
   const creditsPill = (
-    <PlanBorder plan={profile.plan} radius={9}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 5,
-          paddingHorizontal: 9,
-          paddingVertical: 4,
-        }}>
-        <Ionicons name="flash" size={12} color={colors.accent} />
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.ink }}>
-          {profile.credits}
-        </Text>
-      </View>
-    </PlanBorder>
+    <Pressable onPress={() => router.push('/credits')} accessibilityRole="button">
+      <PlanBorder plan={profile.plan} radius={9}>
+        <LinearGradient
+          colors={[colors.accent + '2E', colors.accent + '10']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            paddingHorizontal: 9,
+            paddingVertical: 4,
+          }}>
+          <Ionicons name="flash" size={12} color={colors.accent} />
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.ink }}>
+            {profile.credits}
+          </Text>
+        </LinearGradient>
+      </PlanBorder>
+    </Pressable>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+      <FeedRidgeline />
       <Header
         title="Offerloop"
         logo
@@ -346,9 +402,12 @@ export default function FeedScreen() {
         <StateView
           icon="checkmark-done-circle-outline"
           title="You’re all caught up"
-          body="You’ve been through every job we ranked for you. New roles get added as they’re posted — check back soon, or restart the deck to revisit ones you passed."
-          actionLabel="Restart deck"
-          onAction={resetDeck}
+          body="You’ve been through the roles we ranked for you. Pull in a fresh set — including ones a little outside your usual field — or restart the deck to revisit the ones you passed."
+          actionLabel="Show me new roles"
+          onAction={rerollFeed}
+          actionLoading={rerolling}
+          secondaryLabel="Restart deck"
+          onSecondary={resetDeck}
         />
       )}
     </View>

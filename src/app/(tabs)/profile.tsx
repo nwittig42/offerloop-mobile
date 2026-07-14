@@ -329,12 +329,20 @@ export default function ProfileScreen() {
       gradYear,
       about,
     });
-    // updateProfile only patches the LOCAL cache — without this the roles/
-    // industries edit never reaches the backend, so the feed never re-tunes
-    // (the bug: "I updated my profile and nothing changed"). Persist the
-    // feed-relevant goal; the backend busts jobFeedCache on this write so the
-    // deck reranks to the new goal. Best-effort — the UI already updated.
-    void saveTargetTrack({ targetRoles, industries }).catch(() => {});
+    // updateProfile only patches the LOCAL cache — without this the edit never
+    // reaches the backend, so the feed never re-tunes and the change is lost on
+    // the next refetch (the bug: "I updated my profile and nothing changed").
+    // roles/industries were wired up; about/gradYear/linkedinUrl were still
+    // being dropped on the floor even though Save collected them. Send all of
+    // them. The backend busts jobFeedCache on the feed-relevant ones so the deck
+    // reranks to the new goal. Best-effort — the UI already updated.
+    void saveTargetTrack({
+      targetRoles,
+      industries,
+      about,
+      gradYear,
+      linkedinUrl,
+    }).catch(() => {});
     showToast('Saved');
   };
 

@@ -17,19 +17,35 @@ import { fonts, type Palette } from '@/theme/tokens';
  */
 
 const benefits = (c: Palette): { icon: keyof typeof Ionicons.glyphMap; tone: string; text: string }[] => [
+  // Each line must map to a push the backend ACTUALLY sends, or we're asking for
+  // a permission under false pretenses:
+  //   1. gmail_webhook  -> "{who} replied"
+  //   2. draft_ready_notify -> "your draft is ready"
+  //   3. auto_apply/notify  -> "Application needs your input" / the outcome push
+  // (3) used to advertise Loops, which aren't the point anymore — auto-apply is,
+  // and it was the one real push we never mentioned.
   { icon: 'chatbubble-ellipses-outline', tone: c.positive, text: 'Know the second a recruiter replies' },
   { icon: 'document-text-outline', tone: c.accent, text: 'Get pinged when a draft is ready to send' },
-  { icon: 'infinite', tone: c.navy, text: 'See what your Loops did each morning' },
+  { icon: 'paper-plane-outline', tone: c.navy, text: 'Hear when an application lands — or needs you' },
 ];
 
 export function NotificationPrompt() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const BENEFITS = benefits(colors);
-  const { notificationsEnabled, notifPromptDismissed, setNotificationsEnabled, dismissNotifPrompt } =
-    useApp();
+  const {
+    notificationsEnabled,
+    notifPromptDismissed,
+    notifPermissionResolved,
+    setNotificationsEnabled,
+    dismissNotifPrompt,
+  } = useApp();
 
-  const visible = !notificationsEnabled && !notifPromptDismissed;
+  // Wait for the OS permission read before rendering ANYTHING. notificationsEnabled
+  // starts false, so without this gate the modal painted on the first frame and
+  // then vanished once the (async) permission check came back — it flashed in on
+  // every single launch for users who already had notifications on.
+  const visible = notifPermissionResolved && !notificationsEnabled && !notifPromptDismissed;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={dismissNotifPrompt}>

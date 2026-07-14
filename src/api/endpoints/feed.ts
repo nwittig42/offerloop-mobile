@@ -228,10 +228,61 @@ export function rankJobsByLocation(jobs: Job[], prefs: string[]): Job[] {
   return out;
 }
 
-export async function fetchFeed(): Promise<Job[]> {
-  if (USE_MOCKS) return MOCK_JOBS;
+/**
+ * Tell the server the user rejected (or liked) a job.
+ *
+ * A left-swipe used to be purely local: it filtered the card out of the in-memory
+ * deck and nothing else. The server never heard, so it kept re-serving jobs the
+ * user had already rejected, the client kept filtering them back out, and the
+ * deck only ever SHRANK — you could swipe left on everything and hit a wall with
+ * ~7,400 unseen jobs still in the catalog. Recording the pass lets the next
+ * rerank drop it and pull genuinely unseen jobs up into its place, which is what
+ * lets someone work through the whole catalog instead of a fixed slice.
+ *
+ * Best-effort and fire-and-forget: a failed signal must never block a swipe.
+ */
+export async function sendJobFeedback(jobId: string, signal: 'positive' | 'negative'): Promise<void> {
+  if (USE_MOCKS) return;
+  try {
+    await apiFetch('/api/jobs/feedback', {
+      method: 'POST',
+      body: { job_id: jobId, signal },
+      timeoutMs: 10_000,
+    });
+  } catch {
+    /* swiping must not depend on the network */
+  }
+}
 
-  const res = await apiFetch<FeedResponse>('/api/jobs/feed');
+/**
+ * @param opts.refresh When true, hits `?refresh=true` — the backend advances
+ *   `jobFeedOffset` by 100 and hydrates a deeper slice of the 1000-ID ranked
+ *   list, so the deck fills with genuinely new (and progressively more
+ *   adjacent / less strictly on-field) roles. Wraps to the top at the end, so
+ *   it always returns cards. Used by the "Show me new roles" reroll.
+ */
+/** One page of the deck, plus the cursor for the next one (null = end). */
+export type FeedPage = { jobs: Job[]; nextCursor: number | null };
+
+/** How many ranked cards a page holds. The feed used to ship ~420 at once — the
+ *  whole deck — for a session in which the user swipes a couple of dozen, which
+ *  is most of what made opening the app slow. */
+export const FEED_PAGE_SIZE = 60;
+
+export async function fetchFeedPage(opts?: {
+  refresh?: boolean;
+  cursor?: number;
+  limit?: number;
+}): Promise<FeedPage> {
+  if (USE_MOCKS) return { jobs: MOCK_JOBS, nextCursor: null };
+
+  const q = new URLSearchParams();
+  if (opts?.refresh) q.set('refresh', 'true');
+  q.set('limit', String(opts?.limit ?? FEED_PAGE_SIZE));
+  if (opts?.cursor) q.set('cursor', String(opts.cursor));
+
+  const res = await apiFetch<FeedResponse>(`/api/jobs/feed?${q.toString()}`);
+  // new_matches only comes back on page 0; later pages carry top_jobs alone.
   const raw = [...(res.new_matches || []), ...(res.top_jobs || [])];
 
   const seen = new Set<string>();
@@ -242,5 +293,12 @@ export async function fetchFeed(): Promise<Job[]> {
     seen.add(job.id);
     jobs.push(job);
   }
-  return jobs;
+  const next = (res as unknown as { next_cursor?: number | null }).next_cursor;
+  return { jobs, nextCursor: next ?? null };
+}
+
+/** First page — what the deck is seeded with. */
+export async function fetchFeed(opts?: { refresh?: boolean }): Promise<Job[]> {
+  const page = await fetchFeedPage({ refresh: opts?.refresh });
+  return page.jobs;
 }

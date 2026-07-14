@@ -20,6 +20,13 @@ export async function savePreferredLocations(preferredLocations: string[]): Prom
 export async function saveTargetTrack(opts: {
   targetRoles?: string[];
   industries?: string[];
+  /** The rest of the Profile tab. These used to be collected by Save and then
+   *  dropped on the floor — updateProfile only patched the local cache, so the
+   *  edit vanished on the next refetch. `about` is sent even when empty so the
+   *  user can deliberately clear it. */
+  about?: string;
+  gradYear?: string;
+  linkedinUrl?: string;
 }): Promise<void> {
   if (USE_MOCKS) return;
   await apiFetch('/api/mobile/preferences', {
@@ -27,6 +34,9 @@ export async function saveTargetTrack(opts: {
     body: {
       ...(opts.targetRoles ? { targetRoles: opts.targetRoles } : {}),
       ...(opts.industries ? { industries: opts.industries } : {}),
+      ...(opts.about !== undefined ? { about: opts.about } : {}),
+      ...(opts.gradYear ? { gradYear: opts.gradYear } : {}),
+      ...(opts.linkedinUrl ? { linkedinUrl: opts.linkedinUrl } : {}),
     },
   });
 }

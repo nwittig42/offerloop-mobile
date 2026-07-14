@@ -17,6 +17,9 @@ export function StateView({
   body,
   actionLabel,
   onAction,
+  actionLoading,
+  secondaryLabel,
+  onSecondary,
   tone = 'neutral',
 }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -24,6 +27,10 @@ export function StateView({
   body?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Show the primary action in a loading/disabled state. */
+  actionLoading?: boolean;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
   tone?: 'neutral' | 'error';
 }) {
   const colors = useColors();
@@ -54,7 +61,15 @@ export function StateView({
         </Text>
       ) : null}
       {actionLabel && onAction ? (
-        <Button label={actionLabel} variant="outline" onPress={onAction} />
+        <Button
+          label={actionLoading ? 'Loading…' : actionLabel}
+          variant="outline"
+          disabled={actionLoading}
+          onPress={onAction}
+        />
+      ) : null}
+      {secondaryLabel && onSecondary ? (
+        <Button label={secondaryLabel} variant="ghost" onPress={onSecondary} />
       ) : null}
     </View>
   );

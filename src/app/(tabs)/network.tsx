@@ -403,7 +403,7 @@ export default function NetworkScreen() {
             </Text>
           ) : (
             filteredApplied.map((j) => {
-              const meta = appliedStatusMeta(j.status);
+              const meta = appliedStatusMeta(j.status, j.stage, { canOpenSite: !!j.apply_url });
               const when = appliedRelativeTime(j);
               const toneColor =
                 meta.tone === 'positive'
@@ -440,6 +440,25 @@ export default function NetworkScreen() {
                         {j.ats_platform ? ` · ${j.ats_platform}` : ''}
                         {when ? ` · ${when}` : ''}
                       </Text>
+                      {/* The backend explains exactly why an application didn't go
+                          through ("this employer's Location field wouldn't accept an
+                          automated answer — open the listing and finish it there").
+                          Showing only "Apply on the site" with no reason is half an
+                          answer; the user is left guessing whether we broke or the
+                          form did. */}
+                      {j.failure_reason && (j.status === 'failed' || j.status === 'submit_failed') ? (
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            fontFamily: fonts.sans,
+                            fontSize: 11.5,
+                            color: colors.inkTertiary,
+                            lineHeight: 16,
+                            marginTop: 2,
+                          }}>
+                          {j.failure_reason}
+                        </Text>
+                      ) : null}
                     </View>
                     <View
                       style={{
@@ -458,7 +477,7 @@ export default function NetworkScreen() {
                         {meta.label}
                       </Text>
                     </View>
-                    {j.status === 'needs_attention' ? (
+                    {j.status === 'needs_attention' || j.apply_url ? (
                       <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
                     ) : null}
                   </Card>

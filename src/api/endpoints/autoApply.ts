@@ -231,6 +231,9 @@ export type AppliedJob = {
   apply_url?: string;
   status: AutoApplyStatus;
   stage?: string;
+  /** Why it didn't go through, in plain language. Returned by the list
+   *  endpoint; shown on the tile so "Apply on the site" isn't unexplained. */
+  failure_reason?: string;
   dry_run?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -307,8 +310,17 @@ export function alreadyApplied(applied: AppliedJob[] | undefined, jobId: string)
   );
 }
 
-/** Human-facing label + tone for an application status. */
-export function appliedStatusMeta(s: AutoApplyStatus): {
+/** Human-facing label + tone for an application status.
+ *  `stage` distinguishes the two halves of a still-running job: while the bot
+ *  is typing it's "Auto-applying…", but once it clicks Submit the backend hops
+ *  the stage to `awaiting_verification` and everything after is just waiting on
+ *  Greenhouse / the emailed code. Surface that as its own "waiting" card so a
+ *  filled-but-not-yet-confirmed job doesn't look stuck mid-fill. */
+export function appliedStatusMeta(
+  s: AutoApplyStatus,
+  stage?: string,
+  opts?: { canOpenSite?: boolean },
+): {
   label: string;
   tone: 'positive' | 'waiting' | 'negative' | 'neutral';
 } {
@@ -321,9 +333,21 @@ export function appliedStatusMeta(s: AutoApplyStatus): {
       return { label: 'Needs your input', tone: 'waiting' };
     case 'failed':
     case 'submit_failed':
-      return { label: 'Failed', tone: 'negative' };
+      // Not every role can be auto-applied end to end — a form field won't
+      // commit, the ATS isn't one we drive, the posting moved. That's not a
+      // dead end for the user: if we have the listing URL, frame it as the
+      // next action ("apply on the company site") rather than a scary
+      // "Failed." Only when there's genuinely nowhere to send them do we say
+      // it couldn't be done.
+      return opts?.canOpenSite
+        ? { label: 'Apply on the site', tone: 'waiting' }
+        : { label: "Couldn't apply", tone: 'negative' };
     default:
-      // queued / running — the slow part (Browserbase fills + submits the form)
+      // queued / running. If input's done and we're on the code/submit gate,
+      // say so instead of the generic "Auto-applying…".
+      if (stage === 'awaiting_verification') {
+        return { label: 'Filled — finishing up…', tone: 'waiting' };
+      }
       return { label: 'Auto-applying…', tone: 'neutral' };
   }
 }
