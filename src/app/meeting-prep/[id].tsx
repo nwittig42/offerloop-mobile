@@ -179,12 +179,18 @@ export default function MeetingPrepDetailScreen() {
   // prep in flight usually has something real to read well before it's "done".
   // Show it. Hiding finished work behind a spinner is what made a 2-minute build
   // feel like a dead app — and then dumped the whole brief at once.
+  // Research counts as content: it's the LONGEST phase of the build (~67s of a
+  // ~2m run) and it lands ~25s before the first AI section, so treating it as
+  // "not ready yet" would keep the spinner up over real, readable material.
   const hasContent = !!(
     prep &&
     (prep.commonGround ||
       prep.talkingPoints.length > 0 ||
       prep.companyCheatSheet ||
-      prep.conversationStrategy)
+      prep.conversationStrategy ||
+      prep.research?.companyNews?.length ||
+      prep.research?.companyOverview?.length ||
+      prep.research?.personMentions?.length)
   );
   const stillBuilding = !!prep && prep.status === 'processing';
 
