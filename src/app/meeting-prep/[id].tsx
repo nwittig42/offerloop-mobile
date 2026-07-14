@@ -316,6 +316,19 @@ export default function MeetingPrepDetailScreen() {
           ) : null}
         </Card>
 
+        {/* The full brief up top — the PDF is the better reading surface, so let
+            someone open it immediately instead of scrolling past every section to
+            find the link at the bottom. */}
+        {prep.pdfUrl ? (
+          <Button
+            label="Open the full prep"
+            icon="document-text-outline"
+            variant="outline"
+            fullWidth
+            onPress={() => Linking.openURL(prep.pdfUrl!)}
+          />
+        ) : null}
+
         <PrepText
           title="Why you two connect"
           icon="sparkles-outline"
@@ -392,16 +405,6 @@ export default function MeetingPrepDetailScreen() {
           color={colors.marketing}
           items={prep.research?.industryTrends ?? []}
         />
-
-        {prep.pdfUrl ? (
-          <Button
-            label="Open the full prep"
-            icon="document-text-outline"
-            variant="outline"
-            fullWidth
-            onPress={() => Linking.openURL(prep.pdfUrl!)}
-          />
-        ) : null}
 
         <Text
           style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, textAlign: 'center' }}>
