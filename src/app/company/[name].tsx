@@ -93,7 +93,12 @@ export default function CompanyScreen() {
     enabled: !!company && (tab === 'roles' || tab === 'overview' || tab === 'applied'),
     staleTime: 5 * 60 * 1000,
   });
-  const feedRoles = useMemo(() => allJobs.filter((j) => j.company === company), [allJobs, company]);
+  // sameCompany, not ===: land on /company/Palantir and you still want the
+  // roles posted under "Palantir Technologies".
+  const feedRoles = useMemo(
+    () => allJobs.filter((j) => sameCompany(j.company, company)),
+    [allJobs, company],
+  );
   const roles = useMemo(
     () => (rolesQuery.data && rolesQuery.data.length ? rolesQuery.data : feedRoles),
     [rolesQuery.data, feedRoles],
@@ -140,9 +145,7 @@ export default function CompanyScreen() {
 
   // Auto-apply submissions for this company (from the shared applied-jobs cache).
   const { data: appliedData } = useQuery({ queryKey: ['appliedJobs'], queryFn: listAppliedJobs });
-  const applied = (appliedData ?? []).filter(
-    (j) => (j.company || '').toLowerCase() === company.toLowerCase(),
-  );
+  const applied = (appliedData ?? []).filter((j) => sameCompany(j.company || '', company));
   // Open roles at this company you have NOT auto-applied to yet — the tap-to-apply
   // list surfaced under both the Applied and Reached out tabs.
   const openRoles = (rolesQuery.data ?? []).filter((r) => !applied.some((a) => a.job_id === r.id));

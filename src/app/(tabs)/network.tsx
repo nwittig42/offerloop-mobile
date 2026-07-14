@@ -14,6 +14,7 @@ import {
   type AppliedJob,
 } from '@/api/endpoints/autoApply';
 
+import { sameCompany } from '@/lib/company';
 import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
 import Card from '@/components/ui/Card';
@@ -92,66 +93,74 @@ export default function NetworkScreen() {
   // Companies you've reached out to, most recent first (outreach is newest
   // first), each with how many people and replies.
   const companies = useMemo(() => {
-    const order: string[] = [];
-    const map = new Map<string, { company: string; contacts: number; replies: number }>();
+    // Bucket by sameCompany, not by the raw string. PDL/job cards spell one
+    // employer several ways ("Palantir" vs "Palantir Technologies"), so a raw
+    // key split the same firm into two tiles. sameCompany's prefix rule already
+    // merges these everywhere else — use the same logic here so it can't drift.
+    const buckets: { company: string; contacts: number; replies: number }[] = [];
     for (const o of outreach) {
       if (o.status === 'drafting' || o.status === 'queued') continue;
-      let e = map.get(o.company);
+      let e = buckets.find((b) => sameCompany(b.company, o.company));
       if (!e) {
         e = { company: o.company, contacts: 0, replies: 0 };
-        map.set(o.company, e);
-        order.push(o.company);
+        buckets.push(e);
       }
       e.contacts += 1;
       if (o.status === 'replied') e.replies += 1;
     }
-    return order.map((c) => map.get(c)!);
+    return buckets;
   }, [outreach]);
 
   // One tile per company you've engaged with — applications submitted AND people
   // reached, merged so the Applications tab centers on companies (not scattered
   // lists). Tapping a tile opens that company's roles-applied + people-reached.
   const companyTiles = useMemo(() => {
-    const keyOf = (c: string) => (c || '').trim().toLowerCase();
     // `recency` = position in the newest-first source lists (outreach + applied);
     // lower means more recently engaged, so the one you just did floats to top.
-    const map = new Map<
-      string,
-      {
-        company: string;
-        applied: number;
-        reached: number;
-        replies: number;
-        needsAttention: boolean;
-        recency: number;
-      }
-    >();
+    type Tile = {
+      company: string;
+      applied: number;
+      reached: number;
+      replies: number;
+      needsAttention: boolean;
+      recency: number;
+    };
+    // Bucket by sameCompany so "Palantir" (people reached) and "Palantir
+    // Technologies" (applied) land on ONE tile instead of two. A raw-lowercase
+    // key was splitting the same employer in half.
+    const tiles: Tile[] = [];
+    const find = (c: string) => tiles.find((t) => sameCompany(t.company, c));
     companies.forEach((c, i) => {
-      const k = keyOf(c.company);
-      if (!k) return;
-      map.set(k, {
-        company: c.company,
-        applied: 0,
-        reached: c.contacts,
-        replies: c.replies,
-        needsAttention: false,
-        recency: i,
-      });
+      if (!(c.company || '').trim()) return;
+      const e = find(c.company);
+      if (e) {
+        e.reached += c.contacts;
+        e.replies += c.replies;
+        e.recency = Math.min(e.recency, i);
+      } else {
+        tiles.push({
+          company: c.company,
+          applied: 0,
+          reached: c.contacts,
+          replies: c.replies,
+          needsAttention: false,
+          recency: i,
+        });
+      }
     });
     appliedJobs.forEach((j, i) => {
-      const k = keyOf(j.company);
-      if (!k) return;
-      let e = map.get(k);
+      if (!(j.company || '').trim()) return;
+      let e = find(j.company);
       if (!e) {
         e = { company: j.company, applied: 0, reached: 0, replies: 0, needsAttention: false, recency: i };
-        map.set(k, e);
+        tiles.push(e);
       } else {
         e.recency = Math.min(e.recency, i);
       }
       e.applied += 1;
       if (j.status === 'needs_attention' || j.status === 'needs_verification') e.needsAttention = true;
     });
-    return Array.from(map.values());
+    return tiles;
   }, [companies, appliedJobs]);
 
   const visibleTiles = useMemo(() => {
