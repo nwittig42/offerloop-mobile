@@ -453,11 +453,13 @@ export default function CompanyScreen() {
               const toneColor =
                 meta.tone === 'positive'
                   ? colors.positive
-                  : meta.tone === 'waiting'
-                    ? colors.waiting
-                    : meta.tone === 'negative'
-                      ? colors.negative
-                      : colors.inkTertiary;
+                  : meta.tone === 'apply'
+                    ? colors.applyLink
+                    : meta.tone === 'waiting'
+                      ? colors.waiting
+                      : meta.tone === 'negative'
+                        ? colors.negative
+                        : colors.inkTertiary;
               return (
                 <Pressable
                   key={j.auto_apply_id}

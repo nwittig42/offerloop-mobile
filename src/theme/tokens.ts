@@ -26,6 +26,7 @@ export const lightColors = {
   negative: '#DC2626',
   waiting: '#CA8A04',
   marketing: '#3B82F6',
+  applyLink: '#8B5CF6', // "Apply on the site" status — light purple, distinct from amber "needs input"
   coffee: '#8B5A2B',
   bolt: '#FACC15',
   feedBg: '#E8F1FF', // light baby-blue screen wash (Feed, Loops)
@@ -57,6 +58,7 @@ export const darkColors: Palette = {
   negative: '#FF6B6B',
   waiting: '#E2B53F',
   marketing: '#5B9BF4',
+  applyLink: '#C4B0FF', // light purple, brightened to read on the dark ground
   coffee: '#C08552',
   bolt: '#FACC15',
   feedBg: '#0E1320', // keep the dark screen background in dark mode

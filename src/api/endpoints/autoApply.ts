@@ -326,7 +326,9 @@ export function appliedStatusMeta(
   opts?: { canOpenSite?: boolean },
 ): {
   label: string;
-  tone: 'positive' | 'waiting' | 'negative' | 'neutral';
+  // 'apply' = "Apply on the site" — a distinct light-purple tone so it doesn't
+  // read the same as the amber "Needs your input"; they're different asks.
+  tone: 'positive' | 'waiting' | 'negative' | 'neutral' | 'apply';
 } {
   switch (s) {
     case 'submitted':
@@ -344,7 +346,7 @@ export function appliedStatusMeta(
       // "Failed." Only when there's genuinely nowhere to send them do we say
       // it couldn't be done.
       return opts?.canOpenSite
-        ? { label: 'Apply on the site', tone: 'waiting' }
+        ? { label: 'Apply on the site', tone: 'apply' }
         : { label: "Couldn't apply", tone: 'negative' };
     default:
       // queued / running. If input's done and we're on the code/submit gate,
