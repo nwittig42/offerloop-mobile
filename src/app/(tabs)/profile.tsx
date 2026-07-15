@@ -846,6 +846,33 @@ export default function ProfileScreen() {
 
           {tab === 'settings' ? (
             <>
+              {/* Direct line to the founders — a chat that goes straight to us,
+                  with a "call a founder" option inside. */}
+              <Pressable onPress={() => router.push('/feedback')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.positive + '18',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="chatbubbles-outline" size={18} color={colors.positive} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
+                      Feedback
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      Tell the founders what's working — or what isn't
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
               <Pressable onPress={() => router.push('/swipe-settings')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View

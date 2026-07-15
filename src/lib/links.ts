@@ -16,3 +16,16 @@
  * way: a download/marketing link is fine, a payment link is not.
  */
 export const APP_DOWNLOAD_URL = 'https://offerloop.ai';
+
+/**
+ * "Call a Founder" number, shown in the Feedback screen's call sheet.
+ *
+ * TODO(Rylan): replace with the real founder line before the next build. Format
+ * as a tel:-safe string (digits, optional leading +). Until it's set to a real
+ * number the call button is hidden (see FOUNDER_PHONE_SET).
+ */
+export const FOUNDER_PHONE = '+10000000000';
+/** False while FOUNDER_PHONE is still the placeholder — hides the call CTA. */
+export const FOUNDER_PHONE_SET = FOUNDER_PHONE !== '+10000000000';
+/** Pretty version for display. */
+export const FOUNDER_PHONE_DISPLAY = FOUNDER_PHONE;
