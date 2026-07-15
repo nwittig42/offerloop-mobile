@@ -205,9 +205,9 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           <Text
             style={{
               fontFamily: fonts.sans,
-              fontSize: 14,
+              fontSize: 15,
               color: colors.inkSecondary,
-              lineHeight: 21,
+              lineHeight: 23,
             }}>
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
@@ -256,7 +256,7 @@ function DetailTile({
       <Ionicons name={icon} size={16} color={tone} style={full ? { marginTop: 1 } : undefined} />
       <Text
         numberOfLines={full ? undefined : 1}
-        style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink, lineHeight: full ? 19 : undefined }}>
+        style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink, lineHeight: full ? 20 : undefined }}>
         {label}
       </Text>
     </View>
@@ -337,7 +337,7 @@ export function ExpandedCard({
             <CompanyLogo name={job.company} logoUrl={job.logoUrl} size={40} radius={10} />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
                   {job.company}
                 </Text>
                 <Ionicons name="chevron-forward" size={13} color={colors.inkTertiary} />
@@ -366,7 +366,7 @@ export function ExpandedCard({
             justifyContent: 'center',
           }}>
           <Ionicons name="person-add-outline" size={16} color={colors.accent} />
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.accent }}>
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 15, color: colors.accent }}>
             Find a contact at {job.company}
           </Text>
         </Pressable>
@@ -385,7 +385,7 @@ export function ExpandedCard({
               paddingVertical: 12,
             }}>
             <Ionicons name="flash" size={16} color={colors.paper} />
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.paper }}>
               Auto-apply to this role
             </Text>
           </Pressable>
@@ -393,7 +393,7 @@ export function ExpandedCard({
 
         {tiles.length ? (
           <View style={{ gap: 10 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
               Job details
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
@@ -405,23 +405,23 @@ export function ExpandedCard({
         ) : null}
 
         <View style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
             Job description
           </Text>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 14.5, color: colors.inkSecondary, lineHeight: 23 }}>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 15.5, color: colors.inkSecondary, lineHeight: 24 }}>
             {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
           </Text>
         </View>
 
         {quals.length ? (
           <View style={{ gap: 10 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
               Required qualifications
             </Text>
             {quals.map((q, i) => (
               <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                <Text style={{ color: colors.inkTertiary, fontSize: 14 }}>•</Text>
-                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 14, color: colors.inkSecondary, lineHeight: 22 }}>
+                <Text style={{ color: colors.inkTertiary, fontSize: 15 }}>•</Text>
+                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 15, color: colors.inkSecondary, lineHeight: 23 }}>
                   {q}
                 </Text>
               </View>

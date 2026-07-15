@@ -256,7 +256,7 @@ export default function FeedScreen() {
             <Text
               style={{
                 fontFamily: fonts.sansMedium,
-                fontSize: 12,
+                fontSize: 13,
                 color: colors.inkSecondary,
                 textAlign: 'center',
                 paddingTop: 6,
@@ -286,10 +286,10 @@ export default function FeedScreen() {
                 borderColor: colors.waiting + '40',
               }}>
               <Ionicons name="alert-circle-outline" size={18} color={colors.waiting} />
-              <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.ink }}>
+              <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
                 Set up your application profile to auto-apply
               </Text>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: colors.waiting }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.waiting }}>
                 Set up
               </Text>
             </Pressable>
