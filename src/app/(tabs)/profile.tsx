@@ -23,6 +23,7 @@ import { saveTargetTrack } from '@/api/endpoints/preferences';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
+import FeedbackChat from '@/components/FeedbackChat';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -247,6 +248,7 @@ const TABS = [
   { key: 'personal', label: 'Personal', icon: 'person-outline' },
   { key: 'resume', label: 'Resume', icon: 'document-text-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings-outline' },
+  { key: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -846,33 +848,6 @@ export default function ProfileScreen() {
 
           {tab === 'settings' ? (
             <>
-              {/* Direct line to the founders — a chat that goes straight to us,
-                  with a "call a founder" option inside. */}
-              <Pressable onPress={() => router.push('/feedback')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.positive + '18',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="chatbubbles-outline" size={18} color={colors.positive} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                      Feedback
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      Tell the founders what's working — or what isn't
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
               <Pressable onPress={() => router.push('/swipe-settings')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View
@@ -1044,6 +1019,8 @@ export default function ProfileScreen() {
               ) : null}
             </>
           ) : null}
+
+          {tab === 'feedback' ? <FeedbackChat /> : null}
 
           {/* Which JS bundle is this phone actually running? Answers
               "did the OTA land" at a glance — updateId is null while on
