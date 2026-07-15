@@ -39,6 +39,8 @@ import {
   industryFirmsFor,
   industryFirmsInText,
   peerFirmsInText,
+  sectorForVibeText,
+  referenceFirmInText,
   refineOptions,
   suggestFirm,
   findFirmInText,
@@ -49,7 +51,7 @@ import {
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
 import { ApiError } from '@/api/errors';
-import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, fetchVibeCompanies, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -850,13 +852,38 @@ function ScoutTabInner() {
         // classifier path rewrites "engineers at startups like Stripe" into
         // "Draft 3 engineers", dropping the vibe. heardRaw carries the real words.
         const vibeText = meta?.heardRaw ?? clean;
-        const firms = industryFirmsFor(intent.company)
+        let firms = industryFirmsFor(intent.company)
           ?? (!intent.company ? industryFirmsInText(vibeText) : null)
           // "companies like Stripe" / "startups similar to OpenAI" — no firm
           // named, but a REFERENCE firm is. Suggest its peers so the vibe becomes
           // pickable instead of a dead "which company?".
           ?? (!isRealCompany(intent.company) ? peerFirmsInText(vibeText) : null);
-        if (firms) {
+        // One seq for both awaits below (pool-fill + count grounding).
+        const seqG = ++requestSeq.current;
+        // Piece 3 — pool-fill: when curated is thin/empty for this vibe, pull LIVE
+        // companies from the matching sector (or a reference firm's sector) so
+        // vibes we didn't hand-curate (biotech, edtech, media, defense…) still get
+        // real suggestions that auto-grow with the crawl. Curated stays FIRST:
+        // ranking a sector by raw job volume surfaces foreign mass-hirers, so the
+        // hand-picked names lead and the pool only fills the remaining slots.
+        if ((!firms || firms.length < 4) && !isRealCompany(intent.company)) {
+          const sector = sectorForVibeText(vibeText);
+          const ref = referenceFirmInText(vibeText);
+          if (sector || ref) {
+            try {
+              const pool = await fetchVibeCompanies({ sector: sector || undefined, like: ref || undefined });
+              if (seqG !== requestSeq.current) return;
+              if (pool.length) {
+                const base = firms ?? [];
+                const seen = new Set(base.map((f) => f.toLowerCase()));
+                firms = [...base, ...pool.filter((p) => !seen.has(p.toLowerCase()))];
+              }
+            } catch {
+              if (seqG !== requestSeq.current) return;
+            }
+          }
+        }
+        if (firms && firms.length) {
           const n = intent.kind === 'draft' ? intent.count : 0;
           // Targeting doctrine: employees are the default. Only an explicit
           // hiring-manager ask keeps that targeting; generic words
@@ -870,14 +897,11 @@ function ScoutTabInner() {
             ? 'hiring managers'
             : roleIsGeneric ? 'people on the team' : rawRole;
           const loc = intent.location ? ` in ${intent.location}` : '';
-          // Piece 2 — ground the suggestions in real inventory: RANK firms by how
-          // many open roles we have, so the ones we can actually back surface
-          // first. We rank (not hard-drop) on purpose: company-name canonicalization
-          // is still a passthrough (Piece 0 pending), so a count of 0 can be a
-          // real gap OR a name-match miss — dropping would risk hiding a company we
-          // do have. Zeros just sort last and fall off the 4-slot cut when there's
-          // enough real inventory. Best-effort + seq-guarded.
-          const seqG = ++requestSeq.current;
+          // Piece 2 — ground in real inventory: RANK firms by open-role count so
+          // the ones we can back surface first. Rank (not hard-drop): the pool is
+          // ATS-crawled and tech-heavy, so finance/consulting firms legitimately
+          // have 0 inventory — dropping would empty those vibes. Zeros sort last
+          // and fall off the 4-slot cut. Best-effort + seq-guarded.
           let ordered = firms.slice(0, 6);
           try {
             const counts = await fetchCompanyJobCounts(ordered);

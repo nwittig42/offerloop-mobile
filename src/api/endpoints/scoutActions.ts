@@ -222,11 +222,49 @@ export function peerFirmsFor(company: string | null | undefined): string[] | nul
 export function peerFirmsInText(ask: string): string[] | null {
   const t = (ask || '').replace(/\s+/g, ' ').trim();
   if (!t) return null;
-  const m = t.match(
-    /\b(?:like|similar to|such as|in the vein of|along the lines of|kind of like|sort of like)\s+([A-Za-z0-9&.\-' ]{2,30}?)(?:[,.!?]|\s+(?:in|that|who|which|but|and|or|to|for|based)\b|$)/i,
-  );
+  const m = t.match(REFERENCE_FIRM_RE);
   if (!m) return null;
   return peerFirmsFor(m[1].trim());
+}
+
+const REFERENCE_FIRM_RE =
+  /\b(?:like|similar to|such as|in the vein of|along the lines of|kind of like|sort of like)\s+([A-Za-z0-9&.\-' ]{2,30}?)(?:[,.!?]|\s+(?:in|that|who|which|but|and|or|to|for|based)\b|$)/i;
+
+/** The reference firm in "…like Stripe" / "…similar to OpenAI" — for pool-derived
+ *  peer lookup by sector. null when no reference firm is named. */
+export function referenceFirmInText(ask: string): string | null {
+  const m = (ask || '').replace(/\s+/g, ' ').match(REFERENCE_FIRM_RE);
+  return m ? m[1].trim() : null;
+}
+
+// Phrase → Sid's sector vocab (Piece 3). Ordered: first match wins. Used to turn
+// a vibe ("fintech", "AI startups") into a live pool query. Deliberately does NOT
+// map bare "tech" — too broad for a single sector; curated handles that.
+const VIBE_SECTORS: { re: RegExp; sector: string }[] = [
+  { re: /\bfin ?tech|financial technology|payments?\b/i, sector: 'fintech' },
+  { re: /\bcrypto|web ?3|blockchain|cryptocurrency\b/i, sector: 'fintech' },
+  { re: /\b(a\.?i\.?|artificial intelligence|machine learning|\bml\b|gen ?ai|llms?)\b/i, sector: 'ai_ml' },
+  { re: /\bcyber ?security|infosec\b/i, sector: 'cybersecurity' },
+  { re: /\bdev ?tools|developer tools|data infra(?:structure)?|data engineering\b/i, sector: 'devtools_infra' },
+  { re: /\bsaas|enterprise software|b2b software\b/i, sector: 'saas_enterprise' },
+  { re: /\bbio ?tech|pharma(?:ceutical)?|life sciences\b/i, sector: 'biotech_pharma' },
+  { re: /\bhealth ?tech|digital health|healthcare\b/i, sector: 'healthtech' },
+  { re: /\bclimate|clean ?tech|clean energy|renewable\b/i, sector: 'climate_energy' },
+  { re: /\bdefen[cs]e|aerospace|space tech\b/i, sector: 'defense_aerospace' },
+  { re: /\bgaming|video games?|games? studio\b/i, sector: 'gaming' },
+  { re: /\bed ?tech|education tech\b/i, sector: 'edtech' },
+  { re: /\bmedia|entertainment|streaming\b/i, sector: 'media_entertainment' },
+  { re: /\bconsulting|advisory\b/i, sector: 'consulting_professional' },
+  { re: /\binvestment bank|private equity|hedge fund|asset management\b/i, sector: 'finance_investment_bank' },
+  { re: /\bmarketplace|e-?commerce\b/i, sector: 'consumer_marketplace' },
+  { re: /\bsocial media|consumer social\b/i, sector: 'consumer_social' },
+];
+
+/** Map a vibe phrase to Sid's sector key, or null. Powers pool-derived vibes. */
+export function sectorForVibeText(text: string): string | null {
+  const t = (text || '').toLowerCase();
+  for (const { re, sector } of VIBE_SECTORS) if (re.test(t)) return sector;
+  return null;
 }
 
 /** Titles that actually EXIST at this kind of firm — suggestion chips must

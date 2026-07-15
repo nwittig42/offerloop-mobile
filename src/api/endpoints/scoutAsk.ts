@@ -78,6 +78,23 @@ export async function fetchCompanyJobCounts(companies: string[]): Promise<Record
   return r.counts || {};
 }
 
+/** Live pool companies for a vibe (Piece 3): a sector ('fintech') or a reference
+ *  firm ('like Stripe' → its sector's peers), ranked by real job inventory.
+ *  Best-effort — [] when the sector is unknown/unclassified; caller falls back to
+ *  its curated maps. */
+export async function fetchVibeCompanies(opts: { sector?: string; like?: string; limit?: number }): Promise<string[]> {
+  if (!opts.sector && !opts.like) return [];
+  const p = new URLSearchParams();
+  if (opts.sector) p.set('sector', opts.sector);
+  if (opts.like) p.set('like', opts.like);
+  p.set('limit', String(opts.limit ?? 8));
+  const r = await apiFetch<{ companies?: string[] }>(
+    `/api/mobile/vibe-companies?${p.toString()}`,
+    { timeoutMs: 8_000 },
+  );
+  return r.companies || [];
+}
+
 /** Voice overhaul P2: one round trip that turns the RAW ask audio into an
  *  understanding. Server transcribes with a firm-vocabulary-primed model
  *  (falls back internally to the Apple transcript on any ASR failure —
