@@ -46,8 +46,8 @@ const ROWS = [
     text: 'An auto-apply finished — or needs a decision from you',
   },
   {
-    icon: 'sync-outline' as const,
-    text: 'A Loop found new people while you were away',
+    icon: 'cafe-outline' as const,
+    text: 'Your meeting prep is ready before the chat',
   },
 ];
 

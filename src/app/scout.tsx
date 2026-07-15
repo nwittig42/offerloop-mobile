@@ -40,7 +40,7 @@ type Message = { from: 'user' | 'scout'; text: string; actions?: ScoutAction[] }
 const SUGGESTIONS = [
   'What should I say in a coffee chat?',
   'Which of these jobs fits my resume?',
-  'Set up a Loop for consulting roles',
+  'Find alumni at a company I’m targeting',
 ];
 
 export default function ScoutScreen() {

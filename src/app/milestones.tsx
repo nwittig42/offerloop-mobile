@@ -41,13 +41,12 @@ export default function MilestonesScreen() {
   const colors = useColors();
   const { scheme } = useTheme();
   const dark = scheme === 'dark';
-  const { outreach, meetingPreps, loops, trackerRows, showToast } = useApp();
+  const { outreach, meetingPreps, trackerRows, showToast } = useApp();
   const [selected, setSelected] = useState<Milestone | null>(null);
 
   const sent = outreach.filter((o) => o.status === 'sent' || o.status === 'replied').length;
   const replies = outreach.filter((o) => o.status === 'replied').length;
   const preps = meetingPreps.length;
-  const activeLoops = loops.filter((l) => l.status === 'Active').length;
   const contacts = trackerRows.length;
 
   const milestones: Milestone[] = [
@@ -58,7 +57,7 @@ export default function MilestonesScreen() {
     { id: 'five-reply', icon: 'mail-open', color: '#0EA5E9', title: 'In the conversation', desc: '5 replies back', current: replies, goal: 5 },
     { id: 'first-prep', icon: 'cafe', color: '#8B5A2B', title: 'Coffee ready', desc: 'Prep your first coffee chat', current: preps, goal: 1 },
     { id: 'ten-contacts', icon: 'people', color: '#EC4899', title: 'Building a network', desc: '10 contacts in your network', current: contacts, goal: 10 },
-    { id: 'first-loop', icon: 'infinite', color: '#4F46E5', title: 'On autopilot', desc: 'Start your first Loop', current: activeLoops, goal: 1, reward: 'Loops theme' },
+    { id: 'fifty-send', icon: 'trophy', color: '#4F46E5', title: 'Networking machine', desc: '50 outreach sent', current: sent, goal: 50 },
   ];
 
   const unlocked = milestones.filter((m) => m.current >= m.goal).length;

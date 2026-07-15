@@ -18,8 +18,8 @@ const SIGNUP_URL = 'https://offerloop.ai/signin?mode=signup';
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   { icon: 'albums-outline', title: 'Swipe to draft', body: 'Right-swipe a job and Offerloop drafts a tailored intro to someone there.' },
+  { icon: 'mic-outline', title: 'Just ask Scout', body: 'Talk or type — Scout finds the right people, drafts the intro, and preps you for the chat.' },
   { icon: 'mail-outline', title: 'Replies in one place', body: 'Drafts, sends, and replies land in an inbox built for fast follow-ups.' },
-  { icon: 'infinite', title: 'Loops on autopilot', body: 'Set a Loop and it finds people and drafts outreach while you go about your day.' },
 ];
 
 export default function WelcomeScreen() {

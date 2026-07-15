@@ -591,7 +591,7 @@ export default function Onboarding() {
             { icon: 'chatbubble-ellipses-outline' as const, text: 'A contact replied — follow up while you’re top of mind' },
             { icon: 'document-text-outline' as const, text: 'Your draft is ready to review and send' },
             { icon: 'flash-outline' as const, text: 'An auto-apply finished — or needs a decision from you' },
-            { icon: 'sync-outline' as const, text: 'A Loop found new people while you were away' },
+            { icon: 'cafe-outline' as const, text: 'Your meeting prep is ready before the chat' },
           ].map((row) => (
             <View key={row.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.marketing + '12', alignItems: 'center', justifyContent: 'center' }}>
