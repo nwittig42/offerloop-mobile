@@ -191,6 +191,9 @@ export type AutoApplyStatusDoc = {
   screenshot?: string;
   job_title?: string;
   company?: string;
+  /** The listing URL — lets the Needs-input screen route a question we couldn't
+   *  fully capture (a custom multi-select) to the real form to finish. */
+  apply_url?: string;
   pending_questions?: PendingQuestion[];
   [k: string]: unknown;
 };

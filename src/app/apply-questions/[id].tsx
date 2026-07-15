@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -53,10 +54,14 @@ const MAX_VISIBLE_MATCHES = 30;
 
 function FieldLabel({ q }: { q: PendingQuestion }) {
   const colors = useColors();
+  // Strip any required marker the employer baked into the label text (a trailing
+  // '*' / '✱', sometimes on its own line) so we don't render it PLUS our own red
+  // asterisk — the "…from below. * *" double-marker seen on Palantir's form.
+  const label = (q.label || '').replace(/[\s*✱]+$/u, '').trim();
   return (
     <View style={{ gap: 4 }}>
       <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
-        {q.label}
+        {label}
         {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
       </Text>
       {/* The employer's own help text. Without it, a bare "Additional Information"
@@ -173,18 +178,31 @@ function SearchableSelect({
   );
 }
 
+/** A question that plainly points at choices ("select 1-3 from below", "check
+ *  all that apply") — a custom widget whose options we couldn't scrape off the
+ *  form, so there's nothing to render. Detected from the label so we can be
+ *  honest instead of showing a text box the question can't be answered in. */
+const HIDDEN_LIST_RE =
+  /from below|from the list|from the (?:drop-?down|menu)|check all that apply|select all that apply|select (?:one or more|1|2|3|\d)|choose (?:one|from)/i;
+
 function QuestionField({
   q,
   value,
   onChange,
+  applyUrl,
 }: {
   q: PendingQuestion;
   value: string;
   onChange: (v: string) => void;
+  applyUrl?: string;
 }) {
   const colors = useColors();
   const options = (q.options ?? []).map(optionLabel).filter(Boolean);
   const isSelect = (q.field_type === 'select' || options.length > 0) && options.length > 0;
+  // No options to show, but the question clearly refers to a list — we couldn't
+  // capture this employer's custom picker. Don't strand the user on a text box
+  // for a list they can't see; point them to finish it on the real form.
+  const hiddenList = !isSelect && HIDDEN_LIST_RE.test(q.label || '') && !!applyUrl;
 
   if (isSelect && options.length > SEARCHABLE_THRESHOLD) {
     return <SearchableSelect q={q} options={options} value={value} onChange={onChange} />;
@@ -221,6 +239,64 @@ function QuestionField({
               </Pressable>
             );
           })}
+        </View>
+      ) : hiddenList ? (
+        <View style={{ gap: 10 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: 8,
+              padding: 12,
+              borderRadius: 10,
+              backgroundColor: colors.applyLink + '14',
+              borderWidth: 1,
+              borderColor: colors.applyLink + '33',
+            }}>
+            <Ionicons name="list-outline" size={17} color={colors.applyLink} style={{ marginTop: 1 }} />
+            <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.ink, lineHeight: 18 }}>
+              This question’s choices live on {q.label ? 'the company’s form' : 'the company site'} and we
+              couldn’t pull them in. Open the application to pick from the list — everything else you’ve
+              answered is saved.
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => applyUrl && Linking.openURL(applyUrl)}
+            accessibilityRole="button"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              paddingVertical: 11,
+              borderRadius: 10,
+              backgroundColor: colors.applyLink,
+            }}>
+            <Ionicons name="open-outline" size={16} color="#FFFFFF" />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: '#FFFFFF' }}>
+              Open application to finish
+            </Text>
+          </Pressable>
+          {/* Still allow typing — some "select from below" fields are really free
+              text, so don't hard-block the in-app answer. */}
+          <TextInput
+            value={value}
+            onChangeText={onChange}
+            placeholder="…or type your answer if you know it"
+            placeholderTextColor={colors.inkTertiary}
+            multiline={q.field_type === 'textarea'}
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 15,
+              color: colors.ink,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              minHeight: q.field_type === 'textarea' ? 80 : undefined,
+              textAlignVertical: q.field_type === 'textarea' ? 'top' : 'center',
+            }}
+          />
         </View>
       ) : (
         <TextInput
@@ -398,6 +474,7 @@ export default function ApplyQuestionsScreen() {
                 q={q}
                 value={answers[qid] ?? ''}
                 onChange={(v) => setAnswers((prev) => ({ ...prev, [qid]: v }))}
+                applyUrl={typeof data?.apply_url === 'string' ? data.apply_url : undefined}
               />
             );
           })}
