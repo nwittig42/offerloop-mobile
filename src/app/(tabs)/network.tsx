@@ -26,7 +26,7 @@ import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/store/app';
-import { useColors } from '@/theme/ThemeProvider';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
@@ -47,10 +47,12 @@ const PARALLAX_TRAVEL = 320;
 const PARALLAX_MAX_SCROLL = 1400;
 
 function BigNumber({ value, label }: { value: number; label: string }) {
-  const colors = useColors();
+  // The stat card is a fixed blue gradient in BOTH themes, so its text must be a
+  // fixed light color — not colors.paper, which is dark in dark mode and rendered
+  // these numbers nearly black on the gradient.
   return (
     <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <Text style={{ fontFamily: fonts.display, fontSize: 44, color: colors.paper }}>
+      <Text style={{ fontFamily: fonts.display, fontSize: 44, color: '#FFFFFF' }}>
         {value}
       </Text>
       <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: '#E2E0FB' }}>
@@ -63,6 +65,17 @@ function BigNumber({ value, label }: { value: number; label: string }) {
 export default function NetworkScreen() {
   const router = useRouter();
   const colors = useColors();
+  const { scheme } = useTheme();
+  const isDark = scheme === 'dark';
+  // The backdrop is a LIGHT daytime painting. On the light theme a soft veil lets
+  // the trees glow through. On dark it needs a DEEPER navy veil, heaviest through
+  // the reading zone up top, easing off toward the tree line — otherwise the pale
+  // fog blends to a flat, muddy grey and the text loses contrast. Two tunings, one
+  // image.
+  const scrimColors: readonly [string, string, string] = isDark
+    ? [colors.surface + 'D9', colors.surface + 'E6', colors.surface + 'B0']
+    : [colors.surface + '80', colors.surface + 'A6', colors.surface + 'CC'];
+  const scrimLocations: readonly [number, number, number] = isDark ? [0, 0.45, 1] : [0, 0.4, 1];
   const { outreach, trackerRows, meetingPreps, unreadCount, passedCount, savedCount } = useApp();
   const [tab, setTab] = useState<TabKey>('Companies');
   const [companyQuery, setCompanyQuery] = useState('');
@@ -306,8 +319,8 @@ export default function NetworkScreen() {
       </Animated.View>
       <LinearGradient
         pointerEvents="none"
-        colors={[colors.surface + '80', colors.surface + 'A6', colors.surface + 'CC'] as const}
-        locations={[0, 0.4, 1]}
+        colors={scrimColors}
+        locations={scrimLocations}
         style={StyleSheet.absoluteFill}
       />
 

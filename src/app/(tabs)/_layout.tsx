@@ -6,8 +6,13 @@ import GlassTabBackground from '@/components/GlassTabBackground';
 import NotificationsGate from '@/components/NotificationsGate';
 import { needsAttention } from '@/app/(tabs)/inbox';
 import { useApp } from '@/store/app';
-import { useColors } from '@/theme/ThemeProvider';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+
+// Scout's night bar, promoted to the whole bar's dark-mode look so the nav reads
+// as one deep surface instead of a lighter glass slab under dark screens.
+const SCOUT_BAR_BG = '#0A111F';
+const SCOUT_BAR_BORDER = 'rgba(160,190,255,0.18)';
 
 /**
  * Bottom navigation: Feed, Inbox, Scout, Network, Profile — Scout dead
@@ -20,6 +25,8 @@ import { fonts } from '@/theme/tokens';
 export default function TabsLayout() {
   const { outreach } = useApp();
   const colors = useColors();
+  const { scheme } = useTheme();
+  const isDark = scheme === 'dark';
   const attentionCount = outreach.filter(needsAttention).length;
   // Cap the displayed count so a big number (200+) doesn't clip the badge.
   const badgeValue = attentionCount > 99 ? '99+' : attentionCount;
@@ -35,11 +42,13 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.navy,
         tabBarInactiveTintColor: colors.inkTertiary,
-        tabBarBackground: () => <GlassTabBackground />,
+        // Dark mode: solid Scout-night bar across all tabs (no glass), so the nav
+        // matches Scout's deep surface. Light mode keeps the liquid-glass bar.
+        tabBarBackground: isDark ? () => null : () => <GlassTabBackground />,
         tabBarStyle: {
-          backgroundColor: 'transparent',
+          backgroundColor: isDark ? SCOUT_BAR_BG : 'transparent',
           borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.hairline,
+          borderTopColor: isDark ? SCOUT_BAR_BORDER : colors.hairline,
           elevation: 0,
         },
         tabBarLabelStyle: {
