@@ -28,11 +28,31 @@ export function CommaField({
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const available = suggestions.filter((s) => !selected.includes(s)).slice(0, 6);
+
+  // The fragment the user is mid-typing = text after the last comma (empty once
+  // they've typed a separator). Filter suggestions by it so typing "ven" surfaces
+  // "Venture Capital" — a real autocomplete, not a static list.
+  const endsWithSep = /,\s*$/.test(value);
+  const frag = endsWithSep ? '' : (value.split(',').pop() || '').trim().toLowerCase();
+  const available = suggestions
+    .filter((s) => !selected.some((sel) => sel.toLowerCase() === s.toLowerCase()))
+    .filter((s) => !frag || s.toLowerCase().includes(frag))
+    .slice(0, 6);
 
   const add = (s: string) => {
-    const base = value.replace(/,\s*$/, '').trim();
-    onChangeText(base ? `${base}, ${s}` : s);
+    const parts = value
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const last = parts[parts.length - 1];
+    // If the pick completes the partial the user was typing ("Ven" → "Venture
+    // Capital"), replace that partial instead of appending after it. A finished
+    // value the user tapped past (last isn't a prefix of the pick) is kept.
+    if (!endsWithSep && last && s.toLowerCase().startsWith(last.toLowerCase()) && last.toLowerCase() !== s.toLowerCase()) {
+      parts.pop();
+    }
+    parts.push(s);
+    onChangeText(parts.join(', '));
   };
 
   return (
@@ -58,7 +78,11 @@ export function CommaField({
           {available.map((s) => (
             <Pressable
               key={s}
-              onPress={() => add(s)}
+              // onPressIn, not onPress: tapping a chip blurs the TextInput, which
+              // flips `focused` false and unmounts these chips — with onPress the
+              // add() never fired (the classic "suggestion won't add" bug). Firing
+              // on touch-down lands the add before the blur tears the chip down.
+              onPressIn={() => add(s)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',

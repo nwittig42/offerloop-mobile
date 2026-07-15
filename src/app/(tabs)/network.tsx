@@ -306,8 +306,8 @@ export default function NetworkScreen() {
       </Animated.View>
       <LinearGradient
         pointerEvents="none"
-        colors={[colors.surface + 'BF', colors.surface + 'E0', colors.surface + 'F2'] as const}
-        locations={[0, 0.45, 1]}
+        colors={[colors.surface + '80', colors.surface + 'A6', colors.surface + 'CC'] as const}
+        locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
 
