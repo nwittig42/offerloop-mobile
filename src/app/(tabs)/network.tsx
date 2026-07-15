@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import {
   AUTO_APPLY_TERMINAL,
@@ -246,6 +246,23 @@ export default function NetworkScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      {/* Foggy-trees wash behind the whole tab. It's fixed to the viewport, so it
+          never "runs out" as the company grid grows — every new row of logos
+          scrolls over the same misty backdrop. A surface scrim keeps logos, names
+          and cards legible while the painting shows through the transparent gaps
+          (the company grid especially, where tiles have no card of their own). */}
+      <Image
+        source={require('../../../assets/images/foggy-trees.jpeg')}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={[colors.surface + 'BF', colors.surface + 'E0', colors.surface + 'F2'] as const}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
       <Header
         title="Network"
         mark

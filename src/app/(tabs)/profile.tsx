@@ -508,53 +508,35 @@ export default function ProfileScreen() {
               </Text>
             </View>
             {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
-          </View>
-
-          <ProfileCompletion profile={profile} onGoTo={setTab} />
-
-          <Pressable onPress={() => router.push('/share')}>
-            {/* Gradient outline: a thin LinearGradient frame under an inset paper
-                card. The 1.5px pad is the visible border; the inner radius is one
-                notch tighter so the corners stay concentric. */}
-            <LinearGradient
-              colors={['#5B9BF4', '#2563EB', '#7C4DFF'] as const}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ borderRadius: 11.5, padding: 1.5 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  borderRadius: 10,
-                  backgroundColor: colors.paper,
-                  padding: 20,
-                }}>
-                <LinearGradient
-                  colors={['#5B9BF4', '#7C4DFF'] as const}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+            {/* Share-your-progress, compacted to a gradient-outlined icon beside
+                the name instead of a full-width card — same destination (/share),
+                far less vertical space. The 1.5px gradient pad is the outline;
+                the paper circle sits inside it. */}
+            <Pressable
+              onPress={() => router.push('/share')}
+              accessibilityRole="button"
+              accessibilityLabel="Share your progress">
+              <LinearGradient
+                colors={['#5B9BF4', '#2563EB', '#7C4DFF'] as const}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ borderRadius: 20, padding: 1.5 }}>
+                <View
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
+                    backgroundColor: colors.paper,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}>
-                  <Ionicons name="share-social-outline" size={18} color={colors.paper} />
-                </LinearGradient>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
-                    Share your progress
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
-                    A clean card of your week, for the group chat
-                  </Text>
+                  <Ionicons name="share-social" size={17} color={colors.accent} />
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-              </View>
-            </LinearGradient>
-          </Pressable>
+              </LinearGradient>
+            </Pressable>
+          </View>
+
+          <ProfileCompletion profile={profile} onGoTo={setTab} />
         </View>
 
         <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 8 }}>
