@@ -11,6 +11,7 @@ import {
   Image,
   Pressable,
   ScrollView,
+  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -386,7 +387,26 @@ export default function ProfileScreen() {
         onBellPress={() => router.push('/notifications')}
       />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+      <View style={{ flex: 1 }}>
+        {/* Watercolor mountains wash behind the whole page. A surface scrim (lighter
+            up top, near-opaque lower down) keeps cards and copy legible while the
+            painting still shows through — subtle in the forms, richer in the hero. */}
+        <Image
+          source={require('../../../assets/images/watercolor-mountains.webp')}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+        <LinearGradient
+          pointerEvents="none"
+          colors={[colors.surface + '80', colors.surface + 'D9', colors.surface + 'EB'] as const}
+          locations={[0, 0.4, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <ScrollView
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          contentContainerStyle={{ paddingBottom: 48 }}
+          keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
           <Pressable onPress={() => router.push('/credits')}>
             <LinearGradient
@@ -493,28 +513,47 @@ export default function ProfileScreen() {
           <ProfileCompletion profile={profile} onGoTo={setTab} />
 
           <Pressable onPress={() => router.push('/share')}>
-            <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: colors.accent + '40' }}>
+            {/* Gradient outline: a thin LinearGradient frame under an inset paper
+                card. The 1.5px pad is the visible border; the inner radius is one
+                notch tighter so the corners stay concentric. */}
+            <LinearGradient
+              colors={['#5B9BF4', '#2563EB', '#7C4DFF'] as const}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 11.5, padding: 1.5 }}>
               <View
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: colors.accent + '14',
+                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 12,
+                  borderRadius: 10,
+                  backgroundColor: colors.paper,
+                  padding: 20,
                 }}>
-                <Ionicons name="share-social-outline" size={18} color={colors.accent} />
+                <LinearGradient
+                  colors={['#5B9BF4', '#7C4DFF'] as const}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                  <Ionicons name="share-social-outline" size={18} color={colors.paper} />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+                    Share your progress
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
+                    A clean card of your week, for the group chat
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
-                  Share your progress
-                </Text>
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
-                  A clean card of your week, for the group chat
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-            </Card>
+            </LinearGradient>
           </Pressable>
         </View>
 
@@ -1041,6 +1080,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+      </View>
     </View>
   );
 }
