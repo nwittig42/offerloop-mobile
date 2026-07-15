@@ -20,12 +20,12 @@ export const APP_DOWNLOAD_URL = 'https://offerloop.ai';
 /**
  * "Call a Founder" number, shown in the Feedback screen's call sheet.
  *
- * TODO(Rylan): replace with the real founder line before the next build. Format
- * as a tel:-safe string (digits, optional leading +). Until it's set to a real
- * number the call button is hidden (see FOUNDER_PHONE_SET).
+ * Rylan's personal line as of 2026-07-14 — INTERIM until a shared group/founders
+ * number exists. Swap FOUNDER_PHONE (+ FOUNDER_PHONE_DISPLAY) when that lands.
+ * tel:-safe string (digits, leading +). Placeholder '+10000000000' hides the CTA.
  */
-export const FOUNDER_PHONE = '+10000000000';
+export const FOUNDER_PHONE: string = '+18056801528';
 /** False while FOUNDER_PHONE is still the placeholder — hides the call CTA. */
 export const FOUNDER_PHONE_SET = FOUNDER_PHONE !== '+10000000000';
 /** Pretty version for display. */
-export const FOUNDER_PHONE_DISPLAY = FOUNDER_PHONE;
+export const FOUNDER_PHONE_DISPLAY = '+1 (805) 680-1528';
