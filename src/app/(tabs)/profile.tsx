@@ -68,28 +68,35 @@ function SoftRow({ label, children, last }: { label: string; children: ReactNode
  */
 function ProfileCompletion({
   profile,
-  onFinish,
+  onGoTo,
 }: {
   profile: ReturnType<typeof useApp>['profile'];
-  onFinish: () => void;
+  onGoTo: (tab: 'personal' | 'resume' | 'settings') => void;
 }) {
   const colors = useColors();
 
-  const checks = [
-    !!profile.linkedinUrl?.trim(),
-    profile.targetRoles.length > 0,
-    profile.industries.length > 0,
-    !!profile.gradYear?.trim(),
-    !!profile.about?.trim(),
-    profile.hasResume,
-    profile.gmailConnected,
+  // Each item knows whether it's done AND where to fix it. The button used to
+  // just switch to the Personal tab regardless of what was missing — so if you
+  // hadn't added a resume (Resume tab) or connected Gmail (Settings), "Finish
+  // profile" took you to the wrong place and told you nothing. Now it names the
+  // gaps and jumps to the first one.
+  const items: { label: string; done: boolean; tab: 'personal' | 'resume' | 'settings' }[] = [
+    { label: 'Add your LinkedIn', done: !!profile.linkedinUrl?.trim(), tab: 'personal' },
+    { label: 'Pick target roles', done: profile.targetRoles.length > 0, tab: 'personal' },
+    { label: 'Pick target industries', done: profile.industries.length > 0, tab: 'personal' },
+    { label: 'Add your grad year', done: !!profile.gradYear?.trim(), tab: 'personal' },
+    { label: 'Write a short About', done: !!profile.about?.trim(), tab: 'personal' },
+    { label: 'Upload your resume', done: profile.hasResume, tab: 'resume' },
+    { label: 'Connect Gmail', done: profile.gmailConnected, tab: 'settings' },
   ];
-  const done = checks.filter(Boolean).length;
-  const ratio = done / checks.length;
+  const done = items.filter((i) => i.done).length;
+  const ratio = done / items.length;
   const pct = Math.round(ratio * 100);
+  const missing = items.filter((i) => !i.done);
 
   if (pct >= 100) return null;
 
+  const first = missing[0];
   return (
     <Card style={{ gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -103,7 +110,29 @@ function ProfileCompletion({
           </Text>
         </View>
       </View>
-      <Button label="Finish profile" variant="brand" fullWidth onPress={onFinish} />
+
+      {/* What's actually left — tap any row to jump straight to it. */}
+      <View style={{ gap: 2 }}>
+        {missing.map((i) => (
+          <Pressable
+            key={i.label}
+            onPress={() => onGoTo(i.tab)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 }}>
+            <Ionicons name="ellipse-outline" size={15} color={colors.inkTertiary} />
+            <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}>
+              {i.label}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
+          </Pressable>
+        ))}
+      </View>
+
+      <Button
+        label={first ? first.label : 'Finish profile'}
+        variant="brand"
+        fullWidth
+        onPress={() => first && onGoTo(first.tab)}
+      />
     </Card>
   );
 }
@@ -460,7 +489,7 @@ export default function ProfileScreen() {
             {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
           </View>
 
-          <ProfileCompletion profile={profile} onFinish={() => setTab('personal')} />
+          <ProfileCompletion profile={profile} onGoTo={setTab} />
 
           <Pressable onPress={() => router.push('/share')}>
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: colors.accent + '40' }}>
