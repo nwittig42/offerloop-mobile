@@ -3,8 +3,15 @@ import { useIsFocused } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import {
   AUTO_APPLY_TERMINAL,
@@ -32,6 +39,13 @@ import { fonts } from '@/theme/tokens';
 const TABS = ['Companies', 'Applications', 'Meeting prep'] as const;
 type TabKey = (typeof TABS)[number];
 
+// Parallax backdrop tuning. Over the first PARALLAX_MAX_SCROLL px of scrolling,
+// the forest drifts up PARALLAX_TRAVEL px (~0.23× the content speed), then holds.
+// The image is drawn PARALLAX_TRAVEL taller than the screen so the drift never
+// reveals a gap at the bottom.
+const PARALLAX_TRAVEL = 320;
+const PARALLAX_MAX_SCROLL = 1400;
+
 function BigNumber({ value, label }: { value: number; label: string }) {
   const colors = useColors();
   return (
@@ -55,7 +69,32 @@ export default function NetworkScreen() {
   const [appQuery, setAppQuery] = useState('');
   const [gridCols, setGridCols] = useState(3); // density toggle: 2 / 3 / 4 up
   const [sortMode, setSortMode] = useState<'recent' | 'active'>('recent');
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  // Scroll-linked parallax: the lists write their offset into scrollY, and the
+  // forest translates a fraction of it — slower than the content, so scrolling
+  // deeper into the company grid feels like descending past more tree lines, and
+  // scrolling back up walks it back. Reset on tab switch so each fresh list
+  // starts at the top of the forest.
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+  useEffect(() => {
+    scrollY.value = 0;
+  }, [tab, scrollY]);
+  const bgStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: interpolate(
+          scrollY.value,
+          [0, PARALLAX_MAX_SCROLL],
+          [0, -PARALLAX_TRAVEL],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
 
   // Applications submitted via auto-apply. Fetched on Applications (the list) and
   // Companies (the grid uses per-company applied counts); polls every 15s while
@@ -246,16 +285,25 @@ export default function NetworkScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      {/* Foggy-trees wash behind the whole tab. It's fixed to the viewport, so it
-          never "runs out" as the company grid grows — every new row of logos
-          scrolls over the same misty backdrop. A surface scrim keeps logos, names
-          and cards legible while the painting shows through the transparent gaps
-          (the company grid especially, where tiles have no card of their own). */}
-      <Image
-        source={require('../../../assets/images/foggy-trees.jpeg')}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      {/* Foggy-trees wash behind the whole tab, parallaxed to the scroll (bgStyle)
+          so descending the company grid feels like going deeper into the forest.
+          Drawn taller than the screen so the upward drift never bares a gap. The
+          scrim above it stays fixed to the viewport — a static veil the forest
+          drifts beneath — keeping logos, names and cards legible while the
+          painting shows through the transparent gaps (the company grid especially,
+          where tiles have no card of their own). */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          { position: 'absolute', top: 0, left: 0, right: 0, height: windowHeight + PARALLAX_TRAVEL },
+          bgStyle,
+        ]}>
+        <Image
+          source={require('../../../assets/images/foggy-trees.jpeg')}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      </Animated.View>
       <LinearGradient
         pointerEvents="none"
         colors={[colors.surface + 'BF', colors.surface + 'E0', colors.surface + 'F2'] as const}
@@ -345,7 +393,10 @@ export default function NetworkScreen() {
       </View>
 
       {tab === 'Applications' ? (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
+        <Animated.ScrollView
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
           <Text
             style={{
               fontFamily: fonts.sansSemibold,
@@ -526,9 +577,12 @@ export default function NetworkScreen() {
               an application to open it on the company site.
             </Text>
           ) : null}
-        </ScrollView>
+        </Animated.ScrollView>
       ) : tab === 'Companies' ? (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
+        <Animated.ScrollView
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}>
           <View
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -684,9 +738,12 @@ export default function NetworkScreen() {
               ) : null}
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
+        <Animated.ScrollView
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 40 }}>
           <View
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
@@ -777,7 +834,7 @@ export default function NetworkScreen() {
             }}>
             Coffee chat prep is free and runs the same research as the web
           </Text>
-        </ScrollView>
+        </Animated.ScrollView>
       )}
     </View>
   );

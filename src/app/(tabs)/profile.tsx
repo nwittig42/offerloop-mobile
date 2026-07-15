@@ -516,22 +516,20 @@ export default function ProfileScreen() {
               onPress={() => router.push('/share')}
               accessibilityRole="button"
               accessibilityLabel="Share your progress">
+              {/* Filled gradient chip — the color lives inside now, white glyph on
+                  a blue→violet wash, so it reads as a bright action beside the name. */}
               <LinearGradient
                 colors={['#5B9BF4', '#2563EB', '#7C4DFF'] as const}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{ borderRadius: 20, padding: 1.5 }}>
-                <View
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 19,
-                    backgroundColor: colors.paper,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                  <Ionicons name="share-social" size={17} color={colors.accent} />
-                </View>
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="share-social" size={18} color="#FFFFFF" />
               </LinearGradient>
             </Pressable>
           </View>
