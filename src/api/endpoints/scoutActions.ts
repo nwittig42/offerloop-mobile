@@ -558,9 +558,23 @@ export function extractSlots(ask: string): AskSlots {
 
 /** One clarify round, max (contract rule): a draft ask with no company is the
  *  only case broad enough to coach. Location stays optional — best effort. */
+// Generic placeholders that parse into the company slot but name no actual
+// employer — "engineers at companies", "startups like Stripe", "some firms".
+// Drafting against these searches nothing and fails ("drafting 3 people at
+// companies" → didn't finish), so treat them as no-company and clarify.
+const GENERIC_COMPANY_RE =
+  /^(the\s+)?(companies|company|startups?|firms?|teams?|orgs?|organi[sz]ations?|places?|somewhere|anywhere|businesses|employers?)$/i;
+
+export function isRealCompany(company: string | null | undefined): boolean {
+  const c = (company || '').trim();
+  return !!c && !GENERIC_COMPANY_RE.test(c);
+}
+
 export function clarifyFor(intent: ScoutIntent): { question: string } | null {
-  if (intent?.kind === 'draft' && !intent.company) {
-    return { question: 'Which company should I look at?' };
+  if (intent?.kind === 'draft' && !isRealCompany(intent.company)) {
+    return {
+      question: "Which company should I look at? Name one — or a couple like it — and I'll pull people there.",
+    };
   }
   return null;
 }

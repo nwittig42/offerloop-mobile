@@ -24,6 +24,7 @@ import {
   ackFor,
   applyScope,
   clarifyFor,
+  isRealCompany,
   executeApplyIntent,
   extractSlots,
   type AskSlots,
@@ -446,6 +447,18 @@ function ScoutTabInner() {
 
   const runDraftAction = useCallback(
     async (intent: DraftIntent) => {
+      // Backstop: never launch a draft with no real company (empty, or a generic
+      // placeholder like "companies"/"startups"). Every path lands here — chips,
+      // refine picks, context inference — so one guard stops the doomed "drafting
+      // 3 people at companies → didn't finish". Ask which company instead.
+      if (!isRealCompany(intent.company)) {
+        setClarify({
+          question: "Which company should I look at? Name one — or a couple like it — and I'll pull people there.",
+          baseAsk: intent.role || '',
+        });
+        setPhase('clarify');
+        return;
+      }
       lastDraftRef.current = intent;
       const id = `scout-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
       const title = intent.company
