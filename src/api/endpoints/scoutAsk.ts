@@ -65,6 +65,19 @@ export async function classifyAsk(ask: string, askId: string): Promise<AskClassi
   return r.classification;
 }
 
+/** How many open roles we have per company — grounds Scout's company suggestions
+ *  in real inventory (drop firms with 0 jobs, rank by count). Best-effort: on any
+ *  failure the caller shows the unfiltered suggestions. */
+export async function fetchCompanyJobCounts(companies: string[]): Promise<Record<string, number>> {
+  const list = companies.map((c) => (c || '').trim()).filter(Boolean).slice(0, 8);
+  if (!list.length) return {};
+  const r = await apiFetch<{ counts?: Record<string, number> }>(
+    `/api/mobile/company-counts?companies=${encodeURIComponent(list.join(','))}`,
+    { timeoutMs: 8_000 },
+  );
+  return r.counts || {};
+}
+
 /** Voice overhaul P2: one round trip that turns the RAW ask audio into an
  *  understanding. Server transcribes with a firm-vocabulary-primed model
  *  (falls back internally to the Apple transcript on any ASR failure —

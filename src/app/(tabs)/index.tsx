@@ -49,7 +49,7 @@ import {
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
 import { ApiError } from '@/api/errors';
-import { askScoutBrain, askScoutFindContacts, classifyAsk, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -870,11 +870,28 @@ function ScoutTabInner() {
             ? 'hiring managers'
             : roleIsGeneric ? 'people on the team' : rawRole;
           const loc = intent.location ? ` in ${intent.location}` : '';
+          // Piece 2 — ground the suggestions in real inventory: RANK firms by how
+          // many open roles we have, so the ones we can actually back surface
+          // first. We rank (not hard-drop) on purpose: company-name canonicalization
+          // is still a passthrough (Piece 0 pending), so a count of 0 can be a
+          // real gap OR a name-match miss — dropping would risk hiding a company we
+          // do have. Zeros just sort last and fall off the 4-slot cut when there's
+          // enough real inventory. Best-effort + seq-guarded.
+          const seqG = ++requestSeq.current;
+          let ordered = firms.slice(0, 6);
+          try {
+            const counts = await fetchCompanyJobCounts(ordered);
+            if (seqG !== requestSeq.current) return; // superseded by a newer ask
+            ordered = [...ordered].sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0));
+          } catch {
+            if (seqG !== requestSeq.current) return;
+          }
+          ordered = ordered.slice(0, 4);
           setReply(null);
           track('scout_gate', { gate: 'industry_not_company' });
           setRefine({
             heard: clean,
-            options: firms.slice(0, 4).map((f) =>
+            options: ordered.map((f) =>
               n > 1 ? `Draft ${n} ${role} at ${f}${loc}` : `${role} at ${f}${loc}`),
           });
           setPhase('idle');
