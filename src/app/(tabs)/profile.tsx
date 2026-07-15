@@ -23,7 +23,6 @@ import { saveTargetTrack } from '@/api/endpoints/preferences';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
-import FeedbackChat from '@/components/FeedbackChat';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -529,7 +528,9 @@ export default function ProfileScreen() {
               return (
                 <Pressable
                   key={t.key}
-                  onPress={() => setTab(t.key)}
+                  // Feedback opens the full-screen chat instead of rendering
+                  // cramped inside the profile layout — it's a proper screen.
+                  onPress={() => (t.key === 'feedback' ? router.push('/feedback') : setTab(t.key))}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -1019,8 +1020,6 @@ export default function ProfileScreen() {
               ) : null}
             </>
           ) : null}
-
-          {tab === 'feedback' ? <FeedbackChat /> : null}
 
           {/* Which JS bundle is this phone actually running? Answers
               "did the OTA land" at a glance — updateId is null while on
