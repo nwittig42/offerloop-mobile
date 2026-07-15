@@ -38,6 +38,7 @@ import {
   preflightFor,
   industryFirmsFor,
   industryFirmsInText,
+  peerFirmsInText,
   refineOptions,
   suggestFirm,
   findFirmInText,
@@ -845,8 +846,16 @@ function ScoutTabInner() {
         // ask named no firm at all but talks about an industry ("find me
         // five employees in the tech industry in LA" — the classifier now
         // correctly leaves company empty for those).
+        // Scan the ORIGINAL transcript, not the canonicalized ask — the
+        // classifier path rewrites "engineers at startups like Stripe" into
+        // "Draft 3 engineers", dropping the vibe. heardRaw carries the real words.
+        const vibeText = meta?.heardRaw ?? clean;
         const firms = industryFirmsFor(intent.company)
-          ?? (!intent.company ? industryFirmsInText(clean) : null);
+          ?? (!intent.company ? industryFirmsInText(vibeText) : null)
+          // "companies like Stripe" / "startups similar to OpenAI" — no firm
+          // named, but a REFERENCE firm is. Suggest its peers so the vibe becomes
+          // pickable instead of a dead "which company?".
+          ?? (!isRealCompany(intent.company) ? peerFirmsInText(vibeText) : null);
         if (firms) {
           const n = intent.kind === 'draft' ? intent.count : 0;
           // Targeting doctrine: employees are the default. Only an explicit

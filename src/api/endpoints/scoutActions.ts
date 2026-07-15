@@ -109,7 +109,55 @@ const INDUSTRY_FIRM_MAP: { phrases: string[]; firms: string[] }[] = [
   { phrases: ['hedge funds', 'hedge fund', 'hf'], firms: ['Citadel', 'Point72', 'Millennium', 'Two Sigma'] },
   { phrases: ['consulting', 'management consulting'], firms: ['McKinsey', 'Bain', 'BCG', 'Deloitte'] },
   { phrases: ['tech', 'technology', 'software', 'big tech'], firms: ['Google', 'Meta', 'Stripe', 'Anthropic'] },
+  // Modern "vibe" sectors — a student says "fintech" or "AI companies", not a firm.
+  { phrases: ['fintech', 'financial technology', 'payments'], firms: ['Stripe', 'Plaid', 'Brex', 'Ramp'] },
+  { phrases: ['ai', 'artificial intelligence', 'machine learning', 'genai', 'generative ai', 'ai lab', 'ai labs'],
+    firms: ['OpenAI', 'Anthropic', 'Scale AI', 'Databricks'] },
+  { phrases: ['crypto', 'cryptocurrency', 'web3', 'blockchain'], firms: ['Coinbase', 'Kraken', 'Circle', 'Robinhood'] },
+  { phrases: ['cybersecurity', 'cyber security', 'infosec'], firms: ['CrowdStrike', 'Palo Alto Networks', 'Okta', 'Wiz'] },
+  { phrases: ['data', 'analytics', 'data infrastructure', 'data engineering'], firms: ['Databricks', 'Snowflake', 'Datadog', 'MongoDB'] },
+  { phrases: ['ecommerce', 'e-commerce', 'commerce', 'retail'], firms: ['Amazon', 'Shopify', 'Instacart', 'DoorDash'] },
+  { phrases: ['gaming', 'video games', 'games'], firms: ['Riot Games', 'Epic Games', 'Roblox', 'Electronic Arts'] },
+  { phrases: ['social media', 'consumer social'], firms: ['Meta', 'Snap', 'Pinterest', 'Reddit'] },
+  { phrases: ['healthtech', 'health tech', 'digital health', 'healthcare'], firms: ['Oscar Health', 'Ro', 'Devoted Health', 'Tempus'] },
+  { phrases: ['climate tech', 'cleantech', 'clean energy', 'climate'], firms: ['Tesla', 'Rivian', 'Form Energy', 'Redwood Materials'] },
+  { phrases: ['aerospace', 'defense tech', 'defense', 'space'], firms: ['SpaceX', 'Anduril', 'Blue Origin', 'Palantir'] },
 ];
+
+/** Peers of a NAMED reference firm — powers "companies like Stripe" / "similar
+ *  to OpenAI". Keyed by normalized firm name; the first entry is the reference
+ *  itself so the suggestion set always includes what they actually said. */
+const PEER_FIRM_MAP: Record<string, string[]> = {
+  stripe: ['Stripe', 'Plaid', 'Brex', 'Ramp'],
+  plaid: ['Plaid', 'Stripe', 'Brex', 'Mercury'],
+  brex: ['Brex', 'Ramp', 'Stripe', 'Mercury'],
+  ramp: ['Ramp', 'Brex', 'Stripe', 'Mercury'],
+  coinbase: ['Coinbase', 'Kraken', 'Circle', 'Robinhood'],
+  robinhood: ['Robinhood', 'Coinbase', 'Webull', 'Public'],
+  openai: ['OpenAI', 'Anthropic', 'Cohere', 'Mistral'],
+  anthropic: ['Anthropic', 'OpenAI', 'Cohere', 'Mistral'],
+  'scale ai': ['Scale AI', 'Databricks', 'OpenAI', 'Anthropic'],
+  databricks: ['Databricks', 'Snowflake', 'Confluent', 'MongoDB'],
+  snowflake: ['Snowflake', 'Databricks', 'MongoDB', 'Confluent'],
+  figma: ['Figma', 'Canva', 'Notion', 'Adobe'],
+  notion: ['Notion', 'Figma', 'Airtable', 'Asana'],
+  uber: ['Uber', 'Lyft', 'DoorDash', 'Instacart'],
+  lyft: ['Lyft', 'Uber', 'DoorDash', 'Instacart'],
+  doordash: ['DoorDash', 'Instacart', 'Uber', 'Grubhub'],
+  airbnb: ['Airbnb', 'Booking.com', 'Expedia', 'Vrbo'],
+  google: ['Google', 'Meta', 'Amazon', 'Microsoft'],
+  meta: ['Meta', 'Google', 'Snap', 'Pinterest'],
+  amazon: ['Amazon', 'Google', 'Microsoft', 'Shopify'],
+  microsoft: ['Microsoft', 'Google', 'Amazon', 'Salesforce'],
+  tesla: ['Tesla', 'Rivian', 'Lucid Motors', 'Waymo'],
+  spacex: ['SpaceX', 'Blue Origin', 'Rocket Lab', 'Anduril'],
+  palantir: ['Palantir', 'Anduril', 'Scale AI', 'Databricks'],
+  'goldman sachs': ['Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore'],
+  jpmorgan: ['JPMorgan', 'Goldman Sachs', 'Morgan Stanley', 'Bank of America'],
+  mckinsey: ['McKinsey', 'Bain', 'BCG', 'Deloitte'],
+  bain: ['Bain', 'McKinsey', 'BCG', 'Deloitte'],
+  bcg: ['BCG', 'McKinsey', 'Bain', 'Deloitte'],
+};
 
 /** "the tech industry" / "tech sector" / "the world of finance" all mean the
  *  same industry — strip the dressing before matching. */
@@ -149,6 +197,37 @@ export function industryFirmsInText(text: string): string[] | null {
 }
 
 const normFirm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+
+/** Peers for a named firm: exact peer-map hit, else a fuzzy near-miss rescued to
+ *  a known firm and expanded by its category. null when we can't anchor it. */
+export function peerFirmsFor(company: string | null | undefined): string[] | null {
+  const c = normFirm(company || '');
+  if (!c) return null;
+  if (PEER_FIRM_MAP[c]) return PEER_FIRM_MAP[c];
+  const exact = KNOWN_FIRMS.find((f) => normFirm(f) === c);
+  const anchor = exact || suggestFirm(company || '');
+  if (!anchor) return null;
+  const na = normFirm(anchor);
+  if (PEER_FIRM_MAP[na]) return PEER_FIRM_MAP[na];
+  const cat =
+    FINANCE_FIRMS.some((f) => normFirm(f) === na) ? FINANCE_FIRMS :
+    CONSULTING_FIRMS.some((f) => normFirm(f) === na) ? CONSULTING_FIRMS :
+    TECH_FIRMS.some((f) => normFirm(f) === na) ? TECH_FIRMS : null;
+  if (!cat) return null;
+  return [anchor, ...cat.filter((f) => normFirm(f) !== na)].slice(0, 4);
+}
+
+/** "companies like Stripe", "similar to OpenAI", "startups in the vein of Ramp"
+ *  → peers of the named firm. null when the ask names no reference firm. */
+export function peerFirmsInText(ask: string): string[] | null {
+  const t = (ask || '').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  const m = t.match(
+    /\b(?:like|similar to|such as|in the vein of|along the lines of|kind of like|sort of like)\s+([A-Za-z0-9&.\-' ]{2,30}?)(?:[,.!?]|\s+(?:in|that|who|which|but|and|or|to|for|based)\b|$)/i,
+  );
+  if (!m) return null;
+  return peerFirmsFor(m[1].trim());
+}
 
 /** Titles that actually EXIST at this kind of firm — suggestion chips must
  *  be answerable (Rylan 2026-07-09: "Hiring managers at Moelis" searches a
