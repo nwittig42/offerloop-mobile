@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,7 +14,7 @@ import {
   listAppliedJobs,
 } from '@/api/endpoints/autoApply';
 import { fetchCompany } from '@/api/endpoints/company';
-import type { CompanyInfo } from '@/types';
+import type { CompanyInfo, Job } from '@/types';
 import { fetchRolesByCompany } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
@@ -87,12 +87,28 @@ export default function CompanyScreen() {
   // the Roles deck + Overview have content for ANY company, not just ones that
   // happen to be in the feed. Lazy: only fetched on the Overview/Roles tabs. Feed
   // matches at this company are the fallback while it loads or if search misses.
-  const rolesQuery = useQuery({
+  const rolesQuery = useInfiniteQuery({
     queryKey: ['companyRoles', company],
-    queryFn: () => fetchRolesByCompany(company),
+    queryFn: ({ pageParam }) => fetchRolesByCompany(company, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: !!company && (tab === 'roles' || tab === 'overview' || tab === 'applied'),
     staleTime: 5 * 60 * 1000,
   });
+  // Flatten every loaded page into one deduped list.
+  const rolesData = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Job[] = [];
+    for (const pg of rolesQuery.data?.pages ?? []) {
+      for (const j of pg.jobs) {
+        if (!seen.has(j.id)) {
+          seen.add(j.id);
+          out.push(j);
+        }
+      }
+    }
+    return out;
+  }, [rolesQuery.data]);
   // sameCompany, not ===: land on /company/Palantir and you still want the
   // roles posted under "Palantir Technologies".
   const feedRoles = useMemo(
@@ -100,8 +116,8 @@ export default function CompanyScreen() {
     [allJobs, company],
   );
   const roles = useMemo(
-    () => (rolesQuery.data && rolesQuery.data.length ? rolesQuery.data : feedRoles),
-    [rolesQuery.data, feedRoles],
+    () => (rolesData.length ? rolesData : feedRoles),
+    [rolesData, feedRoles],
   );
   // sameCompany, not ===: PDL rows carry legal names ("Moelis & Company")
   // while this screen's param says "Moelis" — strict equality hid contacts
@@ -114,12 +130,28 @@ export default function CompanyScreen() {
   // swipe through (right = reach out, same as the main feed; left = pass). Seeded
   // from `roles`, re-seeded if the feed loads late, but never after you've begun
   // swiping (so passed/drafted cards don't resurrect).
-  const [roleDeck, setRoleDeck] = useState<typeof roles>(roles);
+  const [roleDeck, setRoleDeck] = useState<typeof roles>([]);
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const swipedAnyRef = useRef(false);
+  // APPEND newly-loaded roles (initial + each paged batch + late feed fallback)
+  // to the deck rather than re-seeding, so paging deeper doesn't resurrect roles
+  // the user already applied to / passed. everSeen guards against re-adding.
+  const everSeen = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!swipedAnyRef.current) setRoleDeck(roles);
+    const fresh = roles.filter((j) => !everSeen.current.has(j.id));
+    if (!fresh.length) return;
+    fresh.forEach((j) => everSeen.current.add(j.id));
+    setRoleDeck((d) => [...d, ...fresh]);
   }, [roles]);
+  // Deepen automatically: when the deck runs low and the company has more roles
+  // than the current page (SpaceX's ~1,900), pull the next page. This is the
+  // "load more" — the user can swipe as deep into a company as they want.
+  useEffect(() => {
+    if (tab !== 'roles') return;
+    if (roleDeck.length < 8 && rolesQuery.hasNextPage && !rolesQuery.isFetchingNextPage) {
+      rolesQuery.fetchNextPage();
+    }
+  }, [tab, roleDeck.length, rolesQuery.hasNextPage, rolesQuery.isFetchingNextPage]);
   // Auto-apply a single role (shared by the Roles swipe deck and the Applied-tab
   // tap-to-apply list). Deduped in the store, so no double applications.
   const applyToRole = (job: (typeof roles)[number]) => autoApplyJob(job);
@@ -148,7 +180,7 @@ export default function CompanyScreen() {
   const applied = (appliedData ?? []).filter((j) => sameCompany(j.company || '', company));
   // Open roles at this company you have NOT auto-applied to yet — the tap-to-apply
   // list surfaced under both the Applied and Reached out tabs.
-  const openRoles = (rolesQuery.data ?? []).filter((r) => !applied.some((a) => a.job_id === r.id));
+  const openRoles = rolesData.filter((r) => !applied.some((a) => a.job_id === r.id));
 
   // Shared "open roles you can one-tap apply to" list, reused across tabs.
   const renderOpenRoles = (header: string) => {

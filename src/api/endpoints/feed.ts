@@ -159,12 +159,18 @@ function mapJob(raw: RawJob): Job {
  * mapJob works unchanged. Companies are stored lowercase-canonical on the backend
  * and the match is case-sensitive, so we lowercase the input to line them up.
  */
-export async function fetchRolesByCompany(company: string): Promise<Job[]> {
-  if (USE_MOCKS) return [];
+export async function fetchRolesByCompany(
+  company: string,
+  cursor?: string,
+): Promise<{ jobs: Job[]; nextCursor: string | null }> {
+  if (USE_MOCKS) return { jobs: [], nextCursor: null };
   const c = (company || '').trim().toLowerCase();
-  if (!c) return [];
-  const res = await apiFetch<{ results?: RawJob[] }>(
-    `/api/jobs/search?company=${encodeURIComponent(c)}&limit=100`,
+  if (!c) return { jobs: [], nextCursor: null };
+  // Paginated so a deep company (SpaceX ships ~1,900 roles) isn't capped at one
+  // page — the caller pages the cursor to load more as the user swipes through.
+  const cur = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+  const res = await apiFetch<{ results?: RawJob[]; next_cursor?: string | null }>(
+    `/api/jobs/search?company=${encodeURIComponent(c)}&limit=100${cur}`,
   );
   const seen = new Set<string>();
   const jobs: Job[] = [];
@@ -174,7 +180,7 @@ export async function fetchRolesByCompany(company: string): Promise<Job[]> {
     seen.add(j.id);
     jobs.push(j);
   }
-  return jobs;
+  return { jobs, nextCursor: res.next_cursor ?? null };
 }
 
 /**
