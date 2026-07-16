@@ -20,7 +20,7 @@ import {
 
 import { useQueryClient } from '@tanstack/react-query';
 
-import { saveTargetTrack } from '@/api/endpoints/preferences';
+import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
@@ -303,6 +303,7 @@ export default function ProfileScreen() {
     }
   };
   const [parseOpen, setParseOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [enriching, setEnriching] = useState(false);
 
@@ -1007,6 +1008,63 @@ export default function ProfileScreen() {
                     ])
                   }
                 />
+              </Card>
+
+              {/* Legal + account controls. Privacy/Terms links and in-app account
+                  deletion are App Store requirements (deletion is Apple 5.1.1(v),
+                  a hard rejection without it). */}
+              <Card padded={false} style={{ paddingHorizontal: 16 }}>
+                <Pressable
+                  onPress={() => Linking.openURL('https://offerloop.ai/privacy')}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color={colors.inkSecondary} />
+                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                    Privacy Policy
+                  </Text>
+                  <Ionicons name="open-outline" size={15} color={colors.inkTertiary} />
+                </Pressable>
+                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
+                <Pressable
+                  onPress={() => Linking.openURL('https://offerloop.ai/terms-of-service')}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
+                  <Ionicons name="document-text-outline" size={18} color={colors.inkSecondary} />
+                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                    Terms of Service
+                  </Text>
+                  <Ionicons name="open-outline" size={15} color={colors.inkTertiary} />
+                </Pressable>
+                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
+                <Pressable
+                  disabled={deletingAccount}
+                  onPress={() =>
+                    Alert.alert(
+                      'Delete account',
+                      'This permanently deletes your account and all your data — contacts, drafts, applications, and settings. This can’t be undone.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            setDeletingAccount(true);
+                            try {
+                              await deleteAccount();
+                              await signOut();
+                            } catch {
+                              setDeletingAccount(false);
+                              Alert.alert('Couldn’t delete', 'Something went wrong — try again, or email us at team@offerloop.ai.');
+                            }
+                          },
+                        },
+                      ],
+                    )
+                  }
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
+                  <Ionicons name="trash-outline" size={18} color={colors.negative} />
+                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.negative }}>
+                    {deletingAccount ? 'Deleting…' : 'Delete account'}
+                  </Text>
+                </Pressable>
               </Card>
               {__DEV__ ? (
                 <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />

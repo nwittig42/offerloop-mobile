@@ -1,6 +1,13 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
 
+/** Permanently delete the account + all data (Apple 5.1.1(v) requirement). The
+ *  caller signs the user out afterward. Throws on failure so the UI can surface it. */
+export async function deleteAccount(): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/mobile/account/delete', { method: 'POST', timeoutMs: 20_000 });
+}
+
 /** Save job location preferences. The feed reads preferredLocations as a soft
  *  geo ranking signal, so this makes the swipe deck lean toward places the user
  *  would realistically take — without hard-filtering away volume. */
