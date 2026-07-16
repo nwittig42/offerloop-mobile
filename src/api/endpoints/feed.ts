@@ -184,6 +184,48 @@ export async function fetchRolesByCompany(
 }
 
 /**
+ * Jobs for a whole SECTOR from the full pool — not the user's ranked feed. Scout's
+ * job search used to only scan the loaded feed, so "fintech jobs" dead-ended even
+ * though the pool has 500+ fintech companies. Resolves the sector to its top
+ * companies (by real inventory) via /vibe-companies, pulls each one's roles, and
+ * round-robin interleaves so no single employer dominates. Empty when the sector
+ * is unknown/unclassified — caller falls back to the feed.
+ */
+export async function fetchSectorJobs(sector: string, limit = 8): Promise<Job[]> {
+  if (USE_MOCKS || !sector) return [];
+  let companies: string[] = [];
+  try {
+    const r = await apiFetch<{ companies?: string[] }>(
+      `/api/mobile/vibe-companies?sector=${encodeURIComponent(sector)}&limit=5`,
+      { timeoutMs: 8_000 },
+    );
+    companies = (r.companies || []).slice(0, 4);
+  } catch {
+    return [];
+  }
+  if (!companies.length) return [];
+  const perCompany = await Promise.all(
+    companies.map((c) => fetchRolesByCompany(c).then((r) => r.jobs).catch(() => [] as Job[])),
+  );
+  const out: Job[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; out.length < limit; i++) {
+    let progressed = false;
+    for (const jobs of perCompany) {
+      const j = jobs[i];
+      if (j && !seen.has(j.id)) {
+        seen.add(j.id);
+        out.push(j);
+        progressed = true;
+        if (out.length >= limit) break;
+      }
+    }
+    if (!progressed) break;
+  }
+  return out;
+}
+
+/**
  * Lazy per-job description. The feed strips description_raw to stay lean, so the
  * card pulls the prose on demand. Returns '' when the job has no stored text so
  * the card can show an honest empty state rather than placeholder filler.

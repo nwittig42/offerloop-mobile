@@ -58,6 +58,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { scoutThread } from '@/lib/scoutThread';
 import { useAuth } from '@/auth/AuthProvider';
 import { pollDraftJob } from '@/api/endpoints/swipe';
+import { fetchSectorJobs } from '@/api/endpoints/feed';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import type { Job } from '@/types';
 import { useApp } from '@/store/app';
@@ -1214,10 +1215,15 @@ function ScoutTabInner() {
         setReply(null);
         setPhase('thinking');
         try {
+          // "who are fintech at Plaid" — an INDUSTRY word in the role slot isn't a
+          // job title; a PDL title search for "fintech" finds nobody. Send an
+          // any-employee marker instead so it returns people at the company.
+          const roleIsIndustry =
+            !!industryFirmsFor(intent.role) || !!sectorForVibeText(intent.role || '');
           const env = await askScoutFindContacts({
             ask: clean,
             askId: `scout-find-${Date.now()}`,
-            role: intent.role,
+            role: roleIsIndustry ? 'professional' : intent.role,
             company: intent.company,
             location: intent.location,
           });
@@ -1246,11 +1252,30 @@ function ScoutTabInner() {
       }
 
       if (intent?.kind === 'find_jobs') {
-        const picks = matchJobs(allJobs, intent.query, intent.location);
+        let picks = matchJobs(allJobs, intent.query, intent.location);
+        let fromPool = false;
+        // Feed empty? Search the FULL pool by sector (fintech, AI, biotech…).
+        // Scout's job search used to box itself to the loaded feed, so a sector
+        // with hundreds of pool companies read as a flat "no jobs."
+        const jobSector = sectorForVibeText(intent.query) ?? sectorForVibeText(meta?.heardRaw ?? clean);
+        if (!picks.length && jobSector) {
+          const seqJ = ++requestSeq.current;
+          setReply(null);
+          setPhase('thinking');
+          try {
+            const pool = await fetchSectorJobs(jobSector);
+            if (seqJ !== requestSeq.current) return;
+            picks = pool;
+            fromPool = pool.length > 0;
+          } catch {
+            if (seqJ !== requestSeq.current) return;
+          }
+        }
         if (picks.length) {
           const applyable = picks.filter((j) => j.autoApplyEligible).length;
+          const where = fromPool ? 'across the job pool' : 'in your feed';
           setReply({
-            say: `Found ${picks.length} ${intent.query} match${picks.length === 1 ? '' : 'es'} in your feed${applyable ? ` — ${applyable} can auto-apply` : ''}. Tap one:`,
+            say: `Found ${picks.length} ${intent.query} role${picks.length === 1 ? '' : 's'} ${where}${applyable ? ` — ${applyable} can auto-apply` : ''}. Tap one:`,
             actions: [],
           });
           setJobPicks({ query: intent.query, jobs: picks });
