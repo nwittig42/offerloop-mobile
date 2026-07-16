@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, Share, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, Share, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -17,6 +17,8 @@ import Animated, {
 import { APP_DOWNLOAD_URL } from '@/lib/links';
 import GlassBar from '@/components/GlassBar';
 import Header from '@/components/Header';
+import ReferralCard from '@/components/ReferralCard';
+import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import PlanBorder from '@/components/PlanBorder';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
@@ -85,6 +87,7 @@ export default function FeedScreen() {
   const colors = useColors();
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
+  const [referralPromptOpen, setReferralPromptOpen] = useState(false);
   // App limit-model (2026-07-10): every tier can auto-apply, bounded by credits
   // (AUTO_APPLY_CREDITS each), not walled by plan. The backend allows all tiers;
   // this used to be Pro/Elite-only and silently no-op'd auto-apply for free.
@@ -158,6 +161,10 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
       draftJob(job.id);
+      // Peak-dopamine moment — paced referral nudge (every 3rd win, ~daily cap).
+      void shouldShowReferralPromptOnWin(Date.now()).then((show) => {
+        if (show) setReferralPromptOpen(true);
+      });
       // Auto-apply on + eligible → deduped background submission (surfaces in
       // Network › Applied). autoApplyJob blocks a second apply to the same job.
       if (swipeSettings.autoApply && job.autoApplyEligible && canAutoApply) {
@@ -418,6 +425,40 @@ export default function FeedScreen() {
           onSecondary={resetDeck}
         />
       )}
+
+      {/* Post-win referral nudge — paced (every 3rd draft, ~daily cap) so it's a
+          celebration, not a nag. Dismissible; ReferralCard hides itself if the
+          endpoint isn't live. */}
+      <Modal
+        visible={referralPromptOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReferralPromptOpen(false)}>
+        <Pressable
+          onPress={() => setReferralPromptOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(10,14,25,0.5)', justifyContent: 'flex-end' }}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: colors.paper,
+              borderTopLeftRadius: 22,
+              borderTopRightRadius: 22,
+              padding: 20,
+              paddingBottom: 36,
+              gap: 12,
+            }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.ink }}>
+              Nice — you’re on a roll.
+            </Text>
+            <ReferralCard />
+            <Pressable onPress={() => setReferralPromptOpen(false)} style={{ paddingVertical: 8 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkTertiary, textAlign: 'center' }}>
+                Maybe later
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
