@@ -21,6 +21,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
+import ReferralCard from '@/components/ReferralCard';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
@@ -536,6 +537,9 @@ export default function ProfileScreen() {
           </View>
 
           <ProfileCompletion profile={profile} onGoTo={setTab} />
+
+          <ReferralCard compact />
+
         </View>
 
         <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 8 }}>

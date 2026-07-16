@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import CircleProgress from '@/components/ui/CircleProgress';
+import ReferralCard from '@/components/ReferralCard';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -123,6 +124,12 @@ export default function MilestonesScreen() {
             </Text>
           </View>
         </Card>
+
+        {/* Referral CTA — invite friends, unlock Elite free. Natural home next to
+            "your grind" progress; renders nothing until the endpoint answers. */}
+        <View style={{ marginBottom: 18 }}>
+          <ReferralCard />
+        </View>
 
         {/* The path: connected timeline rail down the left, badge cards on the right. */}
         {milestones.map((m, i) => {
