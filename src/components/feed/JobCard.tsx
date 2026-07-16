@@ -209,7 +209,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
               color: colors.inkSecondary,
               lineHeight: 23,
             }}>
-            {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
+            {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing — tap to apply and read the details there.')}
           </Text>
         </ScrollView>
         {/* Lifted clear of the floating action bar that overlaps the card's
@@ -409,7 +409,7 @@ export function ExpandedCard({
             Job description
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 15.5, color: colors.inkSecondary, lineHeight: 24 }}>
-            {job.description || (descLoading ? 'Loading description…' : 'No description provided.')}
+            {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing — tap to apply and read the details there.')}
           </Text>
         </View>
 

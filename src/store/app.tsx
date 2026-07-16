@@ -415,6 +415,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // the company page shows the exact card even after a relaunch.
   const [swipedCards, setSwipedCards] = useState<Record<string, Job>>({});
   const swipedLoadedRef = useRef(false);
+  // Latches true the first time /me returns a real profile — see needsOnboarding.
+  const everHadServerProfile = useRef(false);
   useEffect(() => {
     swipedLoadedRef.current = false;
     if (!uid) {
@@ -614,8 +616,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // react-native-screens). A fresh install always has the flag unset, so a
   // brand-new user (and the reviewer) still onboards; re-testing on the same
   // install clears the flag via reinstall.
+  // Latch: once we've seen a real server profile this session, NEVER let a
+  // transient empty /me refetch flip needsOnboarding back on. That flicker was
+  // bouncing already-onboarded users (esp. web-onboarded ones whose local
+  // onboardingDone flag is unset) into onboarding "every so often" — a broken
+  // look and an App Store review risk. A genuine new user has never seen a
+  // profile, so this doesn't block real onboarding.
+  if (profile.hasServerProfile) everHadServerProfile.current = true;
   const needsOnboarding =
     onboardingDone === false &&
+    !everHadServerProfile.current &&
     (FORCE_ONBOARDING || (meQuery.isSuccess && !profile.hasServerProfile));
 
   // PostHog identity: point analytics at the signed-in user (Firebase uid =
