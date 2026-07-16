@@ -2,8 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { Image, Modal, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Same parallax tuning as the Network tab.
+const PARALLAX_TRAVEL = 320;
+const PARALLAX_MAX_SCROLL = 1400;
 
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
@@ -42,6 +53,28 @@ export default function MilestonesScreen() {
   const colors = useColors();
   const { scheme } = useTheme();
   const dark = scheme === 'dark';
+  const { height: windowHeight } = useWindowDimensions();
+  // Watercolor-mountains backdrop (same art as Profile) that parallaxes with the
+  // scroll (same feel as Network) — the "your grind" climb reads as ascending.
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+  const bgStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: interpolate(
+          scrollY.value,
+          [0, PARALLAX_MAX_SCROLL],
+          [0, -PARALLAX_TRAVEL],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+  const scrimColors: readonly [string, string, string] = dark
+    ? [colors.surface + 'D9', colors.surface + 'E6', colors.surface + 'B0']
+    : [colors.surface + '80', colors.surface + 'A6', colors.surface + 'CC'];
   const { outreach, meetingPreps, trackerRows, showToast } = useApp();
   const [selected, setSelected] = useState<Milestone | null>(null);
 
@@ -81,16 +114,26 @@ export default function MilestonesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      {/* Soft blue wash behind the whole path. */}
+      {/* Watercolor mountains behind the whole path, parallaxed to the scroll.
+          A surface scrim keeps the badges + copy legible while the peaks show
+          through — richer up top, near-opaque behind the timeline. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          { position: 'absolute', top: 0, left: 0, right: 0, height: windowHeight + PARALLAX_TRAVEL },
+          bgStyle,
+        ]}>
+        <Image
+          source={require('../../assets/images/watercolor-mountains.webp')}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      </Animated.View>
       <LinearGradient
-        colors={
-          dark
-            ? (['#13233F', '#101A30', colors.surface] as const)
-            : (['#E4EDFF', '#EEF3FF', colors.surface] as const)
-        }
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        pointerEvents="none"
+        colors={scrimColors}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
       />
 
       <View
@@ -111,7 +154,11 @@ export default function MilestonesScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40 }}>
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        style={{ backgroundColor: 'transparent' }}
+        contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40 }}>
         {/* Overall progress, same ring as the profile gauge. */}
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 18 }}>
           <CircleProgress size={64} strokeWidth={6} progress={unlocked / total} color={RAIL} label={`${unlocked}/${total}`} />
@@ -239,7 +286,7 @@ export default function MilestonesScreen() {
           Preview. Theme rewards arrive with the customization update; milestones reward
           status and skins, never gating what you can do.
         </Text>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Badge card, the shareable artifact (styled like the progress card). */}
       <Modal
