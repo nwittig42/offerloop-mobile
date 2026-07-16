@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,6 +142,9 @@ function WaveBar({ index, active }: { index: number; active: boolean }) {
 }
 
 export default function ScoutOrbPreview() {
+  // Dev preview with fixture content — redirect out of any store build, even via
+  // deep link (Apple 2.2 placeholder-content guard).
+  if (!__DEV__) return <Redirect href="/(tabs)/feed" />;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [state, setState] = useState<OrbState>('idle');

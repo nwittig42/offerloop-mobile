@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -58,6 +58,9 @@ function Swatch({ name, hex, border }: { name: string; hex: string; border?: boo
 }
 
 export default function DesignGallery() {
+  // Dev tool with fixture content — never reachable in a store build, even via
+  // deep link (Apple 2.2 placeholder-content guard).
+  if (!__DEV__) return <Redirect href="/(tabs)/feed" />;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colors = useColors();
