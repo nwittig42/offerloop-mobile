@@ -53,10 +53,18 @@ Read these two docs in this repo; they define what to build:
   The **outbound** part is pure JS (OTA-ok). The **auto-return** deep-link needs an
   `associated-domains` entitlement (native → staging rebuild) — build the JS outbound first, flag
   the native return.
-- **PREREQ:** Sid's handoff endpoints (`/api/mobile/web-handoff`, `/api/web/handoff-exchange`,
-  PR #156) must be **deployed to the staging backend** for the app to call them. **Confirm they're
-  live on `offerloop-staging.onrender.com` before wiring this** — if not, this item is blocked on
-  Sid; do the §9 items instead.
+- **PREREQ: ✅ UNBLOCKED (2026-07-21).** Sid's handoff endpoints are **live and verified
+  end-to-end on the staging backend** (`offerloop-staging.onrender.com`):
+  `/api/mobile/web-handoff` (mints code → returns checkout URL) and `/api/web/handoff-exchange`
+  (burns code → returns Firebase custom token, single-use enforced). So you can wire the app-side
+  upgrade CTA now.
+  - The app calls `POST /api/mobile/web-handoff` with the Firebase ID token → gets back
+    `{ url: "https://www.offerloop.ai/checkout?code=<code>" }` → `Linking.openURL(url)`.
+  - **Note the host: the checkout URL is `www.offerloop.ai`** (offerloop.ai 301-redirects to www).
+    Keep this consistent with the auth finish-signin work so the two web flows don't diverge on
+    host — the `/checkout` page (Nick's) must serve on the canonical host.
+  - The **auto-return deep-link** back into the app still needs `associated-domains` (native →
+    staging rebuild). Build the outbound (openURL) part first via OTA; flag the native return.
 
 ---
 
