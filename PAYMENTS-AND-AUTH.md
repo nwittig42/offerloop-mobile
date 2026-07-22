@@ -31,6 +31,10 @@ The app reads and reflects — it does not create accounts or sell digital goods
    Epic v. Apple ruling lets **US** apps include an external-purchase **link**. Keep it
    **neutral/informational** ("Manage on offerloop.ai"), never a "Buy now" CTA, and never point
    it at a paywall screen. That stays safe globally, not just US.
+   **REVISED 2026-07-16:** team decided to add a *functional* upgrade / credit-purchase entry that
+   hands off (signed-in) to web checkout — US-permitted post-Epic. Payment stays 100% on web; the
+   app still sells nothing. Keep copy measured ("View plans" / "Upgrade on the web") to stay safe
+   outside the US. Spec: `SPEC-app-web-upgrade-handoff.md`. Build in v1.1.
 4. **Free account creation on the web is fine. Paying on the web is fine. The app reflecting the
    result is fine.** Just keep the web-link CTA framed as "create your account" (free), not
    "subscribe."
