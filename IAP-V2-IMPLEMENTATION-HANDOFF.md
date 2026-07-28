@@ -2,8 +2,11 @@
 
 **Mission:** implement native in-app purchases (Pro/Elite subscriptions + credit
 top-up packs) per `SPEC-iap-v2-pricing-and-credits.md`, on the STAGING variant
-only, so the whole purchase system is built, sandbox-tested, and ready to ride
-the v1.1 submission the moment v1.0 clears App Review.
+only, so the whole purchase system is built, sandbox-tested, and ready to
+become the next store submission. UPDATE 2026-07-28: build 14 (the tier-silent
+build) was ALSO rejected on 3.1.1, so this work is no longer a post-approval
+v1.1. The IAP build IS the 1.0 resubmission, packaged the day the QA gate
+passes (Phase 6).
 
 Read these first, in order:
 1. `SPEC-iap-v2-pricing-and-credits.md` (the approved plan, source of truth)
@@ -20,7 +23,10 @@ Read these first, in order:
 - STAGING ONLY. Ship JS via
   `APP_VARIANT=preview EXPO_PUBLIC_API_BASE_URL=https://offerloop-staging.onrender.com eas update --branch preview --message "<what changed>"`.
   NEVER `eas update --branch production`, NEVER `eas submit`, never a
-  production build. Build 11+ is in review; do not touch it.
+  production build. Nothing is in review right now (build 14 was rejected
+  2026-07-28; the version page sits in developer-action-needed), but the
+  production channel stays untouched until the deliberate Phase 6 packaging
+  step, which is not this session's job.
 - Bump `src/lib/buildInfo.ts` (OTA_VERSION + OTA_NOTES) before every publish.
 - The ONE allowed native step is the staging rebuild
   (`eas build --profile preview`) to add react-native-purchases. It needs
@@ -52,6 +58,10 @@ Read these first, in order:
   a separate `purchasedCredits` bucket, distinct from the monthly allowance.
 - Copy: CTA "Start 7-day free trial"; subline "7 days free, then $9.99/mo.
   Cancel anytime."; frame "Student pricing, built for recruiting season."
+  The dollar amounts inside these strings are TEMPLATES: interpolate the
+  localized price from getOfferings() at render time (same for the "Pro
+  members get 2,000 credits a month for $9.99" top-up sheet line). A literal
+  price string in code fails acceptance criterion 3.
 - Paywall style: bottom sheets in our design system (ink primary button,
   Instrument Serif for the big price, Card/Chip primitives). NOT RevenueCat
   remote paywalls, NOT full-screen takeovers, no countdown timers or fake
@@ -169,7 +179,10 @@ App-side work assumes Sid's staging webhook from spec section 5:
 `POST /api/revenuecat/webhook` (auth header verify, idempotent on event id,
 environment branch), subscriber-snapshot tier sync, `purchasedCredits` bucket
 + spend order (allowance first, wallet after), `/api/mobile/me` exposing the
-new bucket. Hand Sid the spec section; until it is live, build UI against
+new bucket. One decision to get from Sid up front: REFUND clawback when the
+credits were already spent (clamp purchasedCredits at zero, or record a
+negative balance owed against the next grant). The Phase 5 refund test hits
+this either way. Hand Sid the spec section; until it is live, build UI against
 mocks (obviously-fake fixture data only) and keep purchase buttons disabled
 on staging.
 
@@ -186,14 +199,21 @@ on staging.
 - Firestore tier/credits correct after every step; UI reflects within one
   refetch.
 
-### Phase 6: production packaging (LATER, after v1.0 approval, separate step)
+### Phase 6: production packaging (starts the day Phase 5 passes; this IS the resubmission)
 
-Not this session's job to execute, only to leave ready: mirror the 5 products
-on the real `ai.offerloop.app` record (real intro offer on Pro), map them in
-RC's production app, un-mute tier UI behind the flag, v1.1 binary submission
-with the IAPs attached, App Review notes (paywall location, Restore button,
-demo account stays Free). Update CLAUDE.md's stale "no purchase links" rule
-in the same change.
+Not this session's job to execute, only to leave ready. Build 14 was rejected
+on 3.1.1 (2026-07-28), so there is no tier-silent approval to wait for: the
+IAP build is the next 1.0 store submission itself. Steps: mirror the 5
+products on the real `ai.offerloop.app` record (real intro offer on Pro), map
+them in RC's production app, un-mute tier UI behind the flag, cut a 1.0
+production build (build 15) from the QA-passed code, attach the 5 IAPs to the
+1.0 version, resubmit. Also required: the App Store description gains the
+Apple-required subscription block (subscription names, monthly duration,
+prices, working Terms of Use and Privacy Policy links; omitting it is a
+standard 3.1.2 bounce), and App Review notes (paywall location, Restore
+button location, demo account stays Free so the reviewer can exercise the
+purchase). Update CLAUDE.md's stale "no purchase links" rule in the same
+change.
 
 ## Acceptance criteria
 

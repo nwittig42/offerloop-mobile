@@ -1,14 +1,17 @@
 # SPEC: IAP v2, pricing and credit packs (RevenueCat)
 
-Status 2026-07-28: proposal for Rylan approval. Supersedes the pricing and scope
+Status 2026-07-28: APPROVED by Rylan. Same day, build 14 (the tier-silent
+store build) was rejected on 3.1.1, which changes sequencing: the IAP build is
+now the next 1.0 store submission itself, not a post-approval v1.1 (see
+section 8). Supersedes the pricing and scope
 in SPEC-iap-v1_1.md (that doc assumed Pro 29.99 and Elite 59.99 and deferred
 credit packs; both are now overridden by Nick's mobile pricing handoff of
 2026-07-27). The webhook table, double-subscribe guardrails, and QA gate from
 v1.1 carry forward and are restated here where they changed.
 
 Built and tested on the STAGING variant (Offerloop Staging,
-ai.offerloop.app.preview) while v1.0 sits in App Review. Nothing ships to the
-production channel until v1.0 is approved.
+ai.offerloop.app.preview). Nothing ships to the production channel until the
+deliberate section 8 step 5 packaging pass.
 
 ---
 
@@ -59,7 +62,10 @@ pricing, any "no credit card required" claim.
 Copy rules (match web exactly): CTA "Start 7-day free trial"; under it
 "7 days free, then $9.99/mo. Cancel anytime."; frame "Student pricing, built
 for recruiting season." Prices render ONLY from Purchases.getOfferings(),
-never hardcoded.
+never hardcoded. That rule applies INSIDE these copy strings too: the $9.99
+in the subline (and in the top-up sheet's "Pro members get 2,000 credits a
+month for $9.99" line) is interpolated from the offering's localized price at
+render time, never shipped as a literal.
 
 ### Credit packs (consumables), the new part
 
@@ -191,7 +197,9 @@ one-trial-per-account rule.
 
 Consumables: NON_RENEWING_PURCHASE grants the pack's credits, idempotent on
 transaction_id (webhooks retry up to 5 times; store granted ids). REFUND on a
-pack claws the credits back.
+pack claws the credits back. Open decision for Sid: if the refunded credits
+were already spent, either clamp purchasedCredits at zero or record a
+negative balance against the next grant; pick one and test it in the QA gate.
 
 The two buckets (new Firestore shape, needs Nick/Sid sign-off):
 - credits: the monthly allowance, resets to maxCredits on the 1st, unchanged.
@@ -248,9 +256,13 @@ a pack and verify clawback, buy a pack mid-trial.
 3. Mobile: install SDK, staging rebuild, then sheets and triggers as OTA
    iterations on the rebuilt staging app.
 4. QA gate on staging phones.
-5. After v1.0 approval: real products on ai.offerloop.app, v1.1 binary with
-   IAPs submitted, tier UI un-muted. CLAUDE.md guardrail text updated to the
-   post-ruling reality at the same time.
+5. The day the QA gate passes: real products on ai.offerloop.app, tier UI
+   un-muted, a 1.0 production build (build 15) submitted with the 5 IAPs
+   attached. This IS the next store submission; build 14 was rejected
+   2026-07-28, so there is no tier-silent approval to wait for. The App Store
+   description gains the Apple-required subscription block (names, monthly
+   duration, prices, Terms of Use and Privacy Policy links). CLAUDE.md
+   guardrail text updated to the post-ruling reality at the same time.
 
 ## 9. Open questions for Rylan
 
