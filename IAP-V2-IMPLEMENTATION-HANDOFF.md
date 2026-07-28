@@ -53,9 +53,11 @@ Read these first, in order:
   34.99/mo (5,000 credits, no advertised trial). One subscription group.
   No annual, no slider, no .edu gate, no strikethrough pricing, never say
   "no credit card required."
-- Packs (consumables): 100 credits 2.99, 250 credits 5.99 ("Most popular"),
-  600 credits 9.99 ("Best value"). Purchased credits NEVER expire and live in
-  a separate `purchasedCredits` bucket, distinct from the monthly allowance.
+- Packs (consumables), ladder revised 2026-07-28 by Rylan: 150 credits 2.99,
+  400 credits 5.99 ("Most popular"), 1,000 credits 9.99 ("Best value").
+  The 1,000 pack sits at the 2x-of-Pro per-credit floor; do not grow it
+  further. Purchased credits NEVER expire and live in a separate
+  `purchasedCredits` bucket, distinct from the monthly allowance.
 - Copy: CTA "Start 7-day free trial"; subline "7 days free, then $9.99/mo.
   Cancel anytime."; frame "Student pricing, built for recruiting season."
   The dollar amounts inside these strings are TEMPLATES: interpolate the
@@ -103,8 +105,10 @@ change): Nick confirming web-side pack parity + never-expire alignment.
    - Subscription group "Offerloop Membership":
      `ai.offerloop.app.preview.pro.monthly` 9.99 with a 7-day free-trial
      introductory offer; `ai.offerloop.app.preview.elite.monthly` 34.99.
-   - Consumables: `...credits.100` 2.99, `...credits.250` 5.99,
-     `...credits.600` 9.99.
+   - Consumables: `...credits.150` 2.99, `...credits.400` 5.99,
+     `...credits.1000` 9.99. (NOTE: the first Phase 0 pass on 2026-07-28
+     created these as 100/250/600 before the ladder was revised; the old
+     three get deleted and recreated with the new ids and amounts.)
 3. RevenueCat dashboard: add the preview bundle id as an app in the project,
    confirm the In-App Purchase key (the .p8 above) is uploaded, import the 5
    products. Entitlements `pro` and `elite` mapped to the two subscriptions.
@@ -153,10 +157,11 @@ One sheet component, two modes (see spec sections 2 and 3 for full layout):
   revealing the pack row. Required furniture: Restore Purchases, Terms of
   Use, Privacy Policy links, "auto-renews until canceled, manage in
   Settings" line.
-- TopUpSheet (Pro/Elite): three packs, badges on 250 ("Most popular") and
-  600 ("Best value"), per-draft framing ("about 25 drafts"), line reminding
-  Pro exists ("Pro members get 2,000 credits a month for $9.99") for free
-  users only.
+- TopUpSheet (Pro/Elite): three packs, badges on 400 ("Most popular") and
+  1,000 ("Best value"), per-action framing ("about 40 drafts or 80
+  auto-applies", derived from server-side costs, never hardcoded), line
+  reminding Pro exists ("Pro members get 2,000 credits a month for $9.99",
+  price interpolated from offerings) for free users only.
 
 Wire four triggers:
 1. Insufficient-credits failures (errors.ts detection at the store/app.tsx and
@@ -182,7 +187,11 @@ environment branch), subscriber-snapshot tier sync, `purchasedCredits` bucket
 new bucket. One decision to get from Sid up front: REFUND clawback when the
 credits were already spent (clamp purchasedCredits at zero, or record a
 negative balance owed against the next grant). The Phase 5 refund test hits
-this either way. Hand Sid the spec section; until it is live, build UI against
+this either way. Second Sid item, MUST land before real money: the swipe
+charge display mismatch (app shows creditsPerSwipe: 10 from mobile.py:288,
+backend charges 5 x contacts drafted at runs.py:966). One number wins, is
+charged, is served from /me, and the sheets' "about N drafts" copy derives
+from it. Hand Sid the spec section; until it is live, build UI against
 mocks (obviously-fake fixture data only) and keep purchase buttons disabled
 on staging.
 
@@ -220,8 +229,8 @@ change.
 1. Staging app: a Free sandbox user hitting a credit wall completes a Pro
    trial purchase in one sheet with Face ID and sees tier + credits update
    without leaving the Feed.
-2. A subscribed sandbox user buys the 250 pack and the balance rises by
-   exactly 250, once, server-granted.
+2. A subscribed sandbox user buys the 400 pack and the balance rises by
+   exactly 400, once, server-granted.
 3. No hardcoded price anywhere (grep proves it); all prices from offerings.
 4. Production channel, production branch, and the in-review app: untouched.
 5. Every publish has a matching buildInfo bump and was verified on a phone.

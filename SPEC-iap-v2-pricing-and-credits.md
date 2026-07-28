@@ -69,25 +69,29 @@ render time, never shipped as a literal.
 
 ### Credit packs (consumables), the new part
 
-Rylan's instinct was batches like 15 / 20 / 30 emails. Research on how winning
-apps ladder consumables (Hinge Roses 3/12/50, Tinder Boost packs, Duolingo
-gems) says the sizes should SPREAD, not cluster: a small starter that anchors,
-a badged middle pack most people buy, and a big pack whose per-unit price is
-roughly half the starter's. All packs stay under the 9.99 impulse ceiling.
-At 10 credits per draft:
+Ladder revised 2026-07-28 (Rylan): more generous than the first draft after
+working the math in emails and factoring in auto-apply burn (auto-apply costs
+5 credits per application, so an active session of swipes plus applies can
+clear 100 credits). The sizes still SPREAD (starter that anchors, badged
+middle, big pack with the best per-unit) and all packs stay under the 9.99
+impulse ceiling. At 10 credits per draft and 5 per auto-apply:
 
 | Pack | Credits | About | Price | Per draft | Badge |
 |---|---|---|---|---|---|
-| Quick pack | 100 | 10 drafts | 2.99 | 0.30 | |
-| Popular pack | 250 | 25 drafts | 5.99 | 0.24 | Most popular |
-| Value pack | 600 | 60 drafts | 9.99 | 0.17 | Best value |
+| Starter pack | 150 | 15 drafts or 30 applies | 2.99 | 0.20 | |
+| Popular pack | 400 | 40 drafts or 80 applies | 5.99 | 0.15 | Most popular |
+| Value pack | 1,000 | 100 drafts or 200 applies | 9.99 | 0.10 | Best value |
 
 Why these numbers protect the subscription: Pro works out to about 5 cents per
-draft (9.99 for 2,000 credits). Packs run 17 to 30 cents per draft, 3 to 6
-times worse. That is the same gap Tinder and Hinge keep between a la carte and
-subscription, and it makes "just subscribe" the obvious answer for anyone who
-tops up twice. The top-up sheet says so out loud: "Pro members get 2,000
-credits a month for $9.99."
+draft (9.99 for 2,000 credits). Packs run 10 to 20 cents per draft, 2 to 4
+times worse, and the 1,000 pack sits exactly at the 2x industry floor (the
+same gap Tinder and Hinge keep between a la carte and subscription). "Just
+subscribe" stays the obvious answer for anyone who tops up twice, and the
+top-up sheet says so out loud: "Pro members get 2,000 credits a month for
+$9.99." Do NOT push the 1,000 pack past this point; it is the anchor that
+protects recurring revenue. Sheet copy frames packs in actions ("about 40
+drafts or 80 auto-applies"), never raw credits alone, with the numbers derived
+from the server-side per-action costs.
 
 Two hard rules from Apple guideline 3.1.1 and RevenueCat's consumable docs:
 
@@ -148,9 +152,9 @@ restore from silently moving a subscription between Offerloop accounts.
 Products in RevenueCat (Rylan already created the two subscriptions):
 - Entitlements: pro, elite, mapped from the two subscription products.
 - Offering "default": Pro package (default) + Elite package.
-- Add the three consumable products (e.g. ai.offerloop.app.credits.100 / .250
-  / .600). Consumables get NO entitlement (RevenueCat's own guidance); they
-  are granted by webhook only.
+- Add the three consumable products (ai.offerloop.app.credits.150 / .400 /
+  .1000; staging mirrors use the .preview bundle id prefix). Consumables get
+  NO entitlement (RevenueCat's own guidance); they are granted by webhook only.
 
 The staging problem (no app in the App Store yet), solved: sandbox testing
 does not require an approved app or approved products. The standard approach,
@@ -196,10 +200,19 @@ sync trial eligibility with the web's trialUsedAt; Apple enforces its own
 one-trial-per-account rule.
 
 Consumables: NON_RENEWING_PURCHASE grants the pack's credits, idempotent on
-transaction_id (webhooks retry up to 5 times; store granted ids). REFUND on a
-pack claws the credits back. Open decision for Sid: if the refunded credits
-were already spent, either clamp purchasedCredits at zero or record a
-negative balance against the next grant; pick one and test it in the QA gate.
+transaction_id (webhooks retry up to 5 times; store granted ids). Grants are
+150 / 400 / 1,000 per the section 2 ladder. REFUND on a pack claws the
+credits back. Open decision for Sid: if the refunded credits were already
+spent, either clamp purchasedCredits at zero or record a negative balance
+against the next grant; pick one and test it in the QA gate.
+
+MUST FIX BEFORE REAL MONEY (Sid): the swipe charge display mismatch. The app
+displays creditsPerSwipe: 10 (served from mobile.py:288) but the backend
+actually charges 5 x contacts drafted (runs.py:966). Tolerable with free
+credits, a refund complaint the moment credits cost dollars, and the paywall's
+"about N drafts" framing cannot be written honestly until one number wins.
+Pick the number, charge it, serve it from /api/mobile/me, and derive all
+per-action copy from it.
 
 The two buckets (new Firestore shape, needs Nick/Sid sign-off):
 - credits: the monthly allowance, resets to maxCredits on the 1st, unchanged.
@@ -266,9 +279,9 @@ a pack and verify clawback, buy a pack mid-trial.
 
 ## 9. Open questions for Rylan
 
-1. Pack lineup: 100/250/600 credits at 2.99/5.99/9.99 as proposed, or closer
-   to the original 15/20/30-email instinct? (Recommendation: the spread ladder;
-   15/20/30 prices too close together to steer anyone.)
+1. RESOLVED 2026-07-28: pack lineup is 150/400/1,000 credits at
+   2.99/5.99/9.99 (Rylan chose the more generous ladder; the 1,000 pack sits
+   at the 2x-of-Pro floor and must not grow further).
 2. Nick alignment: the web handoff doc says "no credit slider or in-tier
    options" but does not mention top-up packs at all. Do packs exist on web
    too, and does web agree purchased credits never expire? (Apple forces
