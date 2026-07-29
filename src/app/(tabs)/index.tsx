@@ -23,6 +23,7 @@ import { mapScoutRoute, sendScoutMessage, type ScoutAction, type ScoutTurn } fro
 import {
   ackFor,
   applyScope,
+  AUTO_APPLY_CREDITS,
   clarifyFor,
   isRealCompany,
   executeApplyIntent,
@@ -31,6 +32,7 @@ import {
   executeDraftIntent,
   normalizeAsk,
   matchJobs,
+  pickApplyCandidates,
   parseAffirmation,
   parseAgain,
   parseIntent,
@@ -50,6 +52,8 @@ import {
   type ActionProgress,
   type DraftIntent,
 } from '@/api/endpoints/scoutActions';
+import { iapAvailable } from '@/api/purchases';
+import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ApiError } from '@/api/errors';
 import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, fetchVibeCompanies, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
@@ -101,6 +105,7 @@ const NIGHT = {
 const SUGGESTION_POOL = [
   'Draft 3 IB analysts at Goldman Sachs',
   'Draft 2 engineers at Stripe',
+  'Apply to a few jobs for me',
   'Prep me for my next coffee chat',
   'Find me a PM role to apply to',
   'Analysts at Morgan Stanley in LA',
@@ -286,6 +291,14 @@ function ScoutTabInner() {
   const [ctx, setCtx] = useState<{ slots: AskSlots; age: number } | null>(null);
   const [jobPicks, setJobPicks] = useState<{ query: string; jobs: Job[] } | null>(null);
   const [applyOne, setApplyOne] = useState<Job | null>(null);
+  // "Apply to a few jobs" scope card: Scout's picks, shown by name before
+  // anything irreversible runs. requested keeps the ask honest when fewer
+  // are eligible; fromPool marks candidates pulled beyond today's feed.
+  const [applySome, setApplySome] = useState<{
+    jobs: Job[];
+    requested: number;
+    fromPool: boolean;
+  } | null>(null);
   const [peoplePicks, setPeoplePicks] = useState<{
     items: ContactPreview[];
     role: string;
@@ -517,7 +530,12 @@ function ScoutTabInner() {
           noCredits
             ? {
                 say: "You're out of credits for this one — nothing was charged. They refresh each month, and I'll pick this right back up then.",
-                actions: [{ label: 'View credits', href: '/credits' }],
+                actions: iapAvailable()
+                  ? [
+                      { label: 'Get more credits', href: '#paywall' },
+                      { label: 'View credits', href: '/credits' },
+                    ]
+                  : [{ label: 'View credits', href: '/credits' }],
               }
             : {
                 say: "That one didn't finish — nothing was charged for anyone I couldn't draft. Ask me again.",
@@ -532,7 +550,9 @@ function ScoutTabInner() {
   const runApplyAction = useCallback(
     async (jobs: Job[]) => {
       const id = `apply-${Date.now()}`;
-      const title = `Applying to ${jobs.length} saved job${jobs.length === 1 ? '' : 's'}`;
+      // Serves saved jobs, single applies, and Scout's own picks now, so the
+      // title stays neutral (the picks were never "saved").
+      const title = `Applying to ${jobs.length} job${jobs.length === 1 ? '' : 's'}`;
       setReceipt(null);
       setPhase('idle');
       setReply({ say: `On it — submitting ${jobs.length} application${jobs.length === 1 ? '' : 's'}.`, actions: [] });
@@ -543,7 +563,15 @@ function ScoutTabInner() {
         });
         dropCard(id);
         track('scout_action_completed', { action: 'apply', ok: true, count: jobs.length });
-        setReply({ say: res.say, actions: [{ label: 'Open Applications', href: '/(tabs)/network' }] });
+        setReply({
+          say: res.say,
+          actions: res.needsProfile
+            ? [
+                { label: 'Finish application profile', href: '/application-profile' },
+                { label: 'Open Applications', href: '/(tabs)/network' },
+              ]
+            : [{ label: 'Open Applications', href: '/(tabs)/network' }],
+        });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {
         dropCard(id);
@@ -693,11 +721,19 @@ function ScoutTabInner() {
 
       // Spoken confirmation/dismissal drives whatever card is waiting.
       const aff = parseAffirmation(clean);
-      const pending = preflight || didYouMean || applyOne || receipt;
+      const pending = preflight || didYouMean || applyOne || receipt || applySome;
       if (aff && pending) {
         stopSpeaking();
         track('scout_gate_outcome', {
-          gate: preflight ? preflight.gate : didYouMean ? 'did_you_mean' : applyOne ? 'apply_one' : 'receipt',
+          gate: preflight
+            ? preflight.gate
+            : didYouMean
+              ? 'did_you_mean'
+              : applyOne
+                ? 'apply_one'
+                : receipt
+                  ? 'receipt'
+                  : 'apply_some',
           outcome: aff === 'yes' ? 'run' : 'cancel',
           method: 'voice',
         });
@@ -720,12 +756,17 @@ function ScoutTabInner() {
             setReceipt(null);
             setPhase('idle');
             void runApplyAction(jobs);
+          } else if (applySome) {
+            const picks = applySome.jobs;
+            setApplySome(null);
+            void runApplyAction(picks);
           }
         } else {
           setPreflight(null);
           setDidYouMean(null);
           setApplyOne(null);
           setReceipt(null);
+          setApplySome(null);
           setPhase('idle');
           setReply({ say: 'Cancelled — nothing ran.', actions: [] });
         }
@@ -776,6 +817,7 @@ function ScoutTabInner() {
       setPreflight(null);
       setJobPicks(null);
       setApplyOne(null);
+      setApplySome(null);
       setPeoplePicks(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
@@ -1297,6 +1339,72 @@ function ScoutTabInner() {
         return;
       }
 
+      if (intent?.kind === 'apply_some') {
+        // "Apply to a few jobs for me": candidates come from the CURRENT feed,
+        // auto-apply-eligible only, target roles preferred. A sector-flavored
+        // ask ("apply to a job in tech") falls through to the full pool when
+        // the feed has nothing, same as the job-search path. The scope card
+        // below is the irreversibility gate: every pick is shown by name with
+        // the real credit cost before anything submits.
+        const sector = intent.query
+          ? (sectorForVibeText(intent.query) ?? sectorForVibeText(meta?.heardRaw ?? clean))
+          : null;
+        let candidates = pickApplyCandidates(
+          allJobs,
+          intent.count,
+          profile?.targetRoles ?? [],
+          intent.query,
+          intent.location,
+        );
+        let fromPool = false;
+        if (!candidates.length && sector) {
+          const seqA = ++requestSeq.current;
+          setReply(null);
+          setPhase('thinking');
+          try {
+            const pool = await fetchSectorJobs(sector);
+            if (seqA !== requestSeq.current) return;
+            candidates = pickApplyCandidates(
+              pool,
+              intent.count,
+              profile?.targetRoles ?? [],
+              null,
+              intent.location,
+            );
+            fromPool = candidates.length > 0;
+          } catch {
+            if (seqA !== requestSeq.current) return;
+          }
+        }
+        if (!candidates.length) {
+          const savedEligible = applyScope(savedJobs).eligible.length;
+          setReply({
+            say: `Nothing${intent.query ? ` matching ${intent.query}` : ''}${intent.location ? ` in ${intent.location}` : ''} can auto-apply from today's feed right now${savedEligible ? `, but ${savedEligible} of your saved jobs can` : ''}. The feed refreshes daily.`,
+            actions: [
+              ...(savedEligible
+                ? [{ label: 'Apply to my saved jobs', chatMessage: 'apply to my saved jobs' }]
+                : []),
+              { label: 'Open the Feed', href: '/(tabs)/feed' },
+            ],
+          });
+          setPhase('idle');
+          return;
+        }
+        if (candidates.length === 1) {
+          // One pick: the existing single-apply confirm card is the gate.
+          setReply(null);
+          track('scout_gate', { gate: 'apply_one' });
+          setApplyOne(candidates[0]);
+          setPhase('idle');
+          return;
+        }
+        setReply(null);
+        track('scout_gate', { gate: 'apply_some', count: candidates.length, from_pool: fromPool });
+        setApplySome({ jobs: candidates, requested: intent.count, fromPool });
+        setPhase('idle');
+        return;
+      }
+
       if (intent?.kind === 'apply_saved') {
         const { eligible, tiers } = applyScope(savedJobs);
         if (!eligible.length) {
@@ -1436,7 +1544,9 @@ function ScoutTabInner() {
     },
     // ctx included: the context-inference and instant-follow-up checks read
     // it — a stale closure here would forget the firm mid-conversation.
-    [clarify, savedJobs, runDraftAction, loopCompanies, ctx],
+    // applySome/allJobs/profile joined for the apply_some path (candidate
+    // pick + voice-affirmation on its scope card).
+    [clarify, savedJobs, runDraftAction, runApplyAction, loopCompanies, ctx, applySome, allJobs, profile],
   );
 
   const beginListening = useCallback(async () => {
@@ -1936,7 +2046,7 @@ function ScoutTabInner() {
                 Apply to {applyOne.title}?
               </Text>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
-                {applyOne.company}{applyOne.location ? ` · ${applyOne.location}` : ''} · submits for real · 5 credits
+                {applyOne.company}{applyOne.location ? ` · ${applyOne.location}` : ''} · submits for real · {AUTO_APPLY_CREDITS} credits
               </Text>
               <View style={{ flexDirection: 'row', gap: 9 }}>
                 <Pressable
@@ -1957,6 +2067,76 @@ function ScoutTabInner() {
                   }}
                   style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Apply</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {phase === 'idle' && applySome ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              style={{
+                width: '96%',
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderColor: NIGHT.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 11,
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+                Apply to these {applySome.jobs.length}?
+              </Text>
+              {applySome.requested > applySome.jobs.length ? (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink3 }}>
+                  You asked for {applySome.requested} — {applySome.jobs.length} {applySome.jobs.length === 1 ? 'is' : 'are'} eligible right now.
+                </Text>
+              ) : null}
+              <View style={{ gap: 7 }}>
+                {applySome.jobs.map((j) => (
+                  <View
+                    key={j.id}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: NIGHT.lineSoft,
+                      backgroundColor: 'rgba(255,255,255,0.04)',
+                      borderRadius: 13,
+                      paddingVertical: 10,
+                      paddingHorizontal: 13,
+                      gap: 2,
+                    }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                      {j.title}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                      {j.company}{j.location ? ` · ${j.location}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+                {applySome.fromPool ? 'Pulled from the wider job pool · ' : ''}applications submit for real · {applySome.jobs.length * AUTO_APPLY_CREDITS} credits
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 9 }}>
+                <Pressable
+                  onPress={() => {
+                    track('scout_gate_outcome', { gate: 'apply_some', outcome: 'cancel', method: 'tap' });
+                    setApplySome(null);
+                  }}
+                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Not now</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const picks = applySome.jobs;
+                    track('scout_gate_outcome', { gate: 'apply_some', outcome: 'run', method: 'tap', count: picks.length });
+                    setApplySome(null);
+                    void runApplyAction(picks);
+                  }}
+                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>
+                    Apply to {applySome.jobs.length}
+                  </Text>
                 </Pressable>
               </View>
             </Animated.View>
@@ -2077,6 +2257,8 @@ function ScoutTabInner() {
                         // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
                         if (a.chatMessage) {
                           void submitAsk(a.chatMessage, { source: 'chip' });
+                        } else if (a.href === '#paywall') {
+                          presentPaywall({ context: 'scout' });
                         } else if (a.href) {
                           router.push(a.href as never);
                         }

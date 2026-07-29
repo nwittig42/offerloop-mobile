@@ -24,6 +24,8 @@ import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
+import { iapAvailable } from '@/api/purchases';
+import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ActionCircle } from '@/components/ui/Button';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
@@ -152,9 +154,11 @@ export default function FeedScreen() {
     }
     if (direction === 'right') {
       if (!canDraft) {
-        // Out of swipes: bounce, don't spend. The card snaps back.
+        // Out of swipes: bounce, don't spend. The card snaps back. With IAP
+        // live this is the limit-hit moment, so offer the real fix.
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        showToast('Out of credits — drafts resume when your credits reset');
+        if (iapAvailable()) presentPaywall({ context: 'draft' });
+        else showToast('Out of credits — drafts resume when your credits reset');
         return;
       }
       // A punchy double-buzz on the commit so the draft feels real.
@@ -314,6 +318,11 @@ export default function FeedScreen() {
               onToggleExpand={setExpanded}
               onSwiped={handleSwiped}
               drag={dragX}
+              rightStamp={
+                swipeSettings.autoApply && canAutoApply && top?.autoApplyEligible
+                  ? 'apply'
+                  : 'draft'
+              }
             />
             {/* Undo, top-right over the card (Sorce-style). Outside the deck's
                 gesture so tapping it never swipes or expands. */}

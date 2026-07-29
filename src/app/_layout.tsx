@@ -20,9 +20,11 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purchases';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import ConnectionBanner from '@/components/ConnectionBanner';
 import NotificationPrompt from '@/components/NotificationPrompt';
+import PaywallHost from '@/components/paywall/PaywallSheet';
 import Toast from '@/components/Toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useScreenshotShare } from '@/hooks/useScreenshotShare';
@@ -123,9 +125,19 @@ function ThemedShell() {
   const colors = useColors();
   const { scheme, setSchool } = useTheme();
   const { profile, bootPending } = useApp();
+  const { user } = useAuth();
   const status = useAuthGate();
   useScreenshotShare();
   usePushNotifications();
+
+  // RevenueCat: configure once, then keep app_user_id == Firebase uid so
+  // purchase webhooks land on the same Firestore doc web Stripe writes to.
+  // No-ops entirely when the SDK key or native module is absent.
+  useEffect(() => {
+    configurePurchases();
+    if (user?.uid) void logInPurchases(user.uid);
+    else void logOutPurchases();
+  }, [user?.uid]);
 
   // Keep the school-colors theme pointed at the school the user signed up with.
   useEffect(() => {
@@ -167,10 +179,12 @@ function ThemedShell() {
         <Stack.Screen name="milestones" options={{ presentation: 'card' }} />
         <Stack.Screen name="share" options={{ presentation: 'modal' }} />
         <Stack.Screen name="swipe-settings" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="outreach-template" options={{ presentation: 'modal' }} />
       </Stack>
       <ConnectionBanner />
       <Toast />
       <NotificationPrompt />
+      <PaywallHost />
     </>
   );
 }

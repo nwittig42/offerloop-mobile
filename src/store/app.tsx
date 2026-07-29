@@ -30,6 +30,8 @@ import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPre
 import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
 import { runSwipe, type DraftJobProgress } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
+import { iapAvailable } from '@/api/purchases';
+import { presentPaywall } from '@/components/paywall/paywallBus';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, track } from '@/lib/analytics';
@@ -97,7 +99,11 @@ function enqueueDraft<T>(task: () => Promise<T>, onStart: () => void): Promise<T
 const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   action: 'draft',
   contacts: 1,
-  autoApply: false,
+  // On by default (Rylan, 2026-07-21): a right swipe should apply to the job
+  // AND warm up the team without a settings trip. The backend still gates
+  // eligibility and tier, and the user can turn it off in Swipe settings
+  // (their choice now persists per-user, see swipeSettingsStorageKey).
+  autoApply: true,
   priority: 'employee',
   scoutConfirmSpend: true,
 };
@@ -190,6 +196,10 @@ const onboardingStorageKey = (uid: string) => `offerloop.onboarding.${uid}.v1`;
 // stale forever. Half a day: long enough to cover a session, short enough that a
 // job you passed this morning can resurface tomorrow.
 const passedJobsStorageKey = (uid: string) => `offerloop.passedJobs.${uid}.v1`;
+// Swipe settings used to be plain in-memory state, so every relaunch silently
+// reset targeting and auto-apply back to defaults. Persisted per-user now:
+// saved choices win, defaults only fill gaps (new fields, fresh installs).
+const swipeSettingsStorageKey = (uid: string) => `offerloop.swipeSettings.${uid}.v1`;
 const PASSED_JOBS_TTL_MS = 12 * 60 * 60 * 1000;
 // The exact job card the user swiped, kept per company so the company page can
 // show the real card they acted on (not a generic company blurb).
@@ -872,6 +882,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // the Inbox, shaped for the Network Contacts list.
   const trackerRows = useMemo(() => outreachToTrackerRows(outreach), [outreach]);
   const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
+  const [swipeSettingsLoaded, setSwipeSettingsLoaded] = useState(false);
+  // Load the saved settings on sign-in; persist on every change after that.
+  useEffect(() => {
+    if (!uid) {
+      setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
+      setSwipeSettingsLoaded(true);
+      return;
+    }
+    setSwipeSettingsLoaded(false);
+    let cancelled = false;
+    AsyncStorage.getItem(swipeSettingsStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        let next = DEFAULT_SWIPE_SETTINGS;
+        try {
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed && typeof parsed === 'object') {
+            next = { ...DEFAULT_SWIPE_SETTINGS, ...(parsed as Partial<SwipeSettings>) };
+          }
+        } catch {
+          /* corrupt blob: fall back to defaults */
+        }
+        setSwipeSettings(next);
+        setSwipeSettingsLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
+          setSwipeSettingsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  useEffect(() => {
+    if (!uid || !swipeSettingsLoaded) return;
+    { const j = safeStringify(swipeSettings); if (j) AsyncStorage.setItem(swipeSettingsStorageKey(uid), j).catch(() => {}); }
+  }, [uid, swipeSettings, swipeSettingsLoaded]);
 
   // Credits are the ONLY meter (2026-07-14). The old model ran a swipe-stamina
   // batch with a multi-hour cooldown ALONGSIDE credits, and the two contradicted
@@ -1162,9 +1211,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .catch((err) => {
           if (isInsufficientCredits(err)) {
             setOutreach((prev) => prev.filter((o) => !placeholderIds.includes(o.id)));
-            // Neutral, no web-purchase steering in the toast (Apple anti-steering).
-            // The Credits screen carries the single "manage on web" link.
-            showToast('Not enough credits for that swipe');
+            // The limit hit is the highest-converting purchase moment (spec
+            // section 3): open the native IAP sheet instead of a dead-end
+            // toast. Builds without IAP keep the old neutral toast.
+            if (iapAvailable()) presentPaywall({ context: 'draft' });
+            else showToast('Not enough credits for that swipe');
           } else {
             // Remember the args (incl. swipeId) so a retry re-runs the same
             // gesture — the server replays a completed outcome instead of
@@ -1402,7 +1453,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
             showToast('Set up your application profile to auto-apply');
           } else if (r.code === 'INSUFFICIENT_CREDITS') {
-            showToast('Not enough credits to auto-apply');
+            if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
+            else showToast('Not enough credits to auto-apply');
           } else if (r.code === 'INELIGIBLE') {
             // The server couldn't detect a supported application system for this
             // role. Say so honestly instead of showing the optimistic

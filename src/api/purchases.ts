@@ -1,0 +1,150 @@
+import Constants from 'expo-constants';
+import Purchases, {
+  LOG_LEVEL,
+  type PurchasesOfferings,
+  type PurchasesPackage,
+  type PurchasesStoreProduct,
+} from 'react-native-purchases';
+
+import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
+
+/**
+ * RevenueCat plumbing (SPEC-iap-v2 section 6). The client only purchases and
+ * refreshes; credits and tier are granted SERVER-SIDE by the RevenueCat
+ * webhook. Nothing in here writes credit or tier fields.
+ *
+ * Availability gating: IAP is live only when the public SDK key env var is
+ * present AND Purchases.configure succeeded. Builds without the key (or the
+ * pre-IAP store build) keep every purchase surface hidden and fall back to
+ * the old toasts, so this file is safe to ship over any runtime.
+ */
+
+const RC_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
+
+let configured = false;
+let configureFailed = false;
+
+export function iapAvailable(): boolean {
+  return configured && !configureFailed;
+}
+
+/** Idempotent. Call once at app start; a missing key leaves IAP off. */
+export function configurePurchases(): void {
+  if (configured || configureFailed || !RC_KEY) return;
+  try {
+    Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
+    Purchases.configure({ apiKey: RC_KEY });
+    configured = true;
+  } catch {
+    // Native module absent (Expo Go without preview API, or a build made
+    // before the SDK was added). IAP stays off, app works as before.
+    configureFailed = true;
+  }
+}
+
+/** RC app_user_id MUST equal the Firebase uid so webhooks land on the right
+ *  Firestore doc (shared with web Stripe). */
+export async function logInPurchases(firebaseUid: string): Promise<void> {
+  if (!iapAvailable()) return;
+  try {
+    await Purchases.logIn(firebaseUid);
+  } catch {
+    // Non-fatal: purchase attempts will surface their own errors.
+  }
+}
+
+export async function logOutPurchases(): Promise<void> {
+  if (!iapAvailable()) return;
+  try {
+    await Purchases.logOut();
+  } catch {
+    // Already logged out / anonymous. Fine.
+  }
+}
+
+/** Pack identity comes from the product id suffix, the same source of truth
+ *  Sid's webhook grant table keys on. Never a display guess. */
+const PACK_SUFFIXES = ['credits.150', 'credits.400', 'credits.1000'] as const;
+
+function bundleId(): string {
+  return Constants.expoConfig?.ios?.bundleIdentifier ?? 'ai.offerloop.app.preview';
+}
+
+export function packCreditAmount(productId: string): number | undefined {
+  const m = productId.match(/credits\.(\d+)$/);
+  return m ? Number(m[1]) : undefined;
+}
+
+/** Rounded-down action framing for pack copy ("about 40 drafts or 80
+ *  auto-applies"), derived from the server-served per-action costs. */
+export function packActionFraming(credits: number, creditsPerSwipe: number): string {
+  const drafts = Math.floor(credits / Math.max(1, creditsPerSwipe));
+  const applies = Math.floor(credits / Math.max(1, AUTO_APPLY_CREDITS));
+  return `about ${drafts} drafts or ${applies} auto-applies`;
+}
+
+export type PaywallData = {
+  proPackage: PurchasesPackage | null;
+  elitePackage: PurchasesPackage | null;
+  packs: PurchasesStoreProduct[];
+};
+
+/** One fetch for everything the sheets render. Prices come ONLY from here. */
+export async function fetchPaywallData(): Promise<PaywallData> {
+  if (!iapAvailable()) return { proPackage: null, elitePackage: null, packs: [] };
+  let offerings: PurchasesOfferings | null = null;
+  try {
+    offerings = await Purchases.getOfferings();
+  } catch {
+    offerings = null;
+  }
+  const current = offerings?.current ?? null;
+  const proPackage =
+    current?.monthly ??
+    current?.availablePackages.find((p) => p.product.identifier.includes('.pro.')) ??
+    null;
+  const elitePackage =
+    current?.availablePackages.find((p) => p.product.identifier.includes('.elite.')) ?? null;
+
+  let packs: PurchasesStoreProduct[] = [];
+  try {
+    const ids = PACK_SUFFIXES.map((s) => `${bundleId()}.${s}`);
+    packs = await Purchases.getProducts(ids, 'NON_SUBSCRIPTION' as never);
+    packs.sort((a, b) => (packCreditAmount(a.identifier) ?? 0) - (packCreditAmount(b.identifier) ?? 0));
+  } catch {
+    packs = [];
+  }
+  return { proPackage, elitePackage, packs };
+}
+
+export type PurchaseResult = { ok: boolean; cancelled: boolean };
+
+export async function purchasePackage(pkg: PurchasesPackage): Promise<PurchaseResult> {
+  try {
+    await Purchases.purchasePackage(pkg);
+    return { ok: true, cancelled: false };
+  } catch (e: unknown) {
+    const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);
+    return { ok: false, cancelled };
+  }
+}
+
+export async function purchaseProduct(product: PurchasesStoreProduct): Promise<PurchaseResult> {
+  try {
+    await Purchases.purchaseStoreProduct(product);
+    return { ok: true, cancelled: false };
+  } catch (e: unknown) {
+    const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);
+    return { ok: false, cancelled };
+  }
+}
+
+export async function restorePurchases(): Promise<boolean> {
+  if (!iapAvailable()) return false;
+  try {
+    await Purchases.restorePurchases();
+    return true;
+  } catch {
+    return false;
+  }
+}
