@@ -411,9 +411,8 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
-          {/* Compact credits row (sizes swapped with the referral banner,
-              Rylan 2026-07-28): now that purchasing lives on /credits this is
-              just the doorway, so the growth banner gets the hero weight. */}
+          {/* Credits hero banner (Rylan 2026-07-28): the doorway to the store
+              gets the biggest weight on the page; serif balance up front. */}
           <Pressable onPress={() => router.push('/credits')}>
             <LinearGradient
               colors={['#1B2A44', '#2563EB', '#5B9BF4'] as const}
@@ -422,33 +421,50 @@ export default function ProfileScreen() {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 10,
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
+                gap: 14,
+                borderRadius: 16,
+                paddingHorizontal: 18,
+                paddingVertical: 20,
               }}>
               <View
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
                   backgroundColor: 'rgba(255,255,255,0.18)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="flash" size={14} color={colors.bolt} />
+                <Ionicons name="flash" size={21} color={colors.bolt} />
               </View>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.paper }}>
-                    {profile.credits} credits
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 7 }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.display,
+                      fontSize: 28,
+                      lineHeight: 30,
+                      color: colors.paper,
+                    }}>
+                    {profile.credits.toLocaleString()}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansSemibold,
+                      fontSize: 12,
+                      letterSpacing: 0.6,
+                      color: '#DCE6FB',
+                      paddingBottom: 4,
+                    }}>
+                    CREDITS
                   </Text>
                   {profile.plan !== 'Free' ? (
                     <View
                       style={{
                         borderRadius: 6,
-                        paddingHorizontal: 6,
-                        paddingVertical: 1,
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                        marginBottom: 3,
                         backgroundColor: 'rgba(255,255,255,0.22)',
                       }}>
                       <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10, color: colors.paper }}>
@@ -457,11 +473,11 @@ export default function ProfileScreen() {
                     </View>
                   ) : null}
                 </View>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: '#DCE6FB' }}>
-                  {swipesLabel} · View credits
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#DCE6FB', marginTop: 3 }}>
+                  {swipesLabel} · View credits and packs
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={15} color="#DCE6FB" />
+              <Ionicons name="chevron-forward" size={18} color="#DCE6FB" />
             </LinearGradient>
           </Pressable>
 
@@ -542,7 +558,7 @@ export default function ProfileScreen() {
 
           <ProfileCompletion profile={profile} onGoTo={setTab} />
 
-          <ReferralCard />
+          <ReferralCard compact />
 
         </View>
 
