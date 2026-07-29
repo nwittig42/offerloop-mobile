@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import Purchases, {
   LOG_LEVEL,
+  STOREKIT_VERSION,
   type PurchasesOfferings,
   type PurchasesPackage,
   type PurchasesStoreProduct,
@@ -33,7 +34,11 @@ export function configurePurchases(): void {
   if (configured || configureFailed || !RC_KEY) return;
   try {
     Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
-    Purchases.configure({ apiKey: RC_KEY });
+    // StoreKit 1, deliberately: SK2 purchases are known to fail with error 5
+    // ("product not available") in ad hoc-signed builds like our internal
+    // staging distribution. SK1 works across dev, ad hoc, TestFlight, and
+    // App Store signing. Revisit SK2 once builds flow through TestFlight.
+    Purchases.configure({ apiKey: RC_KEY, storeKitVersion: STOREKIT_VERSION.STOREKIT_1 });
     configured = true;
   } catch {
     // Native module absent (Expo Go without preview API, or a build made

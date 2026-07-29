@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'staging v10';
-export const OTA_NOTES = 'Purchase diagnostics: real StoreKit error in toast, 45s timeout so buttons never wedge, tap-to-retry price sync';
+export const OTA_VERSION = 'staging v11';
+export const OTA_NOTES = 'StoreKit 1 fallback: SK2 fails with error 5 on ad hoc builds, SK1 purchases work on internal distribution';
 
 /** e.g. "staging v3 · a1b2c3d4". The id suffix is the EAS update id, absent
  *  when running the embedded bundle (fresh install before the first OTA) or
