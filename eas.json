@@ -22,6 +22,11 @@
       },
       "channel": "preview"
     },
+    "preview-testflight": {
+      "extends": "preview",
+      "distribution": "store",
+      "autoIncrement": true
+    },
     "production": {
       "autoIncrement": true,
       "env": {
@@ -35,6 +40,11 @@
     "production": {
       "ios": {
         "ascAppId": "6789441106"
+      }
+    },
+    "preview-testflight": {
+      "ios": {
+        "ascAppId": "6795695227"
       }
     }
   }
