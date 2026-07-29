@@ -79,11 +79,20 @@ export function packCreditAmount(productId: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-/** Rounded-down action framing for pack copy ("about 40 drafts or 80
- *  auto-applies"), derived from the server-served per-action costs. */
+/** Rounded-down action counts derived from the server-served per-action
+ *  costs; every "N drafts" string in purchase UI builds from these. */
+export function packActionCounts(
+  credits: number,
+  creditsPerSwipe: number,
+): { drafts: number; applies: number } {
+  return {
+    drafts: Math.floor(credits / Math.max(1, creditsPerSwipe)),
+    applies: Math.floor(credits / Math.max(1, AUTO_APPLY_CREDITS)),
+  };
+}
+
 export function packActionFraming(credits: number, creditsPerSwipe: number): string {
-  const drafts = Math.floor(credits / Math.max(1, creditsPerSwipe));
-  const applies = Math.floor(credits / Math.max(1, AUTO_APPLY_CREDITS));
+  const { drafts, applies } = packActionCounts(credits, creditsPerSwipe);
   return `about ${drafts} drafts or ${applies} auto-applies`;
 }
 

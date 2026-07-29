@@ -25,6 +25,7 @@ import ReferralCard from '@/components/ReferralCard';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
+import { OTA_NOTES, otaStamp } from '@/lib/buildInfo';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -410,6 +411,9 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
+          {/* Compact credits row (sizes swapped with the referral banner,
+              Rylan 2026-07-28): now that purchasing lives on /credits this is
+              just the doorway, so the growth banner gets the hero weight. */}
           <Pressable onPress={() => router.push('/credits')}>
             <LinearGradient
               colors={['#1B2A44', '#2563EB', '#5B9BF4'] as const}
@@ -418,25 +422,25 @@ export default function ProfileScreen() {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 12,
-                borderRadius: 14,
-                paddingHorizontal: 16,
-                paddingVertical: 16,
+                gap: 10,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
               }}>
               <View
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
                   backgroundColor: 'rgba(255,255,255,0.18)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="flash" size={17} color={colors.bolt} />
+                <Ionicons name="flash" size={14} color={colors.bolt} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.paper }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.paper }}>
                     {profile.credits} credits
                   </Text>
                   {profile.plan !== 'Free' ? (
@@ -453,11 +457,11 @@ export default function ProfileScreen() {
                     </View>
                   ) : null}
                 </View>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#DCE6FB' }}>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: '#DCE6FB' }}>
                   {swipesLabel} · View credits
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color="#DCE6FB" />
+              <Ionicons name="chevron-forward" size={15} color="#DCE6FB" />
             </LinearGradient>
           </Pressable>
 
@@ -538,7 +542,7 @@ export default function ProfileScreen() {
 
           <ProfileCompletion profile={profile} onGoTo={setTab} />
 
-          <ReferralCard compact />
+          <ReferralCard />
 
         </View>
 
@@ -898,6 +902,31 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
+              <Pressable onPress={() => router.push('/outreach-template')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="create-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Outreach template
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      How your drafted emails are written and signed
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
               <Pressable onPress={() => router.push('/location-preferences')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View
@@ -1099,6 +1128,29 @@ export default function ProfileScreen() {
                   }}
                 />
               ) : null}
+              {/* Which OTA is this phone actually running? Bumped on every
+                  publish (src/lib/buildInfo.ts) so testers can tell at a
+                  glance whether the change they are checking has landed. */}
+              <View style={{ gap: 2, paddingTop: 6 }}>
+                <Text
+                  style={{
+                    fontFamily: fonts.sansMedium,
+                    fontSize: 11.5,
+                    color: colors.inkTertiary,
+                    textAlign: 'center',
+                  }}>
+                  {otaStamp()}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: fonts.sans,
+                    fontSize: 11,
+                    color: colors.inkTertiary,
+                    textAlign: 'center',
+                  }}>
+                  {OTA_NOTES}
+                </Text>
+              </View>
             </>
           ) : null}
 

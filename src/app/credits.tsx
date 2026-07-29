@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PurchasesStoreProduct } from 'react-native-purchases';
@@ -13,7 +13,7 @@ import { requestWebHandoff } from '@/api/endpoints/upgrade';
 import {
   fetchPaywallData,
   iapAvailable,
-  packActionFraming,
+  packActionCounts,
   packCreditAmount,
   PACK_CREDIT_AMOUNTS,
   purchaseProduct,
@@ -341,7 +341,13 @@ export default function CreditsScreen() {
                             gap: 14,
                             overflow: 'hidden',
                           }}>
-                          {/* Watermark bolt + sparkles for depth. */}
+                          {/* Watercolor mountains wash (same art as Profile /
+                              Milestones) + watermark bolt for depth. */}
+                          <Image
+                            source={require('../../assets/images/watercolor-mountains.webp')}
+                            style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', opacity: 0.16 }]}
+                            resizeMode="cover"
+                          />
                           <Ionicons
                             name="flash"
                             size={116}
@@ -352,18 +358,6 @@ export default function CreditsScreen() {
                               top: -14,
                               transform: [{ rotate: '-14deg' }],
                             }}
-                          />
-                          <Ionicons
-                            name="sparkles"
-                            size={16}
-                            color="rgba(255,255,255,0.35)"
-                            style={{ position: 'absolute', left: 10, top: 10 }}
-                          />
-                          <Ionicons
-                            name="sparkles"
-                            size={11}
-                            color="rgba(255,255,255,0.25)"
-                            style={{ position: 'absolute', left: 150, bottom: 12 }}
                           />
 
                           <View style={{ flex: 1, gap: 4 }}>
@@ -397,11 +391,14 @@ export default function CreditsScreen() {
                             <Text
                               style={{
                                 fontFamily: fonts.sansMedium,
-                                fontSize: 13,
-                                color: 'rgba(255,255,255,0.92)',
+                                fontSize: 11.5,
+                                color: 'rgba(255,255,255,0.88)',
                               }}>
                               {amount != null
-                                ? `About ${packActionFraming(amount, profile.creditsPerSwipe).replace('about ', '')}`
+                                ? (() => {
+                                    const c = packActionCounts(amount, profile.creditsPerSwipe);
+                                    return `≈ ${c.drafts} drafts · ${c.applies} auto-applies`;
+                                  })()
                                 : ''}
                             </Text>
                           </View>
