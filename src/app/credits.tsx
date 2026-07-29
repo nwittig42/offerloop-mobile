@@ -120,7 +120,9 @@ export default function CreditsScreen() {
         }
         setConfirming(false);
       } else if (!r.cancelled) {
-        showToast('Purchase did not go through, nothing was charged');
+        // Staging diagnostic: surface the real StoreKit error so sandbox
+        // failures are readable instead of silent.
+        showToast(r.error ? `Purchase failed: ${r.error}` : 'Purchase did not go through, nothing was charged');
       }
     },
     [buyingId, confirming, profile.credits, profile.plan, queryClient, showToast],
@@ -316,8 +318,14 @@ export default function CreditsScreen() {
                     key={p?.identifier ?? `pack-${i}`}
                     entering={FadeInDown.duration(380).delay(i * 90)}>
                     <Pressable
-                      disabled={!p || Boolean(buyingId) || confirming}
-                      onPress={() => p && void buyPack(p)}
+                      disabled={Boolean(buyingId) || confirming}
+                      onPress={() => {
+                        if (p) void buyPack(p);
+                        else {
+                          showToast('Prices are still syncing from Apple. Retrying…');
+                          loadPacks();
+                        }
+                      }}
                       style={({ pressed }) => ({
                         opacity: buyingId && !busyThis ? 0.55 : 1,
                         transform: [{ scale: pressed ? 0.98 : 1 }],

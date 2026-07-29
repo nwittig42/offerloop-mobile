@@ -130,25 +130,41 @@ export async function fetchPaywallData(): Promise<PaywallData> {
   return { proPackage, elitePackage, packs };
 }
 
-export type PurchaseResult = { ok: boolean; cancelled: boolean };
+export type PurchaseResult = { ok: boolean; cancelled: boolean; error?: string };
+
+function purchaseError(e: unknown): string {
+  const err = e as { message?: string; code?: string | number; userCancelled?: boolean };
+  return [err?.code, err?.message].filter(Boolean).join(' ') || String(e);
+}
+
+/** Sandbox StoreKit sometimes never resolves; a hung promise would wedge the
+ *  buy buttons forever, so purchases race a 45s timeout. */
+function withTimeout<T>(p: Promise<T>, ms = 45000): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Timed out waiting for the App Store')), ms),
+    ),
+  ]);
+}
 
 export async function purchasePackage(pkg: PurchasesPackage): Promise<PurchaseResult> {
   try {
-    await Purchases.purchasePackage(pkg);
+    await withTimeout(Purchases.purchasePackage(pkg));
     return { ok: true, cancelled: false };
   } catch (e: unknown) {
     const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);
-    return { ok: false, cancelled };
+    return { ok: false, cancelled, error: purchaseError(e) };
   }
 }
 
 export async function purchaseProduct(product: PurchasesStoreProduct): Promise<PurchaseResult> {
   try {
-    await Purchases.purchaseStoreProduct(product);
+    await withTimeout(Purchases.purchaseStoreProduct(product));
     return { ok: true, cancelled: false };
   } catch (e: unknown) {
     const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);
-    return { ok: false, cancelled };
+    return { ok: false, cancelled, error: purchaseError(e) };
   }
 }
 
