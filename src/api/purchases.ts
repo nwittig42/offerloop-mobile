@@ -66,6 +66,10 @@ export async function logOutPurchases(): Promise<void> {
  *  Sid's webhook grant table keys on. Never a display guess. */
 const PACK_SUFFIXES = ['credits.150', 'credits.400', 'credits.1000'] as const;
 
+/** The known pack sizes (derived from the ids above) so tiles can render the
+ *  real credit counts while StoreKit prices are still loading. */
+export const PACK_CREDIT_AMOUNTS: number[] = PACK_SUFFIXES.map((s) => Number(s.split('.')[1]));
+
 function bundleId(): string {
   return Constants.expoConfig?.ios?.bundleIdentifier ?? 'ai.offerloop.app.preview';
 }
