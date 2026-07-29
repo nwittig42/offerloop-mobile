@@ -196,6 +196,34 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
             <View style={{ alignItems: 'center', paddingVertical: 40 }}>
               <ActivityIndicator color={colors.navy} />
             </View>
+          ) : !data.proPackage && !data.elitePackage && data.packs.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 36, gap: 10 }}>
+              <Ionicons name="cart-outline" size={26} color={colors.inkTertiary} />
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink }}>
+                The store is warming up
+              </Text>
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: colors.inkSecondary,
+                  textAlign: 'center',
+                  lineHeight: 19,
+                }}>
+                Apple is still preparing the plans and packs. This usually takes a few minutes for
+                new items. Check back shortly.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setData(null);
+                  void fetchPaywallData().then(setData);
+                }}
+                style={{ paddingVertical: 6, paddingHorizontal: 14 }}>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.accent }}>
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
           ) : (
             <>
               {!isSubscriber && (

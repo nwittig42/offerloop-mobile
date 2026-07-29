@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'staging v4';
-export const OTA_NOTES = 'IAP v2: RevenueCat plumbing, paywall sheet, limit-hit triggers, Credits store (native rebuild)';
+export const OTA_VERSION = 'staging v5';
+export const OTA_NOTES = 'Credits screen store: inline purple pack tiles, manage-on-web in balance card, sheet warming-up state';
 
 /** e.g. "staging v3 · a1b2c3d4". The id suffix is the EAS update id, absent
  *  when running the embedded bundle (fresh install before the first OTA) or
