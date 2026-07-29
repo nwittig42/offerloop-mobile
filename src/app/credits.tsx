@@ -32,11 +32,12 @@ import { fonts } from '@/theme/tokens';
  * balance card. Builds without IAP keep the old web-checkout card.
  */
 
-/** Purple ramp for the pack tiles, deepening with pack size. */
-const PACK_GRADIENTS: [string, string][] = [
-  ['#A78BFA', '#8B5CF6'],
-  ['#8B5CF6', '#7C3AED'],
-  ['#7C3AED', '#5B21B6'],
+/** Each pack banner gets its own rich color family (Rylan: green, purple,
+ *  orange; same visual weight as the credits banner above them). */
+const PACK_STYLES: { gradient: [string, string, string]; badge: string | null }[] = [
+  { gradient: ['#064E3B', '#059669', '#34D399'], badge: null },
+  { gradient: ['#4C1D95', '#7C3AED', '#A78BFA'], badge: 'MOST POPULAR' },
+  { gradient: ['#7C2D12', '#EA580C', '#FBBF24'], badge: 'BEST VALUE' },
 ];
 
 export default function CreditsScreen() {
@@ -265,81 +266,107 @@ export default function CreditsScreen() {
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ gap: 10 }}>
               {(packs && packs.length > 0 ? packs : [null, null, null]).map((p, i) => {
                 const amount = p ? packCreditAmount(p.identifier) : null;
-                const badge = i === 1 ? 'POPULAR' : i === 2 ? 'BEST VALUE' : null;
+                const style = PACK_STYLES[i] ?? PACK_STYLES[0];
                 const busyThis = p ? buyingId === p.identifier : false;
                 return (
                   <Pressable
                     key={p?.identifier ?? `placeholder-${i}`}
                     disabled={!p || Boolean(buyingId) || confirming}
                     onPress={() => p && void buyPack(p)}
-                    style={{ flex: 1, opacity: buyingId && !busyThis ? 0.55 : 1 }}>
+                    style={{ opacity: buyingId && !busyThis ? 0.55 : 1 }}>
                     <LinearGradient
-                      colors={PACK_GRADIENTS[i] ?? PACK_GRADIENTS[0]}
+                      colors={style.gradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={{
-                        borderRadius: 14,
-                        paddingVertical: 14,
-                        paddingHorizontal: 8,
+                        borderRadius: 18,
+                        paddingVertical: 16,
+                        paddingHorizontal: 18,
+                        flexDirection: 'row',
                         alignItems: 'center',
-                        gap: 6,
-                        minHeight: 128,
-                        justifyContent: 'center',
+                        gap: 14,
                       }}>
-                      {badge && (
-                        <View
-                          style={{
-                            position: 'absolute',
-                            top: 8,
-                            backgroundColor: 'rgba(255,255,255,0.22)',
-                            borderRadius: 6,
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                          }}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
+                          <Ionicons
+                            name="flash"
+                            size={15}
+                            color={colors.bolt}
+                            style={{ marginBottom: 6 }}
+                          />
+                          <Text
+                            style={{
+                              fontFamily: fonts.display,
+                              fontSize: 32,
+                              color: '#FFFFFF',
+                              lineHeight: 34,
+                            }}>
+                            {amount != null ? amount.toLocaleString() : '· · ·'}
+                          </Text>
                           <Text
                             style={{
                               fontFamily: fonts.sansSemibold,
-                              fontSize: 9,
-                              letterSpacing: 0.6,
-                              color: '#FFFFFF',
+                              fontSize: 11,
+                              letterSpacing: 0.8,
+                              color: 'rgba(255,255,255,0.85)',
+                              paddingBottom: 6,
                             }}>
-                            {badge}
+                            CREDITS
                           </Text>
                         </View>
-                      )}
-                      <Ionicons name="flash" size={16} color={colors.bolt} style={{ marginTop: badge ? 10 : 0 }} />
-                      <Text style={{ fontFamily: fonts.display, fontSize: 26, color: '#FFFFFF', lineHeight: 28 }}>
-                        {amount != null ? amount.toLocaleString() : '· · ·'}
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: fonts.sansMedium,
-                          fontSize: 10.5,
-                          letterSpacing: 0.4,
-                          color: 'rgba(255,255,255,0.85)',
-                          marginTop: -4,
-                        }}>
-                        CREDITS
-                      </Text>
-                      <View
-                        style={{
-                          backgroundColor: '#FFFFFF',
-                          borderRadius: 999,
-                          paddingHorizontal: 12,
-                          paddingVertical: 5,
-                          minWidth: 58,
-                          alignItems: 'center',
-                        }}>
-                        {busyThis || (!p && iapLive) ? (
-                          <ActivityIndicator size="small" color="#5B21B6" />
-                        ) : (
-                          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#111318' }}>
-                            {p?.priceString ?? ''}
-                          </Text>
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansMedium,
+                            fontSize: 12.5,
+                            color: 'rgba(255,255,255,0.9)',
+                          }}>
+                          {amount != null
+                            ? `About ${packActionFraming(amount, profile.creditsPerSwipe)
+                                .replace('about ', '')}`
+                            : 'Loading from the App Store…'}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        {style.badge && (
+                          <View
+                            style={{
+                              backgroundColor: 'rgba(255,255,255,0.24)',
+                              borderRadius: 6,
+                              paddingHorizontal: 7,
+                              paddingVertical: 2.5,
+                            }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 9.5,
+                                letterSpacing: 0.7,
+                                color: '#FFFFFF',
+                              }}>
+                              {style.badge}
+                            </Text>
+                          </View>
                         )}
+                        <View
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 999,
+                            paddingHorizontal: 14,
+                            paddingVertical: 7,
+                            minWidth: 64,
+                            alignItems: 'center',
+                          }}>
+                          {busyThis || (!p && iapLive) ? (
+                            <ActivityIndicator size="small" color={style.gradient[1]} />
+                          ) : (
+                            <Text
+                              style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: '#111318' }}>
+                              {p?.priceString ?? ''}
+                            </Text>
+                          )}
+                        </View>
                       </View>
                     </LinearGradient>
                   </Pressable>
@@ -361,19 +388,6 @@ export default function CreditsScreen() {
                   Confirming your purchase, credits land in a moment…
                 </Text>
               </View>
-            )}
-            {packs !== null && packs.length > 0 && !confirming && (
-              <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
-                {packs
-                  .map((p) => {
-                    const a = packCreditAmount(p.identifier);
-                    return a != null
-                      ? `${a.toLocaleString()} is ${packActionFraming(a, profile.creditsPerSwipe)}`
-                      : '';
-                  })
-                  .filter(Boolean)
-                  .join('  ·  ')}
-              </Text>
             )}
           </View>
         )}
