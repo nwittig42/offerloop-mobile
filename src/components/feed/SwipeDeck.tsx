@@ -45,13 +45,23 @@ type Props = {
   onSwiped: (direction: 'left' | 'right' | 'up', job: Job) => void;
   /** Mirrors the live horizontal drag so the action buttons can react. */
   drag?: SharedValue<number>;
+  /** What a right swipe on the TOP card actually does: 'apply' (green APPLY
+   *  stamp) when auto-apply is on and this job is eligible, else 'draft'.
+   *  Honest per-card: an ineligible job never flashes a promise to apply. */
+  rightStamp?: 'draft' | 'apply';
 };
 
-function Stamp({ kind }: { kind: 'pass' | 'draft' | 'save' }) {
+function Stamp({ kind }: { kind: 'pass' | 'draft' | 'save' | 'apply' }) {
   const colors = useColors();
   const color =
-    kind === 'pass' ? colors.negative : kind === 'save' ? colors.marketing : colors.accent;
-  // pass tilts right (top-right), draft tilts left (top-left), save sits centered.
+    kind === 'pass'
+      ? colors.negative
+      : kind === 'save'
+        ? colors.marketing
+        : kind === 'apply'
+          ? colors.positive
+          : colors.accent;
+  // pass tilts right (top-right), draft/apply tilt left (top-left), save sits centered.
   const centered = kind === 'save';
   return (
     <View
@@ -79,7 +89,7 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' | 'save' }) {
             letterSpacing: 2,
             color,
           }}>
-          {kind === 'pass' ? 'PASS' : kind === 'save' ? 'SAVE' : 'DRAFT'}
+          {kind === 'pass' ? 'PASS' : kind === 'save' ? 'SAVE' : kind === 'apply' ? 'APPLY' : 'DRAFT'}
         </Text>
       </View>
     </View>
@@ -90,7 +100,7 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' | 'save' }) {
 // the cards (jobs) or expand state actually change — not on every store/poll tick.
 export const SwipeDeck = memo(
   forwardRef<SwipeDeckHandle, Props>(
-  ({ jobs, expanded, onToggleExpand, onSwiped, drag }, ref) => {
+  ({ jobs, expanded, onToggleExpand, onSwiped, drag, rightStamp = 'draft' }, ref) => {
     const tx = useSharedValue(0);
     const ty = useSharedValue(0);
 
@@ -242,7 +252,7 @@ export const SwipeDeck = memo(
             <Animated.View
               style={[{ position: 'absolute', top: 10, left: 0, right: 0 }, draftStampStyle]}
               pointerEvents="none">
-              <Stamp kind="draft" />
+              <Stamp kind={rightStamp} />
             </Animated.View>
             <Animated.View
               style={[{ position: 'absolute', top: 10, left: 0, right: 0 }, passStampStyle]}

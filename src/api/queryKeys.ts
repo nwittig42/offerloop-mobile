@@ -17,4 +17,6 @@ export const qk = {
   meetingPrep: (id: string) => ['meetingPrep', id] as const,
   contacts: ['contacts'] as const,
   notifications: ['notifications'] as const,
+  emailTemplate: ['emailTemplate'] as const,
+  savedEmailTemplates: ['savedEmailTemplates'] as const,
 };

@@ -14,7 +14,8 @@ import type { SwipeSettings } from '@/types';
  * reflex. Choose what a right swipe does (draft vs auto-send), how many
  * people it reaches (the hiring manager first, then the team), and, as an
  * accent a few steps down, whether to also apply (Nick's "apply, then warm
- * up the team" move). Auto-apply is off by default and clearly secondary.
+ * up the team" move). Auto-apply is ON by default (Rylan, 2026-07-21); the
+ * toggle here turns it off, and the choice persists per-user.
  */
 
 const ACTIONS: { key: SwipeSettings['action']; label: string; sub: string }[] = [

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PurchasesStoreProduct } from 'react-native-purchases';
@@ -12,6 +12,7 @@ import type { PurchasesStoreProduct } from 'react-native-purchases';
 import { requestWebHandoff } from '@/api/endpoints/upgrade';
 import {
   fetchPaywallData,
+  fetchStorefrontCountry,
   iapAvailable,
   packActionCounts,
   packCreditAmount,
@@ -81,7 +82,7 @@ const PLAN_CHIP: Record<string, readonly [string, string] | null> = {
 export default function CreditsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, showToast } = useApp();
+  const { profile, showToast, connection } = useApp();
   const colors = useColors();
   const queryClient = useQueryClient();
   const [opening, setOpening] = useState(false);
@@ -91,7 +92,10 @@ export default function CreditsScreen() {
   const [packs, setPacks] = useState<PurchasesStoreProduct[] | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const baseline = useRef({ credits: profile.credits, plan: profile.plan });
+  // live: baseline was captured from real /me data, not the mock fallback.
+  // The grant detector requires live-to-live comparison; without it, a mock
+  // flicker during refetch reads as a balance change and celebrates falsely.
+  const baseline = useRef({ credits: profile.credits, plan: profile.plan, live: false });
 
   const loadPacks = useCallback(() => {
     if (!iapAvailable()) return;
@@ -107,7 +111,11 @@ export default function CreditsScreen() {
       if (buyingId || confirming) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setBuyingId(product.identifier);
-      baseline.current = { credits: profile.credits, plan: profile.plan };
+      baseline.current = {
+        credits: profile.credits,
+        plan: profile.plan,
+        live: !connection.usingSampleData,
+      };
       const r = await purchaseProduct(product);
       setBuyingId(null);
       if (r.ok) {
@@ -120,22 +128,37 @@ export default function CreditsScreen() {
         }
         setConfirming(false);
       } else if (!r.cancelled) {
-        // Staging diagnostic: surface the real StoreKit error so sandbox
-        // failures are readable instead of silent.
-        showToast(r.error ? `Purchase failed: ${r.error}` : 'Purchase did not go through, nothing was charged');
+        // Staging diagnostic: a full-detail alert instead of a toast. Shows
+        // the product id, the App Store storefront country, and StoreKit's
+        // underlying reason so sandbox failures are debuggable from a photo
+        // of the screen.
+        const storefront = await fetchStorefrontCountry();
+        Alert.alert(
+          'Purchase failed (staging diagnostics)',
+          [
+            `Product: ${product.identifier}`,
+            `Storefront: ${storefront ?? 'unknown'}`,
+            `Error: ${r.error ?? 'no detail, nothing was charged'}`,
+          ].join('\n\n'),
+        );
       }
     },
-    [buyingId, confirming, profile.credits, profile.plan, queryClient, showToast],
+    [buyingId, confirming, profile.credits, profile.plan, connection.usingSampleData, queryClient, showToast],
   );
 
   useEffect(() => {
     if (!confirming) return;
-    if (profile.credits !== baseline.current.credits) {
+    // Celebrate only on a real increase between two live profiles.
+    if (
+      baseline.current.live &&
+      !connection.usingSampleData &&
+      profile.credits > baseline.current.credits
+    ) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Credits added to your balance');
       setConfirming(false);
     }
-  }, [confirming, profile.credits, showToast]);
+  }, [confirming, profile.credits, connection.usingSampleData, showToast]);
 
   const openPlans = async () => {
     if (opening) return;

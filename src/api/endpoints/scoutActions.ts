@@ -369,7 +369,13 @@ export function isHighConfidenceParse(
   extraFirms: string[],
 ): boolean {
   if (!intent) return false;
-  if (intent.kind === 'find_jobs' || intent.kind === 'apply_saved' || intent.kind === 'prep') return true;
+  if (
+    intent.kind === 'find_jobs' ||
+    intent.kind === 'apply_saved' ||
+    intent.kind === 'apply_some' ||
+    intent.kind === 'prep'
+  )
+    return true;
   if (intent.kind === 'draft' || intent.kind === 'find_people') {
     if (!intent.company) return false; // clarify-shaped: let the server see it
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -398,6 +404,15 @@ export type DraftIntent = {
   wantedSend: boolean;
 };
 export type ApplyIntent = { kind: 'apply_saved' };
+/** "Apply to a few jobs for me": bulk apply with NO saved-list qualifier,
+ *  Scout picks the candidates (SCOUT-VOICE-HANDOFF.md section 3). query is
+ *  a sector/keyword tail ("in tech"), location a place tail ("in LA"). */
+export type ApplySomeIntent = {
+  kind: 'apply_some';
+  count: number;
+  query: string | null;
+  location: string | null;
+};
 export type PrepIntent = { kind: 'prep' };
 export type JobSearchIntent = { kind: 'find_jobs'; query: string; location: string | null };
 /** Browse-only: see people BEFORE deciding to draft (web-Find parity).
@@ -407,6 +422,7 @@ export type FindPeopleIntent = { kind: 'find_people'; role: string; company: str
 export type ScoutIntent =
   | DraftIntent
   | ApplyIntent
+  | ApplySomeIntent
   | PrepIntent
   | JobSearchIntent
   | FindPeopleIntent
@@ -446,6 +462,90 @@ function parseJobSearch(ask: string, lower: string): JobSearchIntent | null {
   const loc = lower.match(/\bin\s+([a-z .\-]{2,32})[,.!?]?$/);
   if (loc) location = loc[1].trim();
   return { kind: 'find_jobs', query, location };
+}
+
+/** Quantity-shaped apply asks: "apply to a few / some / N jobs (for me)",
+ *  "apply to a job", "just apply somewhere", "submit some applications".
+ *  The quantity must sit RIGHT before the job noun, so a role-qualified ask
+ *  ("apply to consulting jobs") falls through to the job SEARCH and the
+ *  user picks from real listings. Checked before parseJobSearch, which used
+ *  to swallow "apply to a few jobs" as a search for the role "few". */
+const APPLY_QTY_RE =
+  /\b(?:apply|applying)(?:\s+(?:to|for))?\s+(?:me\s+)?(a few|a couple(?: of)?|some|a handful(?: of)?|\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|a|an)?\s*(?:more\s+)?(?:jobs?|roles?|positions?|openings?|applications?)\b/;
+
+const SUBMIT_QTY_RE =
+  /\bsubmit(?:ting)?\s+(a few|a couple(?: of)?|some|\d{1,2}|one|two|three|four|five)?\s*(?:more\s+)?applications?\b/;
+
+function applyCountFrom(q: string): number {
+  if (/^\d/.test(q)) return parseInt(q, 10);
+  if (NUM_WORDS[q] != null && q !== 'a' && q !== 'an') return NUM_WORDS[q];
+  if (/^a couple/.test(q)) return 2;
+  if (q === 'a' || q === 'an' || q === 'one') return 1;
+  return 3; // "a few" / "some" / no quantity: a small honest default
+}
+
+export function parseApplySome(ask: string, lower: string): ApplySomeIntent | null {
+  if (!/\b(apply|applying|submit)\b/.test(lower)) return null;
+  if (/(saved|my jobs)/.test(lower)) return null; // that ask is apply_saved
+  let m = lower.match(APPLY_QTY_RE);
+  if (!m) m = lower.match(SUBMIT_QTY_RE);
+  if (!m) {
+    // "just apply somewhere for me" / "apply to something"
+    if (/\b(apply|applying)\b/.test(lower) && /\b(somewhere|something|anything)\b/.test(lower)) {
+      return { kind: 'apply_some', count: 3, query: null, location: null };
+    }
+    return null;
+  }
+  const count = Math.max(1, Math.min(applyCountFrom((m[1] || '').trim()), 5));
+  // Tail after the job noun: "in tech" is a sector, "in LA" is a place.
+  const tail = lower
+    .slice((m.index ?? 0) + m[0].length)
+    .replace(/\bfor me\b/g, '')
+    .trim();
+  let query: string | null = null;
+  let location: string | null = null;
+  const inM = tail.match(/^in\s+(?:the\s+)?([a-z .\-&]{2,32}?)[,.!?]?$/);
+  if (inM) {
+    const x = inM[1].trim();
+    if (sectorForVibeText(x) || industryFirmsFor(x)) query = x;
+    else location = x;
+  }
+  return { kind: 'apply_some', count, query, location };
+}
+
+/** Feed-scoped candidate pick for apply_some: auto-apply-eligible only,
+ *  optional keyword/location filter, target-role matches first with feed
+ *  order (already location-ranked) breaking ties. Honest: returns what
+ *  actually exists, never pads. */
+export function pickApplyCandidates(
+  jobs: Job[],
+  count: number,
+  targetRoles: string[],
+  query: string | null,
+  location: string | null,
+): Job[] {
+  let pool = jobs.filter((j) => j.autoApplyEligible);
+  if (query) {
+    const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
+    if (tokens.length) {
+      pool = pool.filter((j) => {
+        const hay = `${j.title} ${j.company}`.toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      });
+    }
+  }
+  if (location) {
+    pool = pool.filter((j) => (j.location || '').toLowerCase().includes(location.toLowerCase()));
+  }
+  const roleTokens = targetRoles
+    .flatMap((r) => r.toLowerCase().split(/\s+/))
+    .filter((t) => t.length > 2);
+  const scored = pool.map((j, i) => {
+    const hay = j.title.toLowerCase();
+    return { j, hits: roleTokens.filter((t) => hay.includes(t)).length, i };
+  });
+  scored.sort((a, b) => b.hits - a.hits || a.i - b.i);
+  return scored.slice(0, count).map((s) => s.j);
 }
 
 /** Score a job title against the expanded query — every query token must
@@ -524,6 +624,12 @@ export function parseBareCompany(ask: string): string | null {
 
 export function parseIntent(ask: string): ScoutIntent {
   const lower = ask.toLowerCase().trim();
+
+  // Quantity-shaped apply asks first ("apply to a few jobs for me"), and
+  // BEFORE the question guard: the north-star ask arrives as a question
+  // ("can you apply to a few jobs for me?") and must never dead-end at chat.
+  const applySome = parseApplySome(ask, lower);
+  if (applySome) return applySome;
 
   // Job hunting reads as a question half the time ("can you find me a PM
   // role to apply to?") — check it BEFORE the question guard so it never
@@ -831,6 +937,12 @@ export async function executeDraftIntent(
   return { say, names };
 }
 
+/** One auto-apply submit, in credits. Centralized so the scope cards and the
+ *  single-apply confirm all quote the same number. TODO(backend): serve this
+ *  from /api/mobile/me next to creditsPerSwipe so it can never drift from
+ *  CREDIT_COSTS server-side. */
+export const AUTO_APPLY_CREDITS = 5;
+
 /** Scope options for the auto-apply receipt (fixed tiers per contract v1.1 —
  *  no cheap preview-count; real counts come with the brain's preview path). */
 export function applyScope(saved: Job[]) {
@@ -841,7 +953,7 @@ export function applyScope(saved: Job[]) {
       id: `top${n}`,
       label: `Top ${Math.min(n, eligible.length)} saved`,
       count: Math.min(n, eligible.length),
-      creditEstimate: Math.min(n, eligible.length) * 5,
+      creditEstimate: Math.min(n, eligible.length) * AUTO_APPLY_CREDITS,
     }));
   return { eligible, tiers };
 }
@@ -849,9 +961,10 @@ export function applyScope(saved: Job[]) {
 export async function executeApplyIntent(
   jobs: Job[],
   onProgress: (p: ActionProgress) => void,
-): Promise<{ say: string }> {
+): Promise<{ say: string; needsProfile: boolean }> {
   let ok = 0;
   let failed = 0;
+  let needsProfile = false;
   for (let i = 0; i < jobs.length; i++) {
     onProgress({
       stageLabel: `Applying: ${jobs[i].title} · ${jobs[i].company}`,
@@ -860,14 +973,25 @@ export async function executeApplyIntent(
     try {
       const r = await startAutoApply(jobs[i].id);
       if (r.ok) ok += 1;
-      else failed += 1;
+      else {
+        failed += 1;
+        // The gate fires BEFORE any charge, so surfacing it honestly with a
+        // route to fix it is the whole recovery (SCOUT-VOICE-HANDOFF.md 3).
+        if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') needsProfile = true;
+      }
     } catch {
       failed += 1;
     }
   }
   const say =
     ok > 0
-      ? `Submitted ${ok} application${ok === 1 ? '' : 's'}${failed ? ` (${failed} couldn't start — check Applications)` : ''}. You'll get a push as each one finishes.`
-      : `None of those could start — open Applications to see why.`;
-  return { say };
+      ? `Started ${ok} application${ok === 1 ? '' : 's'}${
+          failed
+            ? `, ${failed} couldn't start${needsProfile ? ' (your application profile needs an answer first)' : ', check Applications'}`
+            : ''
+        }. You'll get a push as each one finishes.`
+      : needsProfile
+        ? 'Your application profile needs a quick answer before I can apply for you. It takes about a minute, then ask me again.'
+        : 'None of those could start. Open Applications to see why.';
+  return { say, needsProfile };
 }

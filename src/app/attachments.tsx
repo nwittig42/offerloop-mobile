@@ -170,6 +170,33 @@ export default function AttachmentsScreen() {
           }}>
           PDF, DOC or DOCX · up to 10MB. Only you can see it.
         </Text>
+
+        {/* The template is the other half of "what travels with your outreach":
+            the resume is the attachment, the template is the wording. */}
+        <Pressable onPress={() => router.push('/outreach-template')}>
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                backgroundColor: colors.navy + '12',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Ionicons name="create-outline" size={19} color={colors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
+                Outreach template
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                How every drafted email is written and signed
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+          </Card>
+        </Pressable>
       </ScrollView>
     </View>
   );

@@ -34,11 +34,11 @@ export function configurePurchases(): void {
   if (configured || configureFailed || !RC_KEY) return;
   try {
     Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
-    // StoreKit 1, deliberately: SK2 purchases are known to fail with error 5
-    // ("product not available") in ad hoc-signed builds like our internal
-    // staging distribution. SK1 works across dev, ad hoc, TestFlight, and
-    // App Store signing. Revisit SK2 once builds flow through TestFlight.
-    Purchases.configure({ apiKey: RC_KEY, storeKitVersion: STOREKIT_VERSION.STOREKIT_1 });
+    // StoreKit 2 (RevenueCat's default). The v11 SK1 fallback was a guess
+    // made before the real bug surfaced (the 400 pack had no Availability in
+    // App Store Connect); SK1 is deprecated since iOS 18 and unreliable on
+    // newer iOS, so staying on it is its own risk.
+    Purchases.configure({ apiKey: RC_KEY, storeKitVersion: STOREKIT_VERSION.DEFAULT });
     configured = true;
   } catch {
     // Native module absent (Expo Go without preview API, or a build made
@@ -138,8 +138,37 @@ export async function fetchPaywallData(): Promise<PaywallData> {
 export type PurchaseResult = { ok: boolean; cancelled: boolean; error?: string };
 
 function purchaseError(e: unknown): string {
-  const err = e as { message?: string; code?: string | number; userCancelled?: boolean };
-  return [err?.code, err?.message].filter(Boolean).join(' ') || String(e);
+  const err = e as {
+    message?: string;
+    code?: string | number;
+    userCancelled?: boolean;
+    readableErrorCode?: string;
+    underlyingErrorMessage?: string;
+    userInfo?: { readableErrorCode?: string; underlyingErrorMessage?: string };
+  };
+  const readable = err?.userInfo?.readableErrorCode ?? err?.readableErrorCode;
+  // The underlying message is where StoreKit says WHY (wrong storefront,
+  // agreement problem, unapproved product). The RN bridge nests it under
+  // userInfo, with a deprecated top-level copy on some paths; check both.
+  const underlying = err?.userInfo?.underlyingErrorMessage ?? err?.underlyingErrorMessage;
+  const parts = [
+    [err?.code, err?.message].filter(Boolean).join(' '),
+    readable,
+    underlying ? `underlying: ${underlying}` : '',
+  ].filter(Boolean);
+  return parts.join(' | ') || String(e);
+}
+
+/** The App Store country the device is buying from. Sandbox error 5 is often
+ *  a storefront mismatch, so surfacing this makes that case obvious. */
+export async function fetchStorefrontCountry(): Promise<string | null> {
+  if (!iapAvailable()) return null;
+  try {
+    const s = await Purchases.getStorefront();
+    return s?.countryCode ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Sandbox StoreKit sometimes never resolves; a hung promise would wedge the

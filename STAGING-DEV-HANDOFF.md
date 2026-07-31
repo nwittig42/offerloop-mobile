@@ -32,8 +32,14 @@ Repo: `~/offerloop-mobile` (branch `main`). App code in `src/`.
 - Staging build: bundle `ai.offerloop.app.preview`, name **"Offerloop Staging"**, channel
   **`preview`**, backend `offerloop-staging.onrender.com`. Installed side-by-side with production
   on Rylan's + Nick's phones. They sign in via the **dev password panel** (Elite test accounts).
-- **Deploy a change:** `eas update --branch preview --message "<what changed>"` → the staging app
-  pulls it on next launch.
+- **Deploy a change:** run `eas update` WITH the preview build-profile env vars (eas update does
+  not read eas.json build env, so omitting them publishes a wrong-fingerprint, mock-mode bundle
+  the staging app silently ignores):
+  `APP_VARIANT=preview EXPO_PUBLIC_API_BASE_URL=https://offerloop-staging.onrender.com eas update --branch preview --message "<what changed>"`
+  → the staging app pulls it on next launch (relaunch twice: first launch downloads, second runs it).
+- **Before every publish, bump `src/lib/buildInfo.ts`** (OTA_VERSION next number +
+  one-line OTA_NOTES). The stamp shows in Profile > Settings on the phone; match
+  it against your publish message to know the update landed.
 
 ---
 

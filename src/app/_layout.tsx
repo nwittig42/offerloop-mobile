@@ -16,7 +16,7 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -133,10 +133,19 @@ function ThemedShell() {
   // RevenueCat: configure once, then keep app_user_id == Firebase uid so
   // purchase webhooks land on the same Firestore doc web Stripe writes to.
   // No-ops entirely when the SDK key or native module is absent.
+  // On a genuine account CHANGE (not cold start), also drop every cached
+  // query: without this the previous account's balance and profile keep
+  // rendering until each screen happens to refetch.
+  const prevUid = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     configurePurchases();
     if (user?.uid) void logInPurchases(user.uid);
     else void logOutPurchases();
+    const uid = user?.uid ?? null;
+    if (prevUid.current !== undefined && prevUid.current !== uid) {
+      queryClient.clear();
+    }
+    prevUid.current = uid;
   }, [user?.uid]);
 
   // Keep the school-colors theme pointed at the school the user signed up with.

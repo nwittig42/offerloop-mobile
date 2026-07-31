@@ -1,0 +1,96 @@
+import { apiFetch } from '@/api/client';
+import { USE_MOCKS } from '@/api/config';
+
+/**
+ * Outreach email template, mirrors the web's Email Template page.
+ *
+ * The draft pipeline resolves users/{uid}.emailTemplate server-side on every
+ * swipe (runs.execute_prompt_search), so saving the default here changes the
+ * very next draft with no other app wiring.
+ */
+
+/** The default template that shapes every drafted email. */
+export type EmailTemplateDefault = {
+  /** 'networking' | 'referral' | 'follow_up' | 'custom' | null (backend default) */
+  purpose: string | null;
+  customInstructions: string;
+  signoffPhrase: string;
+  signatureBlock: string;
+  name: string;
+  subject: string;
+  savedTemplateId: string | null;
+};
+
+/** A named reusable template (Elite feature server-side). */
+export type SavedTemplate = { id: string; name: string; subject: string; body: string };
+
+export const EMPTY_TEMPLATE: EmailTemplateDefault = {
+  purpose: null,
+  customInstructions: '',
+  signoffPhrase: 'Best,',
+  signatureBlock: '',
+  name: '',
+  subject: '',
+  savedTemplateId: null,
+};
+
+export async function fetchEmailTemplate(): Promise<EmailTemplateDefault> {
+  if (USE_MOCKS) return EMPTY_TEMPLATE;
+  const r = await apiFetch<Partial<EmailTemplateDefault>>('/api/email-template');
+  return {
+    purpose: r.purpose ?? null,
+    customInstructions: r.customInstructions || '',
+    signoffPhrase: (r.signoffPhrase || '').trim() || 'Best,',
+    signatureBlock: r.signatureBlock || '',
+    name: r.name || '',
+    subject: r.subject || '',
+    savedTemplateId: r.savedTemplateId ?? null,
+  };
+}
+
+/** Save the default template (all tiers). POST /api/email-template. */
+export async function saveEmailTemplate(t: EmailTemplateDefault): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/email-template', {
+    method: 'POST',
+    body: {
+      purpose: t.purpose,
+      stylePreset: null,
+      customInstructions: t.customInstructions,
+      signoffPhrase: t.signoffPhrase,
+      signatureBlock: t.signatureBlock,
+      name: t.name,
+      subject: t.subject,
+      savedTemplateId: t.savedTemplateId,
+    },
+  });
+}
+
+/** List saved custom templates. Elite-gated server-side (403 otherwise), so
+ *  callers should only fetch when the profile says Elite. */
+export async function fetchSavedTemplates(): Promise<SavedTemplate[]> {
+  if (USE_MOCKS) return [];
+  const r = await apiFetch<{ templates?: Partial<SavedTemplate>[] }>('/api/email-template/saved');
+  return (r.templates || []).map((t) => ({
+    id: String(t.id),
+    name: t.name || '',
+    subject: t.subject || '',
+    body: t.body || '',
+  }));
+}
+
+/** Create (no id) or update (with id) a saved custom template. Elite-gated. */
+export async function createSavedTemplate(t: {
+  id?: string;
+  name: string;
+  subject: string;
+  body: string;
+}): Promise<{ id: string }> {
+  if (USE_MOCKS) return { id: t.id || 'mock-template' };
+  return apiFetch<{ id: string }>('/api/email-template/saved', { method: 'POST', body: t });
+}
+
+export async function deleteSavedTemplate(id: string): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch(`/api/email-template/saved/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

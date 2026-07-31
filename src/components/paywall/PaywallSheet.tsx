@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Image,
   Linking,
   Modal,
   Pressable,
@@ -15,8 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   fetchPaywallData,
+  fetchStorefrontCountry,
   iapAvailable,
-  packActionFraming,
+  packActionCounts,
   packCreditAmount,
   purchasePackage,
   purchaseProduct,
@@ -37,10 +41,51 @@ import { fonts } from '@/theme/tokens';
  * Every price string renders from the store offering, never hardcoded.
  * Purchases grant server-side; after buying we poll /me until the balance or
  * tier moves (webhook race, ~15s), then close.
+ *
+ * Visual language mirrors the Credits screen shop (Rylan 2026-07-30): the
+ * same purple-blue gradient banners with luminous rims, the watercolor
+ * mountains wash, serif numbers, and gold price chips.
  */
 
 const TERMS_URL = 'https://offerloop.ai/terms-of-service';
 const PRIVACY_URL = 'https://offerloop.ai/privacy';
+
+const MOUNTAINS = require('../../../assets/images/watercolor-mountains.webp');
+
+/** Same family as the Credits screen PACK_STYLES; keep the two in sync. */
+const PACK_STYLES: {
+  gradient: readonly [string, string];
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  rim: readonly [string, string];
+  badge: string | null;
+}[] = [
+  {
+    gradient: ['#2563EB', '#7C3AED'],
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+    rim: ['#93C5FD', '#C4B5FD'],
+    badge: null,
+  },
+  {
+    gradient: ['#7C3AED', '#4338CA'],
+    start: { x: 1, y: 0 },
+    end: { x: 0, y: 1 },
+    rim: ['#E9D5FF', '#818CF8'],
+    badge: 'MOST POPULAR',
+  },
+  {
+    gradient: ['#312E81', '#6D28D9'],
+    start: { x: 0, y: 1 },
+    end: { x: 1, y: 0 },
+    rim: ['#F0ABFC', '#A78BFA'],
+    badge: 'BEST VALUE',
+  },
+];
+
+const PRO_STYLE = PACK_STYLES[0];
+const ELITE_STYLE = PACK_STYLES[2];
+const GOLD: readonly [string, string] = ['#FDE047', '#F59E0B'];
 
 export default function PaywallHost() {
   const [request, setRequest] = useState<PaywallRequest | null>(null);
@@ -49,11 +94,31 @@ export default function PaywallHost() {
   return <PaywallSheet request={request} onClose={() => setRequest(null)} />;
 }
 
+function Rim({
+  rim,
+  children,
+  marginTop = 0,
+}: {
+  rim: readonly [string, string];
+  children: React.ReactNode;
+  marginTop?: number;
+}) {
+  return (
+    <LinearGradient
+      colors={rim}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ borderRadius: 21, padding: 2, marginTop }}>
+      {children}
+    </LinearGradient>
+  );
+}
+
 function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: () => void }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { profile, showToast } = useApp();
+  const { profile, showToast, connection } = useApp();
 
   const isSubscriber = profile.plan !== 'Free';
   const [data, setData] = useState<PaywallData | null>(null);
@@ -74,7 +139,10 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
   // After a successful purchase, the server grant lands via webhook. Poll /me
   // until credits or plan move, then celebrate and close. Give up politely at
   // ~16s; the balance still refreshes on the next normal refetch.
-  const baseline = useRef({ credits: profile.credits, plan: profile.plan });
+  // live: baseline came from real /me data, not the mock fallback. The grant
+  // detector requires a live-to-live comparison so a mock flicker during
+  // refetch cannot read as a balance change and celebrate falsely.
+  const baseline = useRef({ credits: profile.credits, plan: profile.plan, live: false });
   const pollUntilGranted = useCallback(async () => {
     setProcessing(true);
     for (let i = 0; i < 8; i++) {
@@ -85,48 +153,77 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
 
   useEffect(() => {
     if (!processing) return;
-    if (profile.credits !== baseline.current.credits || profile.plan !== baseline.current.plan) {
+    // Celebrate only on a real change between two live profiles: a balance
+    // increase (pack) or a plan change (subscription).
+    if (!baseline.current.live || connection.usingSampleData) return;
+    if (
+      profile.credits > baseline.current.credits ||
+      profile.plan !== baseline.current.plan
+    ) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('You are all set, balance updated');
       onClose();
     }
-  }, [processing, profile.credits, profile.plan, showToast, onClose]);
+  }, [processing, profile.credits, profile.plan, connection.usingSampleData, showToast, onClose]);
+
+  // Staging diagnostic, same as the Credits screen: show the full reason so
+  // sandbox failures are debuggable from a photo of the phone.
+  const showFailure = useCallback(async (productId: string, error?: string) => {
+    const storefront = await fetchStorefrontCountry();
+    Alert.alert(
+      'Purchase failed (staging diagnostics)',
+      [
+        `Product: ${productId}`,
+        `Storefront: ${storefront ?? 'unknown'}`,
+        `Error: ${error ?? 'no detail, nothing was charged'}`,
+      ].join('\n\n'),
+    );
+  }, []);
 
   const buyPro = useCallback(async () => {
     if (!data?.proPackage || busy) return;
     setBusy(true);
-    baseline.current = { credits: profile.credits, plan: profile.plan };
+    baseline.current = {
+      credits: profile.credits,
+      plan: profile.plan,
+      live: !connection.usingSampleData,
+    };
     const r = await purchasePackage(data.proPackage);
     setBusy(false);
-    if (r.ok) {
-      void pollUntilGranted();
-    } else if (!r.cancelled) {
-      showToast('Purchase did not go through, nothing was charged');
-    }
-  }, [data, busy, profile.credits, profile.plan, pollUntilGranted, showToast]);
+    if (r.ok) void pollUntilGranted();
+    else if (!r.cancelled) void showFailure(data.proPackage.product.identifier, r.error);
+  }, [data, busy, profile.credits, profile.plan, connection.usingSampleData, pollUntilGranted, showFailure]);
 
   const buyElite = useCallback(async () => {
     if (!data?.elitePackage || busy) return;
     setBusy(true);
-    baseline.current = { credits: profile.credits, plan: profile.plan };
+    baseline.current = {
+      credits: profile.credits,
+      plan: profile.plan,
+      live: !connection.usingSampleData,
+    };
     const r = await purchasePackage(data.elitePackage);
     setBusy(false);
     if (r.ok) void pollUntilGranted();
-    else if (!r.cancelled) showToast('Purchase did not go through, nothing was charged');
-  }, [data, busy, profile.credits, profile.plan, pollUntilGranted, showToast]);
+    else if (!r.cancelled) void showFailure(data.elitePackage.product.identifier, r.error);
+  }, [data, busy, profile.credits, profile.plan, connection.usingSampleData, pollUntilGranted, showFailure]);
 
   const buyPack = useCallback(
     async (productId: string) => {
       const product = data?.packs.find((p) => p.identifier === productId);
       if (!product || busy) return;
       setBusy(true);
-      baseline.current = { credits: profile.credits, plan: profile.plan };
+      baseline.current = {
+      credits: profile.credits,
+      plan: profile.plan,
+      live: !connection.usingSampleData,
+    };
       const r = await purchaseProduct(product);
       setBusy(false);
       if (r.ok) void pollUntilGranted();
-      else if (!r.cancelled) showToast('Purchase did not go through, nothing was charged');
+      else if (!r.cancelled) void showFailure(productId, r.error);
     },
-    [data, busy, profile.credits, profile.plan, pollUntilGranted, showToast],
+    [data, busy, profile.credits, profile.plan, connection.usingSampleData, pollUntilGranted, showFailure],
   );
 
   const onRestore = useCallback(async () => {
@@ -243,96 +340,179 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
                   </Text>
 
                   {pro && (
-                    <View
-                      style={{
-                        borderWidth: 1.5,
-                        borderColor: colors.navy,
-                        borderRadius: 10,
-                        padding: 16,
-                        gap: 8,
-                        marginBottom: 10,
-                      }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
-                        <Text
-                          style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>
-                          Offerloop Pro
-                        </Text>
-                        <Text
+                    <Rim rim={PRO_STYLE.rim}>
+                      <LinearGradient
+                        colors={PRO_STYLE.gradient}
+                        start={PRO_STYLE.start}
+                        end={PRO_STYLE.end}
+                        style={{ borderRadius: 19, padding: 18, overflow: 'hidden' }}>
+                        <Image
+                          source={MOUNTAINS}
+                          resizeMode="cover"
                           style={{
-                            fontFamily: fonts.display,
-                            fontSize: 24,
-                            color: colors.heading,
-                            marginLeft: 'auto',
-                          }}>
-                          {proPrice}
-                          <Text style={{ fontSize: 14, fontFamily: fonts.sans, color: colors.inkSecondary }}>
-                            /mo
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            width: '100%',
+                            height: '100%',
+                            opacity: 0.16,
+                          }}
+                        />
+                        <Ionicons
+                          name="flash"
+                          size={116}
+                          color="rgba(255,255,255,0.10)"
+                          style={{ position: 'absolute', right: -18, bottom: -22 }}
+                        />
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                          <Text
+                            style={{
+                              fontFamily: fonts.sansSemibold,
+                              fontSize: 12.5,
+                              letterSpacing: 1.2,
+                              color: 'rgba(255,255,255,0.9)',
+                            }}>
+                            OFFERLOOP PRO
                           </Text>
-                        </Text>
-                      </View>
-                      <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
-                        2,000 credits a month for drafts, contacts, and auto-applies.
-                      </Text>
-                      <Pressable
-                        onPress={() => void buyPro()}
-                        disabled={busy}
-                        style={{
-                          backgroundColor: colors.ink,
-                          borderRadius: 8,
-                          height: 44,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          opacity: busy ? 0.6 : 1,
-                          marginTop: 4,
-                        }}>
-                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.paper }}>
-                          {hasTrial ? 'Start 7-day free trial' : `Get Pro for ${proPrice}/mo`}
-                        </Text>
-                      </Pressable>
-                      {hasTrial && (
+                          <Text
+                            style={{
+                              fontFamily: fonts.display,
+                              fontSize: 32,
+                              color: '#FFFFFF',
+                              marginLeft: 'auto',
+                            }}>
+                            {proPrice}
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontFamily: fonts.sans,
+                                color: 'rgba(255,255,255,0.8)',
+                              }}>
+                              /mo
+                            </Text>
+                          </Text>
+                        </View>
                         <Text
                           style={{
                             fontFamily: fonts.sans,
-                            fontSize: 12,
-                            color: colors.inkTertiary,
-                            textAlign: 'center',
+                            fontSize: 13,
+                            color: 'rgba(255,255,255,0.85)',
+                            marginTop: 6,
                           }}>
-                          7 days free, then {proPrice}/mo. Cancel anytime.
+                          2,000 credits a month for drafts, contacts, and auto-applies.
                         </Text>
-                      )}
-                    </View>
+                        <Pressable
+                          onPress={() => void buyPro()}
+                          disabled={busy}
+                          style={{ marginTop: 14, opacity: busy ? 0.6 : 1 }}>
+                          <LinearGradient
+                            colors={GOLD}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 0, y: 1 }}
+                            style={{
+                              borderRadius: 12,
+                              height: 46,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 15.5,
+                                color: '#451A03',
+                              }}>
+                              {hasTrial ? 'Start 7-day free trial' : `Get Pro for ${proPrice}/mo`}
+                            </Text>
+                          </LinearGradient>
+                        </Pressable>
+                        {hasTrial && (
+                          <Text
+                            style={{
+                              fontFamily: fonts.sans,
+                              fontSize: 12,
+                              color: 'rgba(255,255,255,0.8)',
+                              textAlign: 'center',
+                              marginTop: 8,
+                            }}>
+                            7 days free, then {proPrice}/mo. Cancel anytime.
+                          </Text>
+                        )}
+                      </LinearGradient>
+                    </Rim>
                   )}
 
                   {elite && (
-                    <Pressable
-                      onPress={() => void buyElite()}
-                      disabled={busy}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: colors.hairline,
-                        borderRadius: 10,
-                        padding: 14,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginBottom: 14,
-                        opacity: busy ? 0.6 : 1,
-                      }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
-                          Offerloop Elite
-                        </Text>
-                        <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-                          5,000 credits a month for a heavy recruiting push.
-                        </Text>
-                      </View>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-                        {elite.product.priceString}/mo
-                      </Text>
-                    </Pressable>
+                    <Rim rim={ELITE_STYLE.rim} marginTop={10}>
+                      <Pressable onPress={() => void buyElite()} disabled={busy}>
+                        <LinearGradient
+                          colors={ELITE_STYLE.gradient}
+                          start={ELITE_STYLE.start}
+                          end={ELITE_STYLE.end}
+                          style={{
+                            borderRadius: 19,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            overflow: 'hidden',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                            opacity: busy ? 0.6 : 1,
+                          }}>
+                          <Image
+                            source={MOUNTAINS}
+                            resizeMode="cover"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              width: '100%',
+                              height: '100%',
+                              opacity: 0.14,
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 12,
+                                letterSpacing: 1.1,
+                                color: 'rgba(255,255,255,0.9)',
+                              }}>
+                              OFFERLOOP ELITE
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sans,
+                                fontSize: 12.5,
+                                color: 'rgba(255,255,255,0.85)',
+                                marginTop: 3,
+                              }}>
+                              5,000 credits a month for a heavy recruiting push.
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
+                            {elite.product.priceString}
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontFamily: fonts.sans,
+                                color: 'rgba(255,255,255,0.8)',
+                              }}>
+                              /mo
+                            </Text>
+                          </Text>
+                        </LinearGradient>
+                      </Pressable>
+                    </Rim>
                   )}
 
-                  <Pressable onPress={() => setShowPacks((v) => !v)} style={{ paddingVertical: 4 }}>
+                  <Pressable
+                    onPress={() => setShowPacks((v) => !v)}
+                    style={{ paddingVertical: 4, marginTop: 12 }}>
                     <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.accent }}>
                       Just need a few more drafts?
                     </Text>
@@ -359,57 +539,115 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
               )}
 
               {showPacks &&
-                data.packs.map((p) => {
+                data.packs.map((p, i) => {
                   const amount = packCreditAmount(p.identifier);
-                  const badge =
-                    amount === 400 ? 'Most popular' : amount === 1000 ? 'Best value' : null;
+                  const style = PACK_STYLES[i] ?? PACK_STYLES[0];
+                  const counts =
+                    typeof amount === 'number'
+                      ? packActionCounts(amount, profile.creditsPerSwipe)
+                      : null;
                   return (
-                    <Pressable
-                      key={p.identifier}
-                      onPress={() => void buyPack(p.identifier)}
-                      disabled={busy}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: badge === 'Most popular' ? colors.navy : colors.hairline,
-                        borderRadius: 10,
-                        padding: 14,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginTop: 8,
-                        opacity: busy ? 0.6 : 1,
-                      }}>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Text
-                            style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                            {p.title || `${amount ?? ''} credits`}
-                          </Text>
-                          {badge && (
-                            <View
-                              style={{
-                                backgroundColor: colors.navy,
-                                borderRadius: 8,
-                                paddingHorizontal: 8,
-                                paddingVertical: 2,
-                              }}>
+                    <Rim key={p.identifier} rim={style.rim} marginTop={10}>
+                      <Pressable onPress={() => void buyPack(p.identifier)} disabled={busy}>
+                        <LinearGradient
+                          colors={style.gradient}
+                          start={style.start}
+                          end={style.end}
+                          style={{
+                            borderRadius: 19,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            overflow: 'hidden',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                            opacity: busy ? 0.6 : 1,
+                          }}>
+                          <Image
+                            source={MOUNTAINS}
+                            resizeMode="cover"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              width: '100%',
+                              height: '100%',
+                              opacity: 0.14,
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                              <Ionicons name="flash" size={15} color="#FDE047" />
                               <Text
-                                style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: colors.paper }}>
-                                {badge}
+                                style={{ fontFamily: fonts.display, fontSize: 24, color: '#FFFFFF' }}>
+                                {typeof amount === 'number' ? amount.toLocaleString() : p.title}
                               </Text>
+                              <Text
+                                style={{
+                                  fontFamily: fonts.sansSemibold,
+                                  fontSize: 11,
+                                  letterSpacing: 1,
+                                  color: 'rgba(255,255,255,0.85)',
+                                }}>
+                                CREDITS
+                              </Text>
+                              {style.badge && (
+                                <View
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.22)',
+                                    borderRadius: 7,
+                                    paddingHorizontal: 7,
+                                    paddingVertical: 2,
+                                    marginLeft: 'auto',
+                                  }}>
+                                  <Text
+                                    style={{
+                                      fontFamily: fonts.sansSemibold,
+                                      fontSize: 9.5,
+                                      letterSpacing: 0.6,
+                                      color: '#FFFFFF',
+                                    }}>
+                                    {style.badge}
+                                  </Text>
+                                </View>
+                              )}
                             </View>
-                          )}
-                        </View>
-                        {typeof amount === 'number' && (
-                          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-                            {packActionFraming(amount, profile.creditsPerSwipe)}
-                          </Text>
-                        )}
-                      </View>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-                        {p.priceString}
-                      </Text>
-                    </Pressable>
+                            {counts && (
+                              <Text
+                                style={{
+                                  fontFamily: fonts.sans,
+                                  fontSize: 11.5,
+                                  color: 'rgba(255,255,255,0.85)',
+                                  marginTop: 3,
+                                }}>
+                                {'≈'} {counts.drafts} drafts {'·'} {counts.applies}{' '}
+                                auto-applies
+                              </Text>
+                            )}
+                          </View>
+                          <LinearGradient
+                            colors={GOLD}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 0, y: 1 }}
+                            style={{
+                              borderRadius: 10,
+                              paddingHorizontal: 14,
+                              paddingVertical: 9,
+                            }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 14.5,
+                                color: '#451A03',
+                              }}>
+                              {p.priceString}
+                            </Text>
+                          </LinearGradient>
+                        </LinearGradient>
+                      </Pressable>
+                    </Rim>
                   );
                 })}
 
