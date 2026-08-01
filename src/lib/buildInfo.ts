@@ -12,6 +12,11 @@ import * as Updates from 'expo-updates';
 export const OTA_VERSION = 'staging v16';
 export const OTA_NOTES = 'Purchase toast only celebrates a real balance increase or plan change between live profiles; no more false "all set" on data flicker';
 
+/** Store builds (production channel) hide the stamp entirely: it is a
+ *  staging QA affordance, not something App Review or a real user should
+ *  ever see in Settings. */
+export const SHOW_BUILD_STAMP = __DEV__ || Updates.channel !== 'production';
+
 /** e.g. "staging v3 · a1b2c3d4". The id suffix is the EAS update id, absent
  *  when running the embedded bundle (fresh install before the first OTA) or
  *  in local dev. */

@@ -25,7 +25,7 @@ import ReferralCard from '@/components/ReferralCard';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
-import { OTA_NOTES, otaStamp } from '@/lib/buildInfo';
+import { OTA_NOTES, otaStamp, SHOW_BUILD_STAMP } from '@/lib/buildInfo';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -1146,27 +1146,30 @@ export default function ProfileScreen() {
               ) : null}
               {/* Which OTA is this phone actually running? Bumped on every
                   publish (src/lib/buildInfo.ts) so testers can tell at a
-                  glance whether the change they are checking has landed. */}
-              <View style={{ gap: 2, paddingTop: 6 }}>
-                <Text
-                  style={{
-                    fontFamily: fonts.sansMedium,
-                    fontSize: 11.5,
-                    color: colors.inkTertiary,
-                    textAlign: 'center',
-                  }}>
-                  {otaStamp()}
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: fonts.sans,
-                    fontSize: 11,
-                    color: colors.inkTertiary,
-                    textAlign: 'center',
-                  }}>
-                  {OTA_NOTES}
-                </Text>
-              </View>
+                  glance whether the change they are checking has landed.
+                  Hidden on store builds; it is a staging QA affordance. */}
+              {SHOW_BUILD_STAMP && (
+                <View style={{ gap: 2, paddingTop: 6 }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 11.5,
+                      color: colors.inkTertiary,
+                      textAlign: 'center',
+                    }}>
+                    {otaStamp()}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sans,
+                      fontSize: 11,
+                      color: colors.inkTertiary,
+                      textAlign: 'center',
+                    }}>
+                    {OTA_NOTES}
+                  </Text>
+                </View>
+              )}
             </>
           ) : null}
 
