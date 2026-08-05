@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'staging v16';
-export const OTA_NOTES = 'Purchase toast only celebrates a real balance increase or plan change between live profiles; no more false "all set" on data flicker';
+export const OTA_VERSION = 'staging v17';
+export const OTA_NOTES = 'Rejection-5 fixes: paywall is a native sheet (opens from Credits/Scout/outreach), in-app account creation with password sign-in and reset, AI consent gate before AI features, no web purchase links';
 
 /** Store builds (production channel) hide the stamp entirely: it is a
  *  staging QA affordance, not something App Review or a real user should
