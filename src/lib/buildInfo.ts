@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'staging v18';
-export const OTA_NOTES = 'v17 fixes plus plan management: Pro sees Upgrade to Elite, Elite sees Switch to Pro (next renewal), Manage subscription opens Apple sheet; all Apple-managed subs only';
+export const OTA_VERSION = 'staging v19';
+export const OTA_NOTES = 'Paywall presents as a full-height card (the 0.88 detent formSheet clipped content and left a white void); drag handle restored';
 
 /** Store builds (production channel) hide the stamp entirely: it is a
  *  staging QA affordance, not something App Review or a real user should

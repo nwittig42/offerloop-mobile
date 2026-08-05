@@ -277,10 +277,20 @@ export default function PaywallSheet({
       style={{
         flex: 1,
         backgroundColor: colors.paper,
-        paddingTop: 18,
+        paddingTop: 12,
         paddingHorizontal: 20,
         paddingBottom: insets.bottom + 16,
       }}>
+        <View
+          style={{
+            alignSelf: 'center',
+            width: 40,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: colors.hairline,
+            marginBottom: 14,
+          }}
+        />
         <ScrollView showsVerticalScrollIndicator={false}>
           {processing ? (
             <View style={{ alignItems: 'center', paddingVertical: 40, gap: 14 }}>

@@ -196,15 +196,7 @@ function ThemedShell() {
         <Stack.Screen name="outreach/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="scout" options={{ presentation: 'modal' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
-        <Stack.Screen
-          name="paywall"
-          options={{
-            presentation: 'formSheet',
-            sheetAllowedDetents: [0.88],
-            sheetGrabberVisible: true,
-            sheetCornerRadius: 18,
-          }}
-        />
+        <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />
