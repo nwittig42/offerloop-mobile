@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fetchPaywallData,
   fetchStorefrontCountry,
+  hasAppleSubscription,
   iapAvailable,
   packActionCounts,
   packCreditAmount,
@@ -129,11 +130,18 @@ export default function PaywallSheet({
   const [showPacks, setShowPacks] = useState(isSubscriber || packsFirst);
   const [busy, setBusy] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // Plan switching (Pro <-> Elite) renders ONLY for Apple-managed
+  // subscriptions. A web (Stripe) subscriber must never see a path to a
+  // second, parallel Apple subscription.
+  const [appleManaged, setAppleManaged] = useState(false);
 
   useEffect(() => {
     let alive = true;
     void fetchPaywallData().then((d) => {
       if (alive) setData(d);
+    });
+    void hasAppleSubscription().then((v) => {
+      if (alive) setAppleManaged(v);
     });
     return () => {
       alive = false;
@@ -186,6 +194,9 @@ export default function PaywallSheet({
 
   const buyPro = useCallback(async () => {
     if (!data?.proPackage || busy) return;
+    // Elite -> Pro is a DOWNGRADE: Apple applies it at the next renewal, so
+    // there is no server-side change to poll for. Acknowledge and close.
+    const isDowngrade = profile.plan === 'Elite';
     setBusy(true);
     baseline.current = {
       credits: profile.credits,
@@ -194,9 +205,15 @@ export default function PaywallSheet({
     };
     const r = await purchasePackage(data.proPackage);
     setBusy(false);
-    if (r.ok) void pollUntilGranted();
-    else if (!r.cancelled) void showFailure(data.proPackage.product.identifier, r.error);
-  }, [data, busy, profile.credits, profile.plan, connection.usingSampleData, pollUntilGranted, showFailure]);
+    if (r.ok) {
+      if (isDowngrade) {
+        showToast('Switch scheduled: Pro starts at your next renewal');
+        onClose();
+      } else {
+        void pollUntilGranted();
+      }
+    } else if (!r.cancelled) void showFailure(data.proPackage.product.identifier, r.error);
+  }, [data, busy, profile.credits, profile.plan, connection.usingSampleData, pollUntilGranted, showFailure, showToast, onClose]);
 
   const buyElite = useCallback(async () => {
     if (!data?.elitePackage || busy) return;
@@ -528,6 +545,148 @@ export default function PaywallSheet({
                     }}>
                     Purchased credits never expire and sit on top of your monthly allowance.
                   </Text>
+
+                  {/* Plan switching, Apple-managed subscriptions only (both
+                      plans share one subscription group, so Apple handles
+                      proration on upgrade and next-renewal timing on
+                      downgrade). Web subscribers never see these. */}
+                  {appleManaged && profile.plan === 'Pro' && elite && (
+                    <Rim rim={ELITE_STYLE.rim} marginTop={2}>
+                      <Pressable onPress={() => void buyElite()} disabled={busy}>
+                        <LinearGradient
+                          colors={ELITE_STYLE.gradient}
+                          start={ELITE_STYLE.start}
+                          end={ELITE_STYLE.end}
+                          style={{
+                            borderRadius: 19,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            overflow: 'hidden',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                            opacity: busy ? 0.6 : 1,
+                          }}>
+                          <Image
+                            source={MOUNTAINS}
+                            resizeMode="cover"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              width: '100%',
+                              height: '100%',
+                              opacity: 0.14,
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 12,
+                                letterSpacing: 1.1,
+                                color: 'rgba(255,255,255,0.9)',
+                              }}>
+                              UPGRADE TO ELITE
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sans,
+                                fontSize: 12.5,
+                                color: 'rgba(255,255,255,0.85)',
+                                marginTop: 3,
+                              }}>
+                              5,000 credits a month. Applies right away, Apple prorates the
+                              difference.
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
+                            {elite.product.priceString}
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontFamily: fonts.sans,
+                                color: 'rgba(255,255,255,0.8)',
+                              }}>
+                              /mo
+                            </Text>
+                          </Text>
+                        </LinearGradient>
+                      </Pressable>
+                    </Rim>
+                  )}
+                  {appleManaged && profile.plan === 'Elite' && pro && (
+                    <Rim rim={PRO_STYLE.rim} marginTop={2}>
+                      <Pressable onPress={() => void buyPro()} disabled={busy}>
+                        <LinearGradient
+                          colors={PRO_STYLE.gradient}
+                          start={PRO_STYLE.start}
+                          end={PRO_STYLE.end}
+                          style={{
+                            borderRadius: 19,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            overflow: 'hidden',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                            opacity: busy ? 0.6 : 1,
+                          }}>
+                          <Image
+                            source={MOUNTAINS}
+                            resizeMode="cover"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              width: '100%',
+                              height: '100%',
+                              opacity: 0.14,
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sansSemibold,
+                                fontSize: 12,
+                                letterSpacing: 1.1,
+                                color: 'rgba(255,255,255,0.9)',
+                              }}>
+                              SWITCH TO PRO
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: fonts.sans,
+                                fontSize: 12.5,
+                                color: 'rgba(255,255,255,0.85)',
+                                marginTop: 3,
+                              }}>
+                              2,000 credits a month. Starts at your next renewal, Elite runs
+                              until then.
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
+                            {proPrice}
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontFamily: fonts.sans,
+                                color: 'rgba(255,255,255,0.8)',
+                              }}>
+                              /mo
+                            </Text>
+                          </Text>
+                        </LinearGradient>
+                      </Pressable>
+                    </Rim>
+                  )}
+                  {appleManaged && (
+                    <View style={{ height: 10 }} />
+                  )}
                 </>
               )}
 

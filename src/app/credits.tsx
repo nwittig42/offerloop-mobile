@@ -14,11 +14,13 @@ import { requestWebHandoff } from '@/api/endpoints/upgrade';
 import {
   fetchPaywallData,
   fetchStorefrontCountry,
+  hasAppleSubscription,
   iapAvailable,
   packActionCounts,
   packCreditAmount,
   PACK_CREDIT_AMOUNTS,
   purchaseProduct,
+  showManageSubscriptions,
 } from '@/api/purchases';
 import { qk } from '@/api/queryKeys';
 import { presentPaywall } from '@/components/paywall/paywallBus';
@@ -93,6 +95,9 @@ export default function CreditsScreen() {
   const [packs, setPacks] = useState<PurchasesStoreProduct[] | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Apple-managed subscription: shows the native manage sheet row. Web
+  // (Stripe) subscribers manage where they subscribed; no link from here.
+  const [appleManaged, setAppleManaged] = useState(false);
   // live: baseline was captured from real /me data, not the mock fallback.
   // The grant detector requires live-to-live comparison; without it, a mock
   // flicker during refetch reads as a balance change and celebrates falsely.
@@ -101,6 +106,7 @@ export default function CreditsScreen() {
   const loadPacks = useCallback(() => {
     if (!iapAvailable()) return;
     void fetchPaywallData().then((d) => setPacks(d.packs));
+    void hasAppleSubscription().then(setAppleManaged);
   }, []);
 
   useEffect(() => {
@@ -483,6 +489,19 @@ export default function CreditsScreen() {
               </View>
             )}
           </View>
+        )}
+
+        {/* Apple-managed subscribers get Apple's native manage sheet (cancel,
+            switch plans). Never a web link. */}
+        {iapLive && appleManaged && profile.plan !== 'Free' && (
+          <Pressable
+            onPress={() => void showManageSubscriptions()}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.inkSecondary }}>
+              Manage subscription
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
+          </Pressable>
         )}
 
         {/* How credits work, demoted to a quiet expandable row. */}

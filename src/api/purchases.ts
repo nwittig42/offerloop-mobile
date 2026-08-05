@@ -211,3 +211,31 @@ export async function restorePurchases(): Promise<boolean> {
     return false;
   }
 }
+
+/** True when the active subscription is managed by APPLE through this app.
+ *  RevenueCat only tracks store purchases here, so a web (Stripe)
+ *  subscription is invisible to it; that difference is the whole point.
+ *  Gates the in-app plan-switch tiles and the manage sheet, so a web
+ *  subscriber can never be sold a second, parallel Apple subscription
+ *  (the webhook would ignore it and they would pay twice). */
+export async function hasAppleSubscription(): Promise<boolean> {
+  if (!iapAvailable()) return false;
+  try {
+    const info = await Purchases.getCustomerInfo();
+    return Object.keys(info.entitlements.active).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Apple's own native subscription-management sheet (cancel, switch plans).
+ *  Not a web link; safe under 3.1.1. */
+export async function showManageSubscriptions(): Promise<boolean> {
+  if (!iapAvailable()) return false;
+  try {
+    await Purchases.showManageSubscriptions();
+    return true;
+  } catch {
+    return false;
+  }
+}
