@@ -36,6 +36,7 @@ import {
   INDUSTRY_SUGGESTIONS,
   TARGET_ROLE_SUGGESTIONS,
 } from '@/mocks/data';
+import { useAIConsent } from '@/lib/aiConsent';
 import { useApp } from '@/store/app';
 import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -306,6 +307,7 @@ export default function ProfileScreen() {
   };
   const [parseOpen, setParseOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const { consent: aiConsent } = useAIConsent();
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [enriching, setEnriching] = useState(false);
 
@@ -1063,6 +1065,21 @@ export default function ProfileScreen() {
                   deletion are App Store requirements (deletion is Apple 5.1.1(v),
                   a hard rejection without it). */}
               <Card padded={false} style={{ paddingHorizontal: 16 }}>
+                {/* AI data-sharing choice, reviewable and reversible any time
+                    (guidelines 5.1.1(i)/5.1.2(i)). */}
+                <Pressable
+                  onPress={() => router.push({ pathname: '/ai-consent', params: { mode: 'settings' } })}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
+                  <Ionicons name="sparkles-outline" size={18} color={colors.inkSecondary} />
+                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                    AI and your data
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+                    {aiConsent === 'granted' ? 'Allowed' : 'Off'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={15} color={colors.inkTertiary} />
+                </Pressable>
+                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
                 <Pressable
                   onPress={() => Linking.openURL('https://offerloop.ai/privacy')}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,9 +11,14 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * Passwordless sign-in: enter your email, we send a magic link, tapping it
- * opens the app signed in. No passwords, no social buttons (so no Sign in with
- * Apple requirement). Same account as the website, matched by email.
+ * Sign-in, two paths sharing one email field:
+ * - Magic link (default): we send an https link, tapping it opens the app
+ *   signed in (completeSignInFromUrl handles the universal-link hand-back).
+ * - Password: for accounts created in-app (guideline 4 registration), the
+ *   App Review demo account, and dev builds. Includes password reset.
+ * First-party email auth only, no social buttons, so no Sign-in-with-Apple
+ * requirement (4.8 covers third-party login). Same Firebase project as the
+ * website, so accounts are shared by email.
  */
 // Hardcoded, NOT an env var: EXPO_PUBLIC_* is inlined by `eas build` but NOT
 // by `eas update`, so an OTA stripped the allowlist and the reviewer panel
@@ -25,26 +31,26 @@ const isReviewerEmail = (email: string): boolean =>
 export default function SignInScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { sendSignInLink, signInWithPassword } = useAuth();
+  const router = useRouter();
+  const { sendSignInLink, signInWithPassword, sendPasswordReset } = useAuth();
 
   const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<'enter' | 'sending' | 'sent'>('enter');
   const [error, setError] = useState<string | null>(null);
+  // Password path for accounts registered in-app. Off by default so the
+  // passwordless flow stays the hero; one tap reveals it.
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetNote, setResetNote] = useState<string | null>(null);
   // Resend: the link can land in spam or never arrive, and the only way
   // out used to be 'Use a different email'. Cooldown stops rapid taps
   // (each one invalidates the previous link).
   const [resendIn, setResendIn] = useState(0);
   const [resendNote, setResendNote] = useState<string | null>(null);
 
-  // Password sign-in for dev + internal (preview-channel) field builds, since the
-  // magic-link universal-link hand-back isn't built yet. Hidden on the production
-  // channel so store builds stay passwordless — with ONE exception: App Review.
-  // Apple reviewers must be able to sign in (submission gate, 2026-07-09); when
-  // the email typed in the MAIN field matches the build-time reviewer allowlist
-  // (EXPO_PUBLIC_REVIEWER_EMAILS, comma-separated, set in eas.json production
-  // env), the password panel appears for that account only. First-party
-  // email+password does not trigger the Sign-in-with-Apple rule (4.8 covers
-  // third-party/social login). Invisible to every normal user.
+  // Password panel state. Auto-opens for dev builds, the preview channel, and
+  // the App Review demo account (typed in the main field); any user can also
+  // reveal it via "Sign in with a password instead" since in-app registration
+  // (guideline 4) creates password accounts.
   const [devEmail, setDevEmail] = useState(process.env.EXPO_PUBLIC_DEV_EMAIL || '');
   // Reviewer types their address once, in the main field: mirror it down so
   // the panel only needs the password.
@@ -222,6 +228,13 @@ export default function SignInScreen() {
               onPress={send}
             />
           )}
+          {!showPassword ? (
+            <Button
+              label="Sign in with a password instead"
+              variant="ghost"
+              onPress={() => setShowPassword(true)}
+            />
+          ) : null}
           <Text
             style={{
               fontFamily: fonts.sans,
@@ -231,13 +244,19 @@ export default function SignInScreen() {
               lineHeight: 17,
               paddingTop: 4,
             }}>
-            New to Offerloop? Sign up and get set up on offerloop.ai, then sign in here with
-            the same email.
+            New to Offerloop?{' '}
+            <Text
+              style={{ color: colors.accent, fontFamily: fonts.sansMedium }}
+              onPress={() => router.replace('/(auth)/create-account')}>
+              Create your account
+            </Text>{' '}
+            right here in the app.
           </Text>
         </View>
       )}
 
-      {(__DEV__ || Updates.channel === 'preview' || isReviewerEmail(email)) && phase !== 'sent' ? (
+      {(__DEV__ || Updates.channel === 'preview' || isReviewerEmail(email) || showPassword) &&
+      phase !== 'sent' ? (
         <View
           style={{
             marginTop: 28,
@@ -295,12 +314,37 @@ export default function SignInScreen() {
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.negative }}>{devError}</Text>
           ) : null}
           <Button
-            label={devBusy ? 'Signing in...' : 'Dev sign in'}
+            label={devBusy ? 'Signing in...' : __DEV__ || Updates.channel === 'preview' ? 'Dev sign in' : 'Sign in'}
             variant="outline"
             fullWidth
             disabled={devBusy || !devEmail || !devPassword}
             onPress={devSignIn}
           />
+          <Button
+            label="Forgot password?"
+            variant="ghost"
+            disabled={!/\S+@\S+\.\S+/.test(devEmail.trim())}
+            onPress={async () => {
+              setResetNote(null);
+              try {
+                await sendPasswordReset(devEmail);
+                setResetNote('Password reset email sent. Check your inbox and spam.');
+              } catch {
+                setResetNote('Could not send the reset email. Check the address and try again.');
+              }
+            }}
+          />
+          {resetNote ? (
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 11.5,
+                color: colors.inkTertiary,
+                textAlign: 'center',
+              }}>
+              {resetNote}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       </ScrollView>

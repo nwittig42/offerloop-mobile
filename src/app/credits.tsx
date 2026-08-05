@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -248,31 +249,9 @@ export default function CreditsScreen() {
               left
             </Text>
             <View style={{ flex: 1 }} />
-            {iapLive && (
-              <Pressable
-                onPress={() => void openPlans()}
-                disabled={opening}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 5,
-                  backgroundColor: 'rgba(255,255,255,0.16)',
-                  borderRadius: 8,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  marginBottom: 8,
-                  opacity: opening ? 0.6 : 1,
-                }}>
-                {opening ? (
-                  <ActivityIndicator size="small" color={colors.paper} />
-                ) : (
-                  <Ionicons name="open-outline" size={13} color={colors.paper} />
-                )}
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.paper }}>
-                  Manage on the web
-                </Text>
-              </Pressable>
-            )}
+            {/* No web-management link when IAP is live: the web account page
+                reaches Stripe checkout, and any road from the app to an
+                external purchase is a 3.1.1 rejection (builds 11 to 14). */}
           </View>
 
           <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)' }}>
@@ -533,8 +512,10 @@ export default function CreditsScreen() {
           </Text>
         )}
 
-        {/* Builds without IAP keep the old web checkout path untouched. */}
-        {!iapLive && (
+        {/* Web checkout fallback: dev and internal builds only. A store build
+            whose RevenueCat config ever failed must show NOTHING purchasable
+            rather than a web checkout link (3.1.1). */}
+        {!iapLive && Updates.channel !== 'production' && (
           <>
             <Pressable onPress={() => void openPlans()} disabled={opening}>
               <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: opening ? 0.6 : 1 }}>

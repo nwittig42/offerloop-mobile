@@ -8,7 +8,6 @@ import {
   Alert,
   Image,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -28,7 +27,7 @@ import {
   type PaywallData,
 } from '@/api/purchases';
 import { qk } from '@/api/queryKeys';
-import { onPresentPaywall, type PaywallRequest } from '@/components/paywall/paywallBus';
+import { type PaywallContext } from '@/components/paywall/paywallBus';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -41,6 +40,10 @@ import { fonts } from '@/theme/tokens';
  * Every price string renders from the store offering, never hardcoded.
  * Purchases grant server-side; after buying we poll /me until the balance or
  * tier moves (webhook race, ~15s), then close.
+ *
+ * Rendered as the CONTENT of the /paywall route (native formSheet), never as
+ * a JS <Modal>: root-hosted JS modals fail to present on iOS 26 when a native
+ * modal is already up, which App Review read as an unresponsive button.
  *
  * Visual language mirrors the Credits screen shop (Rylan 2026-07-30): the
  * same purple-blue gradient banners with luminous rims, the watercolor
@@ -87,13 +90,6 @@ const PRO_STYLE = PACK_STYLES[0];
 const ELITE_STYLE = PACK_STYLES[2];
 const GOLD: readonly [string, string] = ['#FDE047', '#F59E0B'];
 
-export default function PaywallHost() {
-  const [request, setRequest] = useState<PaywallRequest | null>(null);
-  useEffect(() => onPresentPaywall((req) => setRequest(req)), []);
-  if (!request) return null;
-  return <PaywallSheet request={request} onClose={() => setRequest(null)} />;
-}
-
 function Rim({
   rim,
   children,
@@ -114,7 +110,15 @@ function Rim({
   );
 }
 
-function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: () => void }) {
+export default function PaywallSheet({
+  context: _context,
+  packsFirst,
+  onClose,
+}: {
+  context: PaywallContext | undefined;
+  packsFirst: boolean;
+  onClose: () => void;
+}) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -122,7 +126,7 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
 
   const isSubscriber = profile.plan !== 'Free';
   const [data, setData] = useState<PaywallData | null>(null);
-  const [showPacks, setShowPacks] = useState(isSubscriber || Boolean(request.packsFirst));
+  const [showPacks, setShowPacks] = useState(isSubscriber || packsFirst);
   const [busy, setBusy] = useState(false);
   const [processing, setProcessing] = useState(false);
 
@@ -243,34 +247,23 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
   const proPrice = pro?.product.priceString ?? '';
   const hasTrial = Boolean(pro?.product.introPrice && pro.product.introPrice.price === 0);
 
-  if (!iapAvailable()) return null;
+  // Store builds always have IAP; this only trips in Expo Go or a build made
+  // before the SDK was added. Close instead of rendering a dead screen.
+  const iapLive = iapAvailable();
+  useEffect(() => {
+    if (!iapLive) onClose();
+  }, [iapLive, onClose]);
+  if (!iapLive) return null;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(10,14,24,0.45)' }}
-        onPress={processing ? undefined : onClose}
-      />
-      <View
-        style={{
-          backgroundColor: colors.paper,
-          borderTopLeftRadius: 18,
-          borderTopRightRadius: 18,
-          paddingTop: 14,
-          paddingHorizontal: 20,
-          paddingBottom: insets.bottom + 16,
-          maxHeight: '86%',
-        }}>
-        <View
-          style={{
-            alignSelf: 'center',
-            width: 40,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: colors.hairline,
-            marginBottom: 12,
-          }}
-        />
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.paper,
+        paddingTop: 18,
+        paddingHorizontal: 20,
+        paddingBottom: insets.bottom + 16,
+      }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {processing ? (
             <View style={{ alignItems: 'center', paddingVertical: 40, gap: 14 }}>
@@ -702,7 +695,6 @@ function PaywallSheet({ request, onClose }: { request: PaywallRequest; onClose: 
             </>
           )}
         </ScrollView>
-      </View>
-    </Modal>
+    </View>
   );
 }

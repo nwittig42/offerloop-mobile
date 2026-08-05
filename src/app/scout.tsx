@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -22,6 +22,7 @@ import {
 } from '@/api/endpoints/scout';
 import Input from '@/components/ui/Input';
 import { scoutThread } from '@/lib/scoutThread';
+import { useAIConsent } from '@/lib/aiConsent';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -50,6 +51,16 @@ export default function ScoutScreen() {
   const { jobs, profile } = useApp();
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
+
+  // AI consent gate (5.1.2(i)): Scout conversations go to the AI providers.
+  // An unconsented open swaps this sheet for the disclosure screen before
+  // anything can be typed, let alone sent.
+  const { consent } = useAIConsent();
+  useEffect(() => {
+    if (consent !== 'granted') {
+      router.replace({ pathname: '/ai-consent', params: { mode: 'prompt' } });
+    }
+  }, [consent, router]);
 
   const job = jobId ? jobs.find((j) => j.id === jobId) : undefined;
 

@@ -1,7 +1,15 @@
+import { router } from 'expo-router';
+
 /**
- * Tiny presenter bus so anything (the store's insufficient-credits catch, the
- * Feed bounce, Scout, the Credits screen) can summon the paywall sheet without
- * threading props through the tree. PaywallHost in the root layout listens.
+ * Paywall presenter. Anything (the store's insufficient-credits catch, the
+ * Feed bounce, Scout, the Credits screen) can summon the paywall without
+ * threading props through the tree.
+ *
+ * The paywall is a ROUTE (/paywall, native formSheet), not a JS <Modal>: a
+ * JS modal hosted at the root fails to present on iOS 26 when a native modal
+ * (Credits, Scout, outreach detail) is already up, which read as "the Upgrade
+ * button does nothing" in App Review. Native stack presentation composes
+ * correctly from any screen, so every trigger site works the same way.
  */
 
 export type PaywallContext = 'draft' | 'auto-apply' | 'scout' | 'credits-screen' | 'low-balance';
@@ -12,15 +20,16 @@ export type PaywallRequest = {
   packsFirst?: boolean;
 };
 
-type Listener = (req: PaywallRequest) => void;
-
-const listeners = new Set<Listener>();
-
-export function onPresentPaywall(fn: Listener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
+// Rapid double-taps (or two low-balance catches racing) must not stack two
+// sheets; router.push has no built-in dedupe.
+let lastPresentedAt = 0;
 
 export function presentPaywall(req: PaywallRequest): void {
-  listeners.forEach((fn) => fn(req));
+  const now = Date.now();
+  if (now - lastPresentedAt < 700) return;
+  lastPresentedAt = now;
+  router.push({
+    pathname: '/paywall',
+    params: { context: req.context, ...(req.packsFirst ? { packsFirst: '1' } : {}) },
+  });
 }

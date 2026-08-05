@@ -2,8 +2,10 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { Alert } from 'react-native';
 import {
+  createUserWithEmailAndPassword,
   isSignInWithEmailLink,
   onIdTokenChanged,
+  sendPasswordResetEmail,
   sendSignInLinkToEmail,
   signInWithEmailAndPassword,
   signInWithEmailLink,
@@ -42,9 +44,12 @@ type AuthContextValue = {
   user: User | null;
   sendSignInLink: (email: string) => Promise<void>;
   completeSignInFromUrl: (url: string) => Promise<boolean>;
-  /** Dev-only: email+password sign-in so the real loop is testable before the
-   * magic-link universal link is set up. Stripped from release builds. */
+  /** Email+password sign-in: reviewers, users who registered in-app, and dev. */
   signInWithPassword: (email: string, password: string) => Promise<void>;
+  /** In-app registration (App Review guideline 4: no browser sign-up). The
+   * backend provisions the account on the first authenticated call. */
+  createAccountWithPassword: (email: string, password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
 };
@@ -80,6 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+  }, []);
+
+  const createAccountWithPassword = useCallback(async (email: string, password: string) => {
+    await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+  }, []);
+
+  const sendPasswordReset = useCallback(async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
   }, []);
 
   const completeSignInFromUrl = useCallback(async (url: string): Promise<boolean> => {
@@ -156,10 +169,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendSignInLink,
       completeSignInFromUrl,
       signInWithPassword,
+      createAccountWithPassword,
+      sendPasswordReset,
       signOut,
       getIdToken,
     }),
-    [status, user, sendSignInLink, completeSignInFromUrl, signInWithPassword, signOut, getIdToken],
+    [status, user, sendSignInLink, completeSignInFromUrl, signInWithPassword, createAccountWithPassword, sendPasswordReset, signOut, getIdToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 
 import { apiFetch } from '@/api/client';
+import { hasAIConsent, promptAIConsent } from '@/lib/aiConsent';
 
 /**
  * Resume upload.
@@ -55,6 +56,14 @@ export async function pickResume(): Promise<PickedResume | null> {
 
 /** Upload + parse. Resolves once the file is stored and the profile is updated. */
 export async function uploadResume(file: PickedResume): Promise<ResumeUploadResult> {
+  // AI consent gate (5.1.2(i)): parsing runs the resume through an AI
+  // provider. Every upload surface funnels through here, so this one check
+  // covers them all; the disclosure opens and the caller's catch shows its
+  // normal failure state.
+  if (!hasAIConsent()) {
+    promptAIConsent();
+    throw new Error('Resume parsing uses AI. Allow AI features to continue.');
+  }
   if (file.size && file.size > MAX_BYTES) {
     throw new Error('That file is over 10MB — try a smaller PDF.');
   }

@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 
 import { isInsufficientCredits } from '@/api/errors';
 import { previewMeetingPrep, type MeetingPrepPreview } from '@/api/endpoints/meetingPreps';
+import { useAIConsent } from '@/lib/aiConsent';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
@@ -23,6 +24,15 @@ export default function NewMeetingPrepScreen() {
   const router = useRouter();
   const { addMeetingPrep, showToast } = useApp();
   const colors = useColors();
+
+  // AI consent gate (5.1.2(i)): the brief is researched and written by the AI
+  // providers from the pasted profile. Redirect unconsented opens.
+  const { consent } = useAIConsent();
+  useEffect(() => {
+    if (consent !== 'granted') {
+      router.replace({ pathname: '/ai-consent', params: { mode: 'prompt' } });
+    }
+  }, [consent, router]);
   const { scanned } = useLocalSearchParams<{ scanned?: string }>();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');

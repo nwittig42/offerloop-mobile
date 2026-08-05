@@ -24,10 +24,10 @@ import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purch
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import ConnectionBanner from '@/components/ConnectionBanner';
 import NotificationPrompt from '@/components/NotificationPrompt';
-import PaywallHost from '@/components/paywall/PaywallSheet';
 import Toast from '@/components/Toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useScreenshotShare } from '@/hooks/useScreenshotShare';
+import { loadAIConsent, useAIConsent } from '@/lib/aiConsent';
 import { AppProvider, useApp } from '@/store/app';
 import { ThemeProvider, useColors, useTheme } from '@/theme/ThemeProvider';
 import { resolveSchool } from '@/theme/tokens';
@@ -82,11 +82,12 @@ export default function RootLayout() {
   );
 }
 
-/** Redirect between the auth stack, the first-run onboarding, and the app based
- *  on sign-in + onboarding status. */
+/** Redirect between the auth stack, the AI-consent gate, the first-run
+ *  onboarding, and the app based on sign-in + consent + onboarding status. */
 function useAuthGate() {
   const { status } = useAuth();
   const { onboardingDone, needsOnboarding } = useApp();
+  const { consent, consentLoaded } = useAIConsent();
   const segments = useSegments();
   const router = useRouter();
 
@@ -94,6 +95,7 @@ function useAuthGate() {
     if (status === 'loading') return;
     const inAuthGroup = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)';
+    const inConsent = segments[0] === 'ai-consent';
 
     if (status === 'signedOut') {
       if (!inAuthGroup) router.replace('/(auth)/welcome');
@@ -106,6 +108,18 @@ function useAuthGate() {
       return;
     }
 
+    // AI disclosure + consent comes before ANYTHING that could send personal
+    // data to an AI provider, including onboarding, whose resume upload is
+    // parsed by one (guidelines 5.1.1(i)/5.1.2(i), rejected 2026-08-05). The
+    // screen itself routes onward after a choice; never redirect while it is
+    // up (it is also openable later from Settings).
+    if (!consentLoaded) return;
+    if (consent === null) {
+      if (!inConsent) router.replace('/ai-consent');
+      return;
+    }
+    if (inConsent) return;
+
     // Force-show onboarding ONLY for a confirmed brand-new user. needsOnboarding
     // is false for any established profile (judged on real /me data), so existing
     // users are never force-trapped. Exit to /(tabs) explicitly — bare '/' is
@@ -115,7 +129,7 @@ function useAuthGate() {
     } else if (onboardingDone && inOnboarding) {
       router.replace('/(tabs)');
     }
-  }, [status, onboardingDone, needsOnboarding, segments, router]);
+  }, [status, onboardingDone, needsOnboarding, consent, consentLoaded, segments, router]);
 
   return status;
 }
@@ -142,6 +156,8 @@ function ThemedShell() {
     if (user?.uid) void logInPurchases(user.uid);
     else void logOutPurchases();
     const uid = user?.uid ?? null;
+    // AI consent is stored per account; reload it alongside the RC identity.
+    void loadAIConsent(uid);
     if (prevUid.current !== undefined && prevUid.current !== uid) {
       queryClient.clear();
     }
@@ -180,6 +196,15 @@ function ThemedShell() {
         <Stack.Screen name="outreach/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="scout" options={{ presentation: 'modal' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
+        <Stack.Screen
+          name="paywall"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.88],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 18,
+          }}
+        />
         <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />
@@ -193,7 +218,6 @@ function ThemedShell() {
       <ConnectionBanner />
       <Toast />
       <NotificationPrompt />
-      <PaywallHost />
     </>
   );
 }

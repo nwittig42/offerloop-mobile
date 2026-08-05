@@ -32,6 +32,7 @@ import { runSwipe, type DraftJobProgress } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
+import { hasAIConsent, promptAIConsent } from '@/lib/aiConsent';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, track } from '@/lib/analytics';
@@ -1271,6 +1272,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         priority?: SwipeSettings['priority'];
       } = {},
     ) => {
+      // AI consent gate (5.1.2(i)): drafting sends profile, resume, and job
+      // data to the AI providers. An unconsented tap re-opens the disclosure
+      // instead of spending anything.
+      if (!hasAIConsent()) {
+        promptAIConsent();
+        return;
+      }
       const count = opts.count ?? 1;
       let action = opts.action ?? 'draft';
       const priority = opts.priority ?? 'employee';
@@ -1407,6 +1415,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const job = jobs.find((j) => j.id === id);
       if (!job) return;
+      // Consent check BEFORE the optimistic deck removal: an unconsented
+      // swipe must not eat the card, it opens the disclosure and the job
+      // stays in the deck for a re-swipe after allowing.
+      if (!hasAIConsent()) {
+        promptAIConsent();
+        return;
+      }
       recordSwipedCard(job); // remember the exact card for the company page
       setJobs((prev) => prev.filter((j) => j.id !== id));
       beginDraft(job.company, job.title, {
@@ -1432,6 +1447,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const appliedIdsRef = useRef<Set<string>>(new Set());
   const autoApplyJob = useCallback(
     (job: Job): void => {
+      // Same AI consent gate as beginDraft: auto-apply builds materials from
+      // the user's profile via the AI providers.
+      if (!hasAIConsent()) {
+        promptAIConsent();
+        return;
+      }
       const id = job.id;
       const cache = queryClient.getQueryData<AppliedJob[]>(['appliedJobs']);
       if (applyingRef.current.has(id) || appliedIdsRef.current.has(id) || alreadyApplied(cache, id)) {

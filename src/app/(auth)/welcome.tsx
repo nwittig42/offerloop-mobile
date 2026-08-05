@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { Image, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,12 +8,11 @@ import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
- * First-download welcome. Sells the hero, then forks: returning users sign in
- * (email link), brand-new users go to offerloop.ai to create their account and
- * subscribe (Flo-style web-first), then come back and sign in. Deep setup lives
- * on the web; the app reflects the profile from /me once signed in.
+ * First-download welcome. Sells the hero, then forks: returning users sign in,
+ * brand-new users create their account IN the app (App Review guideline 4:
+ * registration may not punt to the browser; the web-first flow was rejected
+ * 2026-08-05). Onboarding and profile setup run natively after sign-up.
  */
-const SIGNUP_URL = 'https://offerloop.ai/signin?mode=signup';
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   { icon: 'albums-outline', title: 'Swipe to draft', body: 'Right-swipe a job and Offerloop drafts a tailored intro to someone there.' },
@@ -94,9 +92,8 @@ export default function WelcomeScreen() {
           label="Create your account"
           variant="outline"
           size="lg"
-          icon="open-outline"
           fullWidth
-          onPress={() => Linking.openURL(SIGNUP_URL)}
+          onPress={() => router.push('/(auth)/create-account')}
         />
         <Text
           style={{
@@ -106,7 +103,7 @@ export default function WelcomeScreen() {
             textAlign: 'center',
             lineHeight: 18,
           }}>
-          New here? You’ll set up your account on offerloop.ai, then sign in.
+          New here? Set up takes about a minute, right in the app.
         </Text>
       </View>
     </View>
