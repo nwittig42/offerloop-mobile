@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in the app is broken or looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: One or two sentences. What did you see, what did you expect?
+      placeholder: Tapped a job card in Saved and the app froze on a white screen.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where in the app
+      placeholder: Feed / Inbox / Credits / Scout / Profile / onboarding / ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Inbox
+        2. Tap a replied thread
+        3. ...
+  - type: textarea
+    id: shot
+    attributes:
+      label: Screenshot or screen recording
+      description: Drag an image here if you have one. Screenshots make fixes twice as fast.
+  - type: input
+    id: build
+    attributes:
+      label: App version stamp
+      description: Profile > Settings shows it on staging builds; on the store build just say "App Store".
+      placeholder: App Store / staging v19
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - p0 (broken for everyone)
+        - p1 (broken for some flows or users)
+        - p2 (polish, cosmetic)
+    validations:
+      required: true
