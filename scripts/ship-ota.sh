@@ -115,6 +115,18 @@ EOF
   git commit -q -m "chore: OTA ${STAMP}: ${MESSAGE}"
 else
   STAMP="${CHANNEL} ci-$(git rev-parse --short HEAD)"
+  # Make the stamp visible in Profile > Settings: patch the working copy
+  # only (CI discards it; nothing is committed back to main).
+  python3 - "$STAMP" "$MESSAGE" <<'EOF'
+import re, sys
+stamp, message = sys.argv[1], sys.argv[2]
+p = 'src/lib/buildInfo.ts'
+s = open(p).read()
+s = re.sub(r"OTA_VERSION = '[^']*'", f"OTA_VERSION = '{stamp}'", s)
+safe = message.replace("'", "\\'")
+s = re.sub(r"OTA_NOTES = '[^']*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
+open(p, 'w').write(s)
+EOF
 fi
 
 # 5. Publish.
