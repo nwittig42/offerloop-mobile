@@ -1202,6 +1202,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // A retry never spent a fresh token, so nothing to refund there.
             if (!opts.isRetry) refundSwipe();
             showToast(`No contact found at ${args.company} — no credits used`);
+          } else if (foundCount < args.count) {
+            // Partial reach: the placeholder rows for the people we couldn't
+            // find get dropped above, so say what actually landed instead of
+            // letting the Inbox silently show fewer drafts than were promised.
+            // Credits are charged per contact found, so the misses cost nothing.
+            showToast(
+              `Found ${foundCount} of ${args.count} at ${args.company}, only charged for ${
+                foundCount === 1 ? 'that one' : 'those'
+              }`,
+            );
           }
           if (typeof creditsRemaining === 'number') {
             patchProfile({ credits: creditsRemaining });

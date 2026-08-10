@@ -495,7 +495,13 @@ function ScoutTabInner() {
           });
         });
         dropCard(id);
-        track('scout_action_completed', { action: 'draft', ok: true, count: res.names.length });
+        track('scout_action_completed', {
+          action: 'draft',
+          ok: true,
+          count: res.names.length,
+          requested: res.requested,
+          short: Math.max(0, res.requested - res.names.length),
+        });
         setReply({
           say: res.say,
           actions: res.names.length ? [{ label: 'Open Inbox', href: '/(tabs)/inbox' }] : [],

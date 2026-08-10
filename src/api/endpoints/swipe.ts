@@ -323,34 +323,55 @@ export async function runSwipe(
   // finish while the user is away, and the push both notifies them and
   // triggers the app's instant inbox refresh.
   try {
-    const baseBody = { batchSize: args.count, mode, notify_draft_ready: true };
-    const primary = await runJobToCompletion(
-      {
-        ...baseBody,
-        prompt: `${args.jobTitle} at ${args.company}`,
-        swipe_id: args.swipeId ? `${args.swipeId}-p` : undefined,
-      },
-      onProgress,
-    );
-    let contacts = primary.contacts;
-    let creditsRemaining = primary.creditsRemaining;
+    const baseBody = { mode, notify_draft_ready: true };
+    const contacts: RawContact[] = [];
+    const seen = new Set<string>();
+    let creditsRemaining: number | undefined;
+    /** Absorb a pass: new people only, never more than was asked for. */
+    const absorb = (r: { contacts: RawContact[]; creditsRemaining?: number }) => {
+      for (const c of r.contacts) {
+        if (contacts.length >= args.count) break;
+        const key = dedupeKey(c);
+        if (key && seen.has(key)) continue;
+        if (key) seen.add(key);
+        contacts.push(c);
+      }
+      if (typeof r.creditsRemaining === 'number') creditsRemaining = r.creditsRemaining;
+    };
 
-    // Miss-proofing: if the titled search found nobody (title too specific,
-    // small co), one no-title pass so a swipe almost never comes back empty.
-    if (contacts.length === 0) {
-      const fallback = await runJobToCompletion(
+    absorb(
+      await runJobToCompletion(
         {
           ...baseBody,
-          prompt: `people at ${args.company}`,
-          swipe_id: args.swipeId ? `${args.swipeId}-f` : undefined,
+          batchSize: args.count,
+          prompt: `${args.jobTitle} at ${args.company}`,
+          swipe_id: args.swipeId ? `${args.swipeId}-p` : undefined,
         },
         onProgress,
+      ),
+    );
+
+    // Top-up, not just miss-proofing: the titled pass comes back SHORT of the
+    // ask whenever the title is narrow, the company is small, or the best
+    // matches were already contacted (the server skips those). One no-title
+    // pass for the REMAINDER, like the hiring-manager path above already does.
+    // This used to fire only on a completely empty result, so "draft 2
+    // engineers at Stripe" quietly delivered one.
+    if (contacts.length < args.count) {
+      absorb(
+        await runJobToCompletion(
+          {
+            ...baseBody,
+            batchSize: args.count - contacts.length,
+            prompt: `people at ${args.company}`,
+            swipe_id: args.swipeId ? `${args.swipeId}-f` : undefined,
+          },
+          onProgress,
+        ),
       );
-      contacts = fallback.contacts;
-      if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
     }
 
-    const items = contacts.slice(0, args.count).map((c, i) => mapContact(c, i, args));
+    const items = contacts.map((c, i) => mapContact(c, i, args));
     return { items, creditsRemaining };
   } catch (e) {
     // A server without /draft-jobs yet (OTA reached the phone before the
@@ -370,20 +391,33 @@ async function runSwipeLegacySync(args: SwipeArgs, mode: string): Promise<SwipeR
     mode,
     args.swipeId ? `${args.swipeId}-p` : undefined,
   );
-  let contacts = primary.contacts;
+  const contacts: RawContact[] = [];
+  const seen = new Set<string>();
   let creditsRemaining = primary.creditsRemaining;
+  const absorb = (list: RawContact[]) => {
+    for (const c of list) {
+      if (contacts.length >= args.count) break;
+      const key = dedupeKey(c);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      contacts.push(c);
+    }
+  };
+  absorb(primary.contacts);
 
-  if (contacts.length === 0) {
+  // Same top-up rule as the job path: fill the remainder, not just an empty
+  // result, so a multi-contact ask stops delivering fewer than it promised.
+  if (contacts.length < args.count) {
     const fallback = await promptSearch(
       `people at ${args.company}`,
-      args.count,
+      args.count - contacts.length,
       mode,
       args.swipeId ? `${args.swipeId}-f` : undefined,
     );
-    contacts = fallback.contacts;
+    absorb(fallback.contacts);
     if (typeof fallback.creditsRemaining === 'number') creditsRemaining = fallback.creditsRemaining;
   }
 
-  const items = contacts.slice(0, args.count).map((c, i) => mapContact(c, i, args));
+  const items = contacts.map((c, i) => mapContact(c, i, args));
   return { items, creditsRemaining };
 }
