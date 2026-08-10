@@ -912,7 +912,7 @@ export async function executeDraftIntent(
   intent: DraftIntent,
   askId: string,
   onProgress: (p: ActionProgress) => void,
-): Promise<{ say: string; names: string[] }> {
+): Promise<{ say: string; names: string[]; requested: number }> {
   const result: SwipeResult = await runSwipe(
     {
       company: intent.company || '',
@@ -931,10 +931,27 @@ export async function executeDraftIntent(
     },
   );
   const names = result.items.map((i) => i.contact?.name).filter(Boolean) as string[];
-  const say = names.length
-    ? `Done — ${names.length === 1 ? `drafted ${names[0]}` : `${names.length} drafts ready: ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}`}. They're in your Inbox.`
-    : `I couldn't find anyone matching that — try a different company or broader role. No credits used.`;
-  return { say, names };
+  const list = `${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}`;
+  const short = intent.count - names.length;
+  let say: string;
+  if (!names.length) {
+    say = `I couldn't find anyone matching that. Try a different company or broader role. No credits used.`;
+  } else if (short > 0) {
+    // Honest shortfall (issue "Scout not returning proper amount of contacts"):
+    // saying "Done" after finding 1 of 2 reads as a bug, because the ask was
+    // only half done. Name what landed, say what didn't, and that the misses
+    // cost nothing (the server charges per contact found).
+    say =
+      `Drafted ${names.length} of the ${intent.count} you asked for${intent.company ? ` at ${intent.company}` : ''}: ` +
+      `${list}. ${names.length === 1 ? "It's" : "They're"} in your Inbox. ` +
+      `I couldn't find ${short} more right now, and nothing was charged for ${short === 1 ? 'that one' : 'those'}. ` +
+      `A broader role or another company usually turns up more.`;
+  } else {
+    say = `Done, ${names.length === 1 ? `drafted ${names[0]}` : `${names.length} drafts ready: ${list}`}. ${
+      names.length === 1 ? "It's" : "They're"
+    } in your Inbox.`;
+  }
+  return { say, names, requested: intent.count };
 }
 
 /** One auto-apply submit, in credits. Centralized so the scope cards and the
