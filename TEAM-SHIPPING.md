@@ -46,13 +46,24 @@ gate). If it aborts with a fingerprint mismatch, your change is native lane.
 - The review demo account (applereview@offerloop.ai) is sacred: never buy
   subscriptions on it. App UPDATES get reviewed too.
 
+## CI does the publishing (no Expo accounts needed for Nick and Sid)
+
+- Merge to main: GitHub Actions auto-ships to STAGING (see
+  .github/workflows/ship-staging.yml). Add "[skip ota]" to a commit message
+  to opt out (docs-only changes and the like).
+- Ship to production: repo > Actions > "Ship production OTA" > Run
+  workflow, type the message and YES. That is the whole release.
+- The local script still works for anyone who prefers the terminal:
+  ./scripts/ship-ota.sh staging|production "message".
+- Publishing identity is one repo secret, EXPO_TOKEN (an Expo access token
+  from Rylan's account). If it ever leaks or a laptop is lost, revoke it at
+  expo.dev > Settings > Access tokens and mint a new one.
+
 ## One-time setup (Nick, Sid)
 
 1. GitHub access to deenabandi004-byte/offerloop-mobile, clone, npm install.
-2. Expo account: get added as a member of the rylanbohnett Expo org, then
-   npx eas-cli login. (Rylan: expo.dev > organization settings > members.)
-3. Xcode not required for OTA shipping. Node 20+.
-4. Read this file, CLAUDE.md, and HANDOFF-post-resubmission.md.
+2. Xcode not required. Node 20+. No Expo account needed; CI publishes.
+3. Read this file, CLAUDE.md, and HANDOFF-post-resubmission.md.
 
 ## Reporting bugs (everyone, including from your phone)
 

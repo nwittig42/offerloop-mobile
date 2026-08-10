@@ -54,6 +54,10 @@ else
   )
 fi
 
+# CI mode (GitHub Actions): no prompts, no stamp-bump commit; identity comes
+# from the EXPO_TOKEN secret and the stamp is the commit hash.
+IS_CI="${GITHUB_ACTIONS:-}"
+
 # 1. Clean tree only.
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "ABORT: uncommitted changes. Commit (or stash) before shipping."
@@ -62,7 +66,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 # Production shipments should have been seen on a phone first.
-if [[ "$CHANNEL" == "production" ]]; then
+if [[ "$CHANNEL" == "production" && -z "$IS_CI" ]]; then
   read -r -p "Has this exact code been checked on staging on a real phone? [y/N] " ok
   [[ "$ok" == "y" || "$ok" == "Y" ]] || { echo "Ship to staging first: ./scripts/ship-ota.sh staging \"...\""; exit 1; }
 fi
@@ -90,8 +94,10 @@ if ! env "${ENV_VARS[@]}" CI=1 npx eas-cli fingerprint:compare "$EXPECT_RUNTIME"
   exit 1
 fi
 
-# 4. Bump the OTA stamp and commit it.
-python3 - "$CHANNEL" "$MESSAGE" <<'EOF'
+# 4. Stamp. Locally: bump the OTA stamp and commit it. In CI: the commit
+# hash IS the stamp (no bot commits back to main).
+if [[ -z "$IS_CI" ]]; then
+  python3 - "$CHANNEL" "$MESSAGE" <<'EOF'
 import re, sys
 channel, message = sys.argv[1], sys.argv[2]
 p = 'src/lib/buildInfo.ts'
@@ -104,9 +110,12 @@ s = re.sub(r"OTA_NOTES = '[^']*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
 open(p, 'w').write(s)
 print(f"stamp: {channel} v{n}")
 EOF
-STAMP=$(grep -o "OTA_VERSION = '[^']*'" src/lib/buildInfo.ts | cut -d"'" -f2)
-git add src/lib/buildInfo.ts
-git commit -q -m "chore: OTA ${STAMP}: ${MESSAGE}"
+  STAMP=$(grep -o "OTA_VERSION = '[^']*'" src/lib/buildInfo.ts | cut -d"'" -f2)
+  git add src/lib/buildInfo.ts
+  git commit -q -m "chore: OTA ${STAMP}: ${MESSAGE}"
+else
+  STAMP="${CHANNEL} ci-$(git rev-parse --short HEAD)"
+fi
 
 # 5. Publish.
 echo "== publishing to ${BRANCH} =="

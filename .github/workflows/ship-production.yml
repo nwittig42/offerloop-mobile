@@ -1,0 +1,32 @@
+# Shipping to PRODUCTION is a deliberate button press: repo > Actions >
+# "Ship production OTA" > Run workflow. You must type YES to confirm the
+# exact code on main was verified on staging first.
+name: Ship production OTA
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "What changed (goes in the update log)"
+        required: true
+      staging_verified:
+        description: "Type YES to confirm this code was checked on the staging app"
+        required: true
+
+jobs:
+  ship:
+    if: ${{ inputs.staging_verified == 'YES' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Ship
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MSG: ${{ inputs.message }}
+        run: ./scripts/ship-ota.sh production "$MSG"

@@ -1,0 +1,28 @@
+# Every merge to main auto-ships to the STAGING channel (TestFlight app).
+# Skips stamp-bump commits made by the local ship script (already published)
+# and anything marked [skip ota]. Publishing identity: the EXPO_TOKEN secret.
+name: Ship staging OTA
+on:
+  push:
+    branches: [main]
+
+jobs:
+  ship:
+    if: |
+      !startsWith(github.event.head_commit.message, 'chore: OTA') &&
+      !contains(github.event.head_commit.message, '[skip ota]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the staging fingerprint gate reads an old eas.json from history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Ship
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: ./scripts/ship-ota.sh staging "$(echo "$MSG" | head -n1)"
