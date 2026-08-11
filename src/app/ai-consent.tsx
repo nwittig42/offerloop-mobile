@@ -3,7 +3,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Image, Linking, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { setAIConsent } from '@/lib/aiConsent';
+import { useEffect } from 'react';
+
+import { setAIConsent, useAIConsent } from '@/lib/aiConsent';
 import { Button } from '@/components/ui/Button';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -41,6 +43,16 @@ export default function AIConsentScreen() {
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isPrompt = mode === 'prompt' || mode === 'settings';
+  const { consent, consentLoaded } = useAIConsent();
+
+  // First-run gate mode only: if a stored answer finishes loading while this
+  // screen is up (the cold-start race that re-showed the popup every launch),
+  // move on. Settings/prompt modes keep the screen open on purpose.
+  useEffect(() => {
+    if (!isPrompt && consentLoaded && consent !== null) {
+      router.replace('/(tabs)');
+    }
+  }, [isPrompt, consentLoaded, consent]);
 
   const finish = async (choice: 'granted' | 'declined') => {
     await setAIConsent(choice);

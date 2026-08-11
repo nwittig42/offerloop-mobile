@@ -55,9 +55,13 @@ export type ResumeBuildResult =
 
 export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
   try {
+    // polish: run the mapped draft through the website's Harvard-rubric LLM
+    // pass so the mobile build matches web quality. Slower (an LLM round
+    // trip), hence the long timeout; the backend falls back to the unpolished
+    // mapping if the user is capped or the LLM hiccups.
     const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
       `${WEB_BASE}/api/resume-builder/from-linkedin/preview`,
-      { method: 'POST', timeoutMs: 45000 },
+      { method: 'POST', body: { polish: true }, timeoutMs: 90000 },
     );
     if (!r.success || !r.resume) return { status: 'error', message: 'Generation failed.' };
     return { status: 'ok', resume: r.resume, html: r.html };
@@ -69,6 +73,25 @@ export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
       }
       if (e.status === 429) return { status: 'limit' };
     }
+    return { status: 'error', message: 'Could not build the resume right now.' };
+  }
+}
+
+/** The no-LinkedIn, no-file door: the user describes (or pastes) their
+ *  experience in their own words and the website's builder turns it into a
+ *  Harvard-format draft. Same generator the web resume builder uses,
+ *  including its role-research pass, hence the long timeout. Counts against
+ *  the lifetime generation cap (it is an LLM build). */
+export async function generateResumeFromPrompt(prompt: string): Promise<ResumeBuildResult> {
+  try {
+    const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
+      `${WEB_BASE}/api/resume-builder/generate`,
+      { method: 'POST', body: { prompt }, timeoutMs: 120000 },
+    );
+    if (!r.success || !r.resume) return { status: 'error', message: 'Generation failed.' };
+    return { status: 'ok', resume: r.resume, html: r.html };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 429) return { status: 'limit' };
     return { status: 'error', message: 'Could not build the resume right now.' };
   }
 }

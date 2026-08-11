@@ -94,9 +94,9 @@ export default function RootLayout() {
 /** Redirect between the auth stack, the AI-consent gate, the first-run
  *  onboarding, and the app based on sign-in + consent + onboarding status. */
 function useAuthGate() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const { onboardingDone, needsOnboarding } = useApp();
-  const { consent, consentLoaded } = useAIConsent();
+  const { consent, consentLoaded, consentLoadedFor } = useAIConsent();
   const segments = useSegments();
   const router = useRouter();
 
@@ -126,7 +126,10 @@ function useAuthGate() {
     // parsed by one (guidelines 5.1.1(i)/5.1.2(i), rejected 2026-08-05). The
     // screen itself routes onward after a choice; never redirect while it is
     // up (it is also openable later from Settings).
-    if (!consentLoaded) return;
+    // Wait until the stored choice for THIS account is actually loaded;
+    // consentLoaded alone can be a stale answer for the signed-out state,
+    // which re-showed the consent screen on every cold start.
+    if (!consentLoaded || consentLoadedFor !== (user?.uid ?? null)) return;
     if (consent === null) {
       if (!inConsent) router.replace('/ai-consent');
       return;
@@ -211,6 +214,7 @@ function ThemedShell() {
         <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="resume-preview" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="resume-from-text" options={{ presentation: 'modal' }} />
         <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />

@@ -15,7 +15,7 @@ import { fonts } from '@/theme/tokens';
  */
 
 type Door = {
-  key: 'upload' | 'linkedin';
+  key: 'upload' | 'linkedin' | 'describe';
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   body: string;
@@ -34,6 +34,12 @@ const DOORS: Door[] = [
     title: 'Build from my LinkedIn',
     body: 'Scout turns your LinkedIn into a clean resume. You review it before anything uses it.',
   },
+  {
+    key: 'describe',
+    icon: 'create-outline',
+    title: 'Just describe what you have done',
+    body: 'No file, thin LinkedIn? Tell Scout in your own words and he drafts one from that.',
+  },
 ];
 
 export function ResumeDoors({
@@ -41,22 +47,25 @@ export function ResumeDoors({
   hasLinkedin,
   onUpload,
   onBuildFromLinkedin,
+  onDescribe,
   onNotNow,
 }: {
   hasResume: boolean;
   hasLinkedin: boolean;
   onUpload: () => void;
   onBuildFromLinkedin: () => void;
+  onDescribe: () => void;
   onNotNow: () => void;
 }) {
   const colors = useColors();
 
   // Emphasize the door that matches where the user already is: a file on hand
-  // beats generating one; LinkedIn is the next-best path. Neither set: no
-  // emphasis, let them read both doors evenly.
-  const emphasized: Door['key'] | null = hasResume ? 'upload' : hasLinkedin ? 'linkedin' : null;
+  // beats generating one; LinkedIn next; with neither, the describe door is
+  // the one that always works.
+  const emphasized: Door['key'] = hasResume ? 'upload' : hasLinkedin ? 'linkedin' : 'describe';
 
-  const pressFor = (key: Door['key']) => (key === 'upload' ? onUpload : onBuildFromLinkedin);
+  const pressFor = (key: Door['key']) =>
+    key === 'upload' ? onUpload : key === 'linkedin' ? onBuildFromLinkedin : onDescribe;
 
   return (
     <View style={{ gap: 18 }}>

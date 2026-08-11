@@ -584,6 +584,10 @@ export default function FeedScreen() {
               hasLinkedin={!!profile.linkedinUrl?.trim()}
               onUpload={doorUpload}
               onBuildFromLinkedin={doorLinkedin}
+              onDescribe={() => {
+                setDoorsOpen(false);
+                router.push('/resume-from-text');
+              }}
               onNotNow={() => setDoorsOpen(false)}
             />
           </Pressable>

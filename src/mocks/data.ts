@@ -445,7 +445,7 @@ export const MOCK_PROFILE = {
   gmailConnected: false,
   gmailAddress: '',
   hasResume: false,
-  resume: { name: '', updatedLabel: '' },
+  resume: { name: '', updatedLabel: '', url: '' as string | undefined },
   linkedinUrl: '',
   phone: '',
   preferredLocations: [] as string[],

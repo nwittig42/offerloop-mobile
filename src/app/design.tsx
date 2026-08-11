@@ -177,6 +177,7 @@ export default function DesignGallery() {
               hasLinkedin
               onUpload={() => {}}
               onBuildFromLinkedin={() => {}}
+              onDescribe={() => {}}
               onNotNow={() => {}}
             />
           </Card>

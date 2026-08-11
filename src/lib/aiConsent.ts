@@ -21,6 +21,11 @@ const keyFor = (uid: string) => `offerloop.aiConsent.${uid}`;
 let currentUid: string | null = null;
 let value: AIConsent = null;
 let loaded = false;
+/** Which account the loaded value belongs to. The auth gate must ignore
+ *  `loaded` for a different uid: on cold start the gate can run between
+ *  sign-in restore and the storage read, see a stale null, and bounce the
+ *  user to the consent screen they already answered (Rylan, 2026-08-10). */
+let loadedFor: string | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -31,6 +36,7 @@ function emit() {
 export async function loadAIConsent(uid: string | null): Promise<void> {
   currentUid = uid;
   loaded = false;
+  loadedFor = null;
   value = null;
   emit();
   if (!uid) {
@@ -44,7 +50,11 @@ export async function loadAIConsent(uid: string | null): Promise<void> {
   } catch {
     value = null;
   }
+  // A later loadAIConsent call may have superseded this one; only publish if
+  // we are still the current account.
+  if (currentUid !== uid) return;
   loaded = true;
+  loadedFor = uid;
   emit();
 }
 
@@ -77,8 +87,13 @@ const subscribe = (fn: () => void) => {
 };
 
 /** React view of the consent state, shared app-wide. */
-export function useAIConsent(): { consent: AIConsent; consentLoaded: boolean } {
+export function useAIConsent(): {
+  consent: AIConsent;
+  consentLoaded: boolean;
+  consentLoadedFor: string | null;
+} {
   const consent = useSyncExternalStore(subscribe, () => value);
   const consentLoaded = useSyncExternalStore(subscribe, () => loaded);
-  return { consent, consentLoaded };
+  const consentLoadedFor = useSyncExternalStore(subscribe, () => loadedFor);
+  return { consent, consentLoaded, consentLoadedFor };
 }

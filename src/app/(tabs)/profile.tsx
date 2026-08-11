@@ -22,6 +22,8 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
 import ReferralCard from '@/components/ReferralCard';
+import * as WebBrowser from 'expo-web-browser';
+
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
@@ -794,34 +796,46 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
-              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: colors.accent + '14',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                  <Ionicons name="document-text-outline" size={19} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
-                    {profile.resume.name}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                    {profile.resume.updatedLabel}
-                  </Text>
-                </View>
-                {resumeBusy ? (
-                  <ActivityIndicator size="small" color={colors.accent} />
-                ) : profile.hasResume ? (
-                  <Chip label="Attached" tone="positive" dot />
-                ) : (
-                  <Chip label="Not added" tone="neutral" />
-                )}
-              </Card>
+              {/* Tapping the file card opens the actual PDF (the answer to
+                  "how do I view the resume it builds"). In-app browser so
+                  closing it lands right back here. */}
+              <Pressable
+                disabled={!profile.hasResume || !profile.resume.url}
+                onPress={() => {
+                  if (profile.resume.url) void WebBrowser.openBrowserAsync(profile.resume.url);
+                }}
+                accessibilityLabel="View resume PDF">
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="document-text-outline" size={19} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
+                      {profile.resume.name}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      {profile.hasResume && profile.resume.url
+                        ? 'Tap to view the PDF'
+                        : profile.resume.updatedLabel}
+                    </Text>
+                  </View>
+                  {resumeBusy ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : profile.hasResume ? (
+                    <Chip label="Attached" tone="positive" dot />
+                  ) : (
+                    <Chip label="Not added" tone="neutral" />
+                  )}
+                </Card>
+              </Pressable>
 
               <Button
                 label={profile.hasResume ? 'Replace resume' : 'Upload resume'}
@@ -832,18 +846,29 @@ export default function ProfileScreen() {
                 onPress={onPickResume}
               />
 
-              {/* The second door, permanent home: build one from LinkedIn.
-                  The Feed's blocked-swipe sheet offers this too, but nobody
-                  should need a blocked swipe to find the builder. */}
+              {/* Doors two and three, permanent home: build from LinkedIn or
+                  from a typed description. The Feed's blocked-swipe sheet
+                  offers these too, but nobody should need a blocked swipe to
+                  find the builder. */}
               {RESUME_BUILDER_LIVE && !profile.hasResume ? (
-                <Button
-                  label="Build one from your LinkedIn"
-                  variant="outline"
-                  fullWidth
-                  icon="logo-linkedin"
-                  disabled={resumeBusy}
-                  onPress={() => router.push('/resume-preview')}
-                />
+                <>
+                  <Button
+                    label="Build one from your LinkedIn"
+                    variant="outline"
+                    fullWidth
+                    icon="logo-linkedin"
+                    disabled={resumeBusy}
+                    onPress={() => router.push('/resume-preview')}
+                  />
+                  <Button
+                    label="Describe your experience instead"
+                    variant="outline"
+                    fullWidth
+                    icon="create-outline"
+                    disabled={resumeBusy}
+                    onPress={() => router.push('/resume-from-text')}
+                  />
+                </>
               ) : null}
 
               {/* LinkedIn, the second source we gather from, above the parse.

@@ -102,7 +102,10 @@ export default function ResumePreviewScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator color={colors.navy} />
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
-              Building your resume from LinkedIn…
+              Scout is building and polishing your resume…
+            </Text>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+              This can take up to a minute.
             </Text>
           </View>
         ) : state.phase === 'ready' ? (

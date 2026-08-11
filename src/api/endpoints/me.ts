@@ -75,8 +75,8 @@ export async function fetchMe(): Promise<Profile> {
     // and a completion ring crediting a resume they never uploaded).
     hasResume: !!me.resume,
     resume: me.resume
-      ? { name: me.resume.name, updatedLabel: 'On file' }
-      : { name: 'No resume yet', updatedLabel: 'Add one in the app' },
+      ? { name: me.resume.name, updatedLabel: 'On file', url: me.resume.url }
+      : { name: 'No resume yet', updatedLabel: 'Add one in the app', url: undefined },
     linkedinUrl: me.linkedinUrl || '',
     phone: me.phone || '',
     preferredLocations: me.preferredLocations || [],
