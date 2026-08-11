@@ -68,18 +68,39 @@ gate). If it aborts with a fingerprint mismatch, your change is native lane.
 ## Reporting bugs (everyone, including from your phone)
 
 File a GitHub issue with the Bug template (the GitHub mobile app makes this
-a 30-second job: screenshot, two sentences, submit). One bug per issue.
-Label severity: `p0` broken-for-everyone, `p1` broken-for-some, `p2` polish.
+a 30-second job: screenshot, two sentences, submit). ONE bug per issue:
+each issue becomes one focused agent conversation and one reviewable PR.
+If you have a brain-dump of problems, file one issue with a bulleted list
+and comment "@claude split each bullet into its own issue". Label severity:
+`p0` broken-for-everyone, `p1` broken-for-some, `p2` polish.
 
-### The agent loop (optional but encouraged)
+### The agent loop (set up, working, and proven)
 
-With the Claude GitHub app installed on the repo, comment `@claude` on any
-bug issue with a line like "@claude investigate and open a PR with a fix".
-The agent reads the codebase, writes the fix, and opens a pull request for
-human review. A human always reviews and merges, then ships via the loop
-above. Setup (Rylan, once): install the Claude GitHub app on the repo and
-add the ANTHROPIC_API_KEY secret in repo settings; the workflow file is
-.github/workflows/claude.yml.
+The issue IS the chat. Comment on any bug issue:
+"@claude investigate this and open a PR with a fix" and post it. You can
+close the app; the agent runs on GitHub's servers and replies in the same
+thread (turn on GitHub app notifications to get pinged). Typical fix lands
+as a linked branch/PR in 5 to 15 minutes. A HUMAN always reviews and
+merges; merging auto-ships staging.
+
+Proof it works: issue #1 (Scout drafted 1 of 2 requested contacts) went
+phone report -> agent fix in 5m50s -> human merge -> staging -> production,
+about an hour end to end, 2026-08-10. Note: the agent's environment cannot
+run the typechecker, so give nontrivial PRs a local `npx tsc --noEmit` on
+the branch before merging (Claude Code can do this for you).
+
+Big product rethinks are not agent food; bring those to a Claude Code
+session where you can design together first.
+
+### Production-button gotchas
+
+- After clicking Run workflow, the "workflow successful" toast only means
+  the run was REQUESTED. Watch the run itself go green, or check
+  `eas update:list --branch production` for the new entry.
+- The staging_verified box must be exactly YES. Anything else silently
+  skips the job and the run still shows green.
+- Docs-only commits: put "[skip ota]" in the commit message so CI does not
+  pointlessly re-ship staging.
 
 ## Native backlog (batch these into the next App Store build)
 
