@@ -25,6 +25,9 @@ import { fonts } from '@/theme/tokens';
  */
 
 const DECLINE = 'Decline to answer';
+/** The salary default: honest and safe. Forms get "no expectation stated";
+ *  a typed number replaces it. Never prefill an invented figure. */
+const SALARY_OPEN = 'Open / prefer not to say';
 const GENDERS = ['Male', 'Female', 'Non-binary', DECLINE];
 const RACES = [
   'Asian',
@@ -147,15 +150,25 @@ export default function ApplicationProfileScreen() {
   const [linkedin, setLinkedin] = useState('');
 
   // Hydrate from the saved profile, falling back to what we already know from
-  // the user's Offerloop profile (LinkedIn + phone). Saved values win.
+  // the user's Offerloop profile (LinkedIn + phone + grad year). Saved values
+  // win. Prefills only carry REAL data: the start date comes from the entered
+  // grad year, and salary defaults to open rather than any invented number
+  // (no-fake-numbers rule).
   useEffect(() => {
     if (!data) return;
     setAuthorized(data.workAuthorization?.authorizedToWorkUS ?? null);
     setSponsorship(data.workAuthorization?.requiresSponsorship ?? null);
     setRelocate(data.preferences?.openToRelocation ?? null);
     setRemote(data.preferences?.openToRemote ?? null);
-    setStartDate(data.preferences?.earliestStartDate ?? '');
-    setSalary(data.preferences?.expectedSalaryUsd != null ? String(data.preferences.expectedSalaryUsd) : '');
+    setStartDate(
+      data.preferences?.earliestStartDate ??
+        (profile.gradYear?.trim() ? `After graduation (${profile.gradYear.trim()})` : ''),
+    );
+    setSalary(
+      data.preferences?.expectedSalaryUsd != null
+        ? String(data.preferences.expectedSalaryUsd)
+        : SALARY_OPEN,
+    );
     setGender(data.demographics?.gender ?? null);
     setRace(data.demographics?.race ?? null);
     setVeteran(data.veteranStatus ?? null);
@@ -257,11 +270,22 @@ export default function ApplicationProfileScreen() {
             <TextInput
               value={salary}
               onChangeText={setSalary}
-              placeholder="e.g. 85000"
+              onFocus={() => {
+                // Tapping into the default clears it so typing a number is
+                // one gesture; blanking the field falls back to open.
+                if (salary === SALARY_OPEN) setSalary('');
+              }}
+              onBlur={() => {
+                if (!salary.trim()) setSalary(SALARY_OPEN);
+              }}
+              placeholder={SALARY_OPEN}
               placeholderTextColor={colors.inkTertiary}
-              keyboardType="number-pad"
               style={inputStyle}
             />
+            <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 16 }}>
+              Leaving this open is normal and usually the smart move. Enter a number only
+              if you have a firm one.
+            </Text>
           </Field>
         </Card>
 

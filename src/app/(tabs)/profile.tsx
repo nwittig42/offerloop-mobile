@@ -24,7 +24,7 @@ import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
 import ReferralCard from '@/components/ReferralCard';
 import * as WebBrowser from 'expo-web-browser';
 
-import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { deleteResume, pickResume, uploadResume } from '@/api/endpoints/resume';
 import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
@@ -309,6 +309,36 @@ export default function ProfileScreen() {
     } finally {
       setResumeBusy(false);
     }
+  };
+  // Same removal the Attachments screen offers (backend deletes the stored
+  // file AND the parsed data), surfaced here because this tab is where people
+  // actually manage their resume (Rylan, 2026-08-10). Ask first: destructive.
+  const onRemoveResume = () => {
+    Alert.alert(
+      'Remove your resume?',
+      'This deletes the file and everything we parsed from it. Auto-apply stops working until you add another one.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                setResumeBusy(true);
+                await deleteResume();
+                await queryClient.invalidateQueries({ queryKey: qk.me });
+                showToast('Resume removed');
+              } catch {
+                showToast("Couldn't remove it. Try again.");
+              } finally {
+                setResumeBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
   const [parseOpen, setParseOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -661,15 +691,49 @@ export default function ProfileScreen() {
               {/* One soft card, rows separated by hairlines, no boxy inputs. */}
               <Card padded={false} style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
                 <SoftRow label="LinkedIn">
-                  <TextInput
-                    ref={fieldRefs.linkedin}
-                    value={linkedinUrl}
-                    onChangeText={setLinkedinUrl}
-                    placeholder="linkedin.com/in/you"
-                    placeholderTextColor={colors.inkTertiary}
-                    autoCapitalize="none"
-                    style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.ink, paddingVertical: 2 }}
-                  />
+                  {/* The gathered highlights expand inline under the field
+                      (Rylan 2026-08-10) instead of a separate card elsewhere.
+                      Chevron only when there is real gathered content. */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TextInput
+                      ref={fieldRefs.linkedin}
+                      value={linkedinUrl}
+                      onChangeText={setLinkedinUrl}
+                      placeholder="linkedin.com/in/you"
+                      placeholderTextColor={colors.inkTertiary}
+                      autoCapitalize="none"
+                      style={{ flex: 1, fontFamily: fonts.sans, fontSize: 15, color: colors.ink, paddingVertical: 2 }}
+                    />
+                    {profile.linkedinHighlights.length ? (
+                      <Pressable
+                        onPress={() => setLinkedinOpen((v) => !v)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel="Show what we gathered from your LinkedIn">
+                        <Ionicons
+                          name={linkedinOpen ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={colors.inkTertiary}
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {linkedinOpen && profile.linkedinHighlights.length ? (
+                    <View style={{ gap: 6, marginTop: 10 }}>
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.inkTertiary }}>
+                        What we gathered from your LinkedIn
+                      </Text>
+                      {profile.linkedinHighlights.map((h, i) => (
+                        <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
+                          <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
+                          <Text
+                            style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
+                            {h}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </SoftRow>
                 <SoftRow label="Target roles">
                   <CommaField
@@ -796,16 +860,48 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
-              {/* Tapping the file card opens the actual PDF (the answer to
-                  "how do I view the resume it builds"). In-app browser so
-                  closing it lands right back here. */}
-              <Pressable
-                disabled={!profile.hasResume || !profile.resume.url}
-                onPress={() => {
-                  if (profile.resume.url) void WebBrowser.openBrowserAsync(profile.resume.url);
-                }}
-                accessibilityLabel="View resume PDF">
+              {/* Location preferences moved here from Settings (Rylan
+                  2026-08-10): it steers which jobs auto-apply considers, so
+                  it belongs with the application tools. */}
+              <Pressable onPress={() => router.push('/location-preferences')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="location-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Location preferences
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      {profile.preferredLocations?.length
+                        ? profile.preferredLocations.slice(0, 3).join(' · ') +
+                          (profile.preferredLocations.length > 3 ? ' …' : '')
+                        : 'Where you’d actually take a job'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
+              {/* ONE resume container (Rylan 2026-08-10): file + status on
+                  top, the gathered-parse dropdown inside, replace as the
+                  bottom hairline row. Tapping the file row opens the PDF. */}
+              <Card padded={false}>
+                <Pressable
+                  disabled={!profile.hasResume || !profile.resume.url}
+                  onPress={() => {
+                    if (profile.resume.url) void WebBrowser.openBrowserAsync(profile.resume.url);
+                  }}
+                  accessibilityLabel="View resume PDF"
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
                   <View
                     style={{
                       width: 40,
@@ -834,17 +930,117 @@ export default function ProfileScreen() {
                   ) : (
                     <Chip label="Not added" tone="neutral" />
                   )}
-                </Card>
-              </Pressable>
+                </Pressable>
 
-              <Button
-                label={profile.hasResume ? 'Replace resume' : 'Upload resume'}
-                variant={profile.hasResume ? 'outline' : 'brand'}
-                fullWidth
-                icon="cloud-upload-outline"
-                disabled={resumeBusy}
-                onPress={onPickResume}
-              />
+                <Pressable
+                  onPress={() => setParseOpen((v) => !v)}
+                  accessibilityRole="button"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.hairlineLight,
+                  }}>
+                  <Ionicons name="scan-outline" size={17} color={colors.navy} />
+                  {/* Without a resume on file, the backend fills this parse
+                      from the LinkedIn enrichment. Say so; "from your resume"
+                      when there is no resume reads as invented data. */}
+                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                    {profile.hasResume
+                      ? 'Here is what we gathered from your resume'
+                      : 'What we know so far, from your LinkedIn'}
+                  </Text>
+                  <Ionicons
+                    name={parseOpen ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.inkTertiary}
+                  />
+                </Pressable>
+
+                {parseOpen ? (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 14 }}>
+                    {resumeExperiences.length === 0 ? (
+                      <Text
+                        style={{
+                          fontFamily: fonts.sans,
+                          fontSize: 12.5,
+                          color: colors.inkTertiary,
+                          lineHeight: 18,
+                        }}>
+                        No resume on file yet. Upload one below, or build one from your
+                        LinkedIn, and the parse shows up here.
+                      </Text>
+                    ) : (
+                      resumeExperiences.map((exp) => (
+                        <View key={exp.id} style={{ gap: 6 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, flex: 1 }}>
+                              {exp.role}
+                            </Text>
+                            <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                              {exp.dates}
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
+                            {exp.org}
+                            {exp.location ? `  ·  ${exp.location}` : ''}
+                          </Text>
+                          <View style={{ gap: 5, marginTop: 2 }}>
+                            {exp.bullets.map((b, i) => (
+                              <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
+                                <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
+                                <Text
+                                  style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
+                                  {b}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                ) : null}
+
+                <Pressable
+                  onPress={onPickResume}
+                  disabled={resumeBusy}
+                  accessibilityRole="button"
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    paddingVertical: 13,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.hairlineLight,
+                    opacity: pressed || resumeBusy ? 0.5 : 1,
+                  })}>
+                  <Ionicons name="cloud-upload-outline" size={16} color={colors.accent} />
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
+                    {profile.hasResume ? 'Replace resume' : 'Upload resume'}
+                  </Text>
+                </Pressable>
+              </Card>
+
+              {profile.hasResume ? (
+                <Pressable
+                  onPress={onRemoveResume}
+                  disabled={resumeBusy}
+                  accessibilityRole="button"
+                  style={({ pressed }) => ({
+                    alignItems: 'center',
+                    paddingVertical: 6,
+                    opacity: pressed || resumeBusy ? 0.5 : 1,
+                  })}>
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.negative }}>
+                    Remove resume
+                  </Text>
+                </Pressable>
+              ) : null}
 
               {/* Doors two and three, permanent home: build from LinkedIn or
                   from a typed description. The Feed's blocked-swipe sheet
@@ -871,107 +1067,7 @@ export default function ProfileScreen() {
                 </>
               ) : null}
 
-              {/* LinkedIn, the second source we gather from, above the parse.
-                  Only expandable when we actually have gathered highlights —
-                  otherwise it's an honest status row (no fabricated bullets). */}
-              <Pressable
-                onPress={() => profile.linkedinHighlights.length && setLinkedinOpen((v) => !v)}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="logo-linkedin" size={17} color={colors.accent} />
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {!linkedinUrl.trim()
-                      ? 'Add your LinkedIn in Personal'
-                      : profile.linkedinHighlights.length
-                        ? 'What we gathered from your LinkedIn'
-                        : linkedinUrl.trim()}
-                  </Text>
-                  {linkedinUrl.trim() && profile.linkedinHighlights.length ? (
-                    <Ionicons
-                      name={linkedinOpen ? 'chevron-up' : 'chevron-down'}
-                      size={16}
-                      color={colors.inkTertiary}
-                    />
-                  ) : null}
-                </Card>
-              </Pressable>
-
-              {linkedinOpen && profile.linkedinHighlights.length ? (
-                <Card style={{ gap: 6 }}>
-                  {profile.linkedinHighlights.map((h, i) => (
-                    <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                      <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
-                      <Text
-                        style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
-                        {h}
-                      </Text>
-                    </View>
-                  ))}
-                </Card>
-              ) : null}
-
-              <Pressable onPress={() => setParseOpen((v) => !v)}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="scan-outline" size={17} color={colors.navy} />
-                  {/* Without a resume on file, the backend fills this parse
-                      from the LinkedIn enrichment. Say so; "from your resume"
-                      when there is no resume reads as invented data. */}
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {profile.hasResume
-                      ? 'Here is what we gathered from your resume'
-                      : 'What we know so far, from your LinkedIn'}
-                  </Text>
-                  <Ionicons
-                    name={parseOpen ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color={colors.inkTertiary}
-                  />
-                </Card>
-              </Pressable>
-
-              {parseOpen && resumeExperiences.length === 0 ? (
-                <Card>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sans,
-                      fontSize: 12.5,
-                      color: colors.inkTertiary,
-                      lineHeight: 18,
-                    }}>
-                    No resume on file yet. Upload one above, or build one from your
-                    LinkedIn, and the parse shows up here.
-                  </Text>
-                </Card>
-              ) : null}
-
-              {parseOpen && resumeExperiences.length > 0 ? (
-                resumeExperiences.map((exp) => (
-                  <Card key={exp.id} style={{ gap: 8 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink, flex: 1 }}>
-                        {exp.role}
-                      </Text>
-                      <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                        {exp.dates}
-                      </Text>
-                    </View>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
-                      {exp.org}
-                      {exp.location ? `  ·  ${exp.location}` : ''}
-                    </Text>
-                    <View style={{ gap: 6, marginTop: 2 }}>
-                      {exp.bullets.map((b, i) => (
-                        <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                          <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
-                          <Text
-                            style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
-                            {b}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </Card>
-                ))
-              ) : !parseOpen ? (
+              {!parseOpen ? (
                 <View style={{ alignItems: 'center', paddingVertical: 12, gap: 10 }}>
                   <Image
                     source={require('../../../assets/images/scout-prep.png')}
@@ -1045,34 +1141,6 @@ export default function ProfileScreen() {
                     </Text>
                     <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
                       How your drafted emails are written and signed
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              <Pressable onPress={() => router.push('/location-preferences')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="location-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Location preferences
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      {profile.preferredLocations?.length
-                        ? profile.preferredLocations.slice(0, 3).join(' · ') +
-                          (profile.preferredLocations.length > 3 ? ' …' : '')
-                        : 'Where you’d actually take a job'}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
