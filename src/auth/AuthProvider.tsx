@@ -63,10 +63,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<User | null>(null);
 
-  const getIdToken = useCallback(
-    (forceRefresh?: boolean) => (auth.currentUser ? auth.currentUser.getIdToken(forceRefresh) : Promise.resolve(null)),
-    [],
-  );
+  const getIdToken = useCallback(async (forceRefresh?: boolean) => {
+    // Wait for Firebase to finish restoring the persisted session before
+    // answering. Without this, a request fired during cold start sees
+    // currentUser === null, goes out unauthenticated, gets a 401, and the
+    // client's session-expired handler signed the user out ON EVERY LAUNCH.
+    // That was the "it keeps asking me to sign in" plague (2026-08-10).
+    await auth.authStateReady();
+    return auth.currentUser ? auth.currentUser.getIdToken(forceRefresh) : null;
+  }, []);
 
   const signOut = useCallback(async () => {
     await fbSignOut(auth);
@@ -140,7 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     registerTokenGetter(getIdToken);
     registerUnauthorizedHandler(() => {
-      void signOut();
+      // Only a 401 on a request that carried a REAL token means the session
+      // is dead. If there is no current user, the request simply raced the
+      // session restore; signing out would throw away a healthy session.
+      if (auth.currentUser) void signOut();
     });
     const unsub = onIdTokenChanged(auth, (u) => {
       setUser(u);

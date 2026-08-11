@@ -98,6 +98,10 @@ function useAuthGate() {
     const inConsent = segments[0] === 'ai-consent';
 
     if (status === 'signedOut') {
+      // finish-signin is the magic-link landing screen: the URL listener is
+      // completing the sign-in RIGHT NOW, so leave it alone (it has its own
+      // timeout fallback) instead of yanking the user to the welcome screen.
+      if (segments[0] === 'finish-signin') return;
       if (!inAuthGroup) router.replace('/(auth)/welcome');
       return;
     }
