@@ -17,7 +17,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purchases';
@@ -33,6 +33,15 @@ import { ThemeProvider, useColors, useTheme } from '@/theme/ThemeProvider';
 import { resolveSchool } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
+
+// Cap Dynamic Type scaling at 1.3x app-wide. Full-size accessibility fonts
+// (up to ~3x) broke dropdowns and keyboard layouts throughout the app; a
+// 1.3 ceiling keeps larger-text users readable without shattering layouts.
+// Revisit per-screen if we ever pursue full Dynamic Type support.
+// @ts-expect-error defaultProps is a runtime escape hatch RN still honors.
+Text.defaultProps = { ...(Text.defaultProps ?? {}), maxFontSizeMultiplier: 1.3 };
+// @ts-expect-error same as above for inputs.
+TextInput.defaultProps = { ...(TextInput.defaultProps ?? {}), maxFontSizeMultiplier: 1.3 };
 
 // (diagnostic handler removed — root cause found: onboarding->tabs nav race)
 

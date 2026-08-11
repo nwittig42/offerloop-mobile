@@ -39,13 +39,22 @@ export function NotificationPrompt() {
     notifPermissionResolved,
     setNotificationsEnabled,
     dismissNotifPrompt,
+    onboardingDone,
   } = useApp();
 
   // Wait for the OS permission read before rendering ANYTHING. notificationsEnabled
   // starts false, so without this gate the modal painted on the first frame and
   // then vanished once the (async) permission check came back — it flashed in on
   // every single launch for users who already had notifications on.
-  const visible = notifPermissionResolved && !notificationsEnabled && !notifPromptDismissed;
+  //
+  // Also: never show DURING onboarding, which has its own notifications step;
+  // this sheet double-asked right on top of it. It waits for a later launch,
+  // and only for users who did not grant permission in onboarding.
+  const visible =
+    notifPermissionResolved &&
+    !notificationsEnabled &&
+    !notifPromptDismissed &&
+    onboardingDone === true;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={dismissNotifPrompt}>

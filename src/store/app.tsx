@@ -1540,7 +1540,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [showToast],
   );
 
-  const dismissNotifPrompt = useCallback(() => setNotifPromptDismissed(true), []);
+  // "Skip for now" must survive restarts: it was session-only state, so
+  // every launch re-asked users who had already said no (2026-08-10).
+  // Device-level on purpose; asking again on a NEW phone is fine.
+  const dismissNotifPrompt = useCallback(() => {
+    setNotifPromptDismissed(true);
+    AsyncStorage.setItem('offerloop.notifPromptDismissed', '1').catch(() => {});
+  }, []);
+  useEffect(() => {
+    AsyncStorage.getItem('offerloop.notifPromptDismissed')
+      .then((v) => {
+        if (v === '1') setNotifPromptDismissed(true);
+      })
+      .catch(() => {});
+  }, []);
 
   // Returning users who already granted permission: silently re-register the
   // push token each launch (Expo tokens can rotate) and suppress the prompt.
