@@ -12,7 +12,6 @@ import { matchCities, RECRUITING_CITIES } from '@/data/cities';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import SnakeBorder from '@/components/ui/SnakeBorder';
-import { PersonReveal } from '@/components/feed/PersonReveal';
 import SwipeDeck from '@/components/feed/SwipeDeck';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
 import { track } from '@/lib/analytics';
@@ -134,11 +133,6 @@ export default function Onboarding() {
   const [trackChoice, setTrackChoice] = useState<string | null>(null);
   const [locations, setLocations] = useState<string[]>(profile.preferredLocations ?? []);
   const [drafted, setDrafted] = useState(false);
-  // The teaching beat between the demo swipe and the crafting tease: a
-  // PersonReveal on OBVIOUSLY fake fixture content (no-fake-data rule), so
-  // the mechanic ("a right swipe brings back a person") lands instantly and
-  // offline. The real-contact payoff is the person-first toast in the store.
-  const [revealSeen, setRevealSeen] = useState(false);
   const [referral, setReferral] = useState<string | null>(null);
   // "Somewhere else" gets a free-text detail: real attribution beats a bucket.
   const [referralOther, setReferralOther] = useState('');
@@ -547,28 +541,10 @@ export default function Onboarding() {
 
   // ── Step 3: aha demo swipe ─────────────────────────────────────────────
   if (step === 4) {
-    if (drafted && !revealSeen) {
-      return (
-        <OnboardingScaffold
-          step={5}
-          total={TOTAL}
-          canBack={false}
-          title="A person came back"
-          subtitle="Not an application into the void. A real human to talk to."
-          footer={null}>
-          <View style={{ paddingTop: 18 }}>
-            <PersonReveal
-              framing="This is what a right swipe does"
-              name="Sample Person"
-              role="Sample Job Title"
-              company="Acme Test Co"
-              onViewIntro={() => setRevealSeen(true)}
-              viewLabel="Got it"
-            />
-          </View>
-        </OnboardingScaffold>
-      );
-    }
+    // NOTE(2026-08-11): a PersonReveal teaching beat with fixture content
+    // ("Sample Person at Acme Test Co") lived here for one release. Rylan
+    // cut it: fake sample data read as hollow, not as teaching. The real
+    // payoff stays the person-first toast when an actual contact lands.
     if (drafted) {
       // Don't reveal here — keep the draft "behind the curtain" while it writes
       // in the background. The reveal lands on the final step, by which point the

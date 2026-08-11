@@ -10,7 +10,7 @@ import { USE_MOCKS } from '@/api/config';
 import { fetchJobDescription } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
-import { cardArt, cardFlair, listingTags, targetMatches } from '@/components/feed/cardArt';
+import { cardArt, listingTags, targetMatches } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
@@ -112,14 +112,8 @@ function DetailGroup({
 function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
-  const { swipeSettings, profile } = useApp();
+  const { profile } = useApp();
   const art = cardArt(job.id);
-  // "One-swipe apply" flair only when auto-apply is actually ON, otherwise a
-  // right swipe just drafts and the ribbon would be a lie.
-  const flair = cardFlair({
-    ...job,
-    autoApplyEligible: job.autoApplyEligible && swipeSettings.autoApply,
-  });
   const details = dedupeDetails(job);
 
   // Sparse-card fill (Rylan 2026-08-11): when the structured fields leave a
@@ -135,12 +129,13 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
     detailCount < 3
       ? targetMatches(jobText, [...profile.targetRoles, ...profile.industries], 2)
       : [];
-  const tags = detailCount < 3 ? listingTags(job.description, 6 - detailCount * 2) : [];
+  const tags = detailCount < 3 ? listingTags(job.description, 4 - detailCount) : [];
   return (
     <View style={{ flex: 1 }}>
       {/* Full-bleed palette wash + hand-drawn loop watermark, breaking out of
-          the Card's 20px padding and clipped to its corners. The wash tint
-          rotates per card (cardArt) so the deck has color variety. */}
+          the Card's 20px padding and clipped to its corners. Steady brand
+          blue: the rotating per-card tints read as a rendering glitch, not
+          variety (Rylan 2026-08-11), so they lasted one release. */}
       <View
         pointerEvents="none"
         style={{
@@ -153,7 +148,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           overflow: 'hidden',
         }}>
         <LinearGradient
-          colors={[art.tint + '14', '#FAFBFF00']}
+          colors={[BRAND_BLUE + '12', '#FAFBFF00']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.9, y: 0.6 }}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 190 }}
@@ -167,32 +162,9 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
 
       {accentTheme === 'school' ? <SchoolStripe /> : null}
 
-      {/* Flair ribbon: one colorful, TRUE fact about the role (salary listed,
-          one-swipe apply, remote). Pure real data; renders nothing when the
-          job has no standout field. */}
-      {flair ? (
-        <LinearGradient
-          colors={flair.colors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            alignSelf: 'flex-start',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            borderRadius: 999,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            marginBottom: 12,
-          }}>
-          <Ionicons name={flair.icon as keyof typeof Ionicons.glyphMap} size={13} color="#FFFFFF" />
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#FFFFFF' }}>
-            {flair.label}
-          </Text>
-        </LinearGradient>
-      ) : null}
-
-      {/* Title, left-aligned, the focal point (Sorce-style). */}
+      {/* Title, left-aligned, the focal point (Sorce-style). A gradient
+          "flair ribbon" sat above this for one release; Rylan cut it
+          (read as gimmicky next to the clean chips below). */}
       <Text
         numberOfLines={2}
         style={{
@@ -280,11 +252,13 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         ) : null}
 
         {/* Real phrases from the listing itself, so a sparse card still gives
-            a feel for the company at a glance. */}
+            a feel for the company at a glance. Full-size chips, same visual
+            weight as compensation/arrangement (Rylan 2026-08-11): tiny tags
+            just re-created the white space they were meant to fill. */}
         {tags.length ? (
           <DetailGroup label="From the listing" center={false}>
             {tags.map((t) => (
-              <Chip key={t} label={t} tone="neutral" size="sm" />
+              <Chip key={t} label={t} tone="brand" icon="pricetag-outline" size="lg" />
             ))}
           </DetailGroup>
         ) : null}
