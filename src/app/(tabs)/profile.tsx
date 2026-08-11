@@ -251,7 +251,6 @@ function AppearanceSelector() {
 
 const TABS = [
   { key: 'personal', label: 'Personal', icon: 'person-outline' },
-  { key: 'resume', label: 'Resume', icon: 'document-text-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings-outline' },
   { key: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
 ] as const;
@@ -352,9 +351,9 @@ export default function ProfileScreen() {
   // flows fire immediately, text fields get the cursor placed in them.
   const onCompletionAction = (action: StepAction) => {
     if (action === 'resume') {
-      // Land on the Resume tab so upload progress and the parse are visible,
-      // and open the picker right away, the step is the action.
-      setTab('resume');
+      // Show Personal (where the resume section lives) and open the picker
+      // right away, the step is the action.
+      setTab('personal');
       void onPickResume();
     } else if (action === 'gmail') {
       setTab('settings');
@@ -777,14 +776,9 @@ export default function ProfileScreen() {
                 disabled={!dirty}
                 onPress={saveProfile}
               />
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                Deeper personalization, templates, and tone live on offerloop.ai
-              </Text>
-            </>
-          ) : null}
-
-          {tab === 'resume' ? (
-            <>
+              {/* What we gathered: the old Resume tab, merged in here (Rylan
+                  2026-08-10) so the evidence sits right under the inputs that
+                  produced it instead of one tab away. */}
               <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View
                   style={{
@@ -832,7 +826,7 @@ export default function ProfileScreen() {
                   <Ionicons name="logo-linkedin" size={17} color={colors.accent} />
                   <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
                     {!linkedinUrl.trim()
-                      ? 'Add your LinkedIn in Personal'
+                      ? 'Add your LinkedIn above'
                       : profile.linkedinHighlights.length
                         ? 'What we gathered from your LinkedIn'
                         : linkedinUrl.trim()}
@@ -940,8 +934,8 @@ export default function ProfileScreen() {
               ) : null}
 
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                Rebuild your resume or update your LinkedIn on offerloop.ai and the parse
-                updates here.
+                Rebuild your resume on offerloop.ai and the parse updates here. Deeper
+                personalization, templates, and tone live there too.
               </Text>
             </>
           ) : null}

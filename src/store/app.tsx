@@ -1618,15 +1618,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (url: string): Promise<EnrichResult> => {
       const clean = url.trim();
       if (!clean) return { enriched: false, error: 'Enter your LinkedIn URL first' };
-      patchProfile({ linkedinUrl: clean }); // optimistic; enrichment persists it server-side
       try {
         const res = await enrichLinkedin(clean);
         if (res.enriched) {
+          // Claim the URL on the profile only on success. It used to patch
+          // optimistically before the call, so a failed enrichment still ticked
+          // "Add your LinkedIn" complete in the completion card.
+          patchProfile({ linkedinUrl: clean });
           // The endpoint wrote linkedinUrl + resumeParsed + linkedinResumeParsed
           // to Firestore; refetch /me so grad year, school, experiences, and the
           // LinkedIn highlights fill in.
           await queryClient.invalidateQueries({ queryKey: qk.me });
-          showToast('LinkedIn pulled in — profile updated');
+          showToast('LinkedIn pulled in, profile updated');
         } else {
           showToast(res.error || 'Could not read that LinkedIn profile');
         }
