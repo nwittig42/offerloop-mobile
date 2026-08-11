@@ -83,7 +83,7 @@ export default function SwipeSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { swipeSettings, updateSwipeSettings, profile, rerollFeed, rerolling } = useApp();
+  const { swipeSettings, updateSwipeSettings, profile } = useApp();
   const { action, contacts, autoApply, priority } = swipeSettings;
 
   const totalCredits = contacts * profile.creditsPerSwipe;
@@ -114,45 +114,9 @@ export default function SwipeSettingsScreen() {
           Set this once. After that, every right swipe is a single tap.
         </Text>
 
-        {/* Reroll the feed — pull in a fresh, wider set of roles on demand. Keeps
-            the personalized deck as the default but gives an explicit valve for
-            range (adjacent fields, other cities) without re-onboarding. */}
-        <Pressable
-          onPress={() => {
-            if (rerolling) return;
-            rerollFeed();
-            router.back();
-          }}
-          disabled={rerolling}>
-          <Card
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-              opacity: rerolling ? 0.6 : 1,
-            }}>
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
-                backgroundColor: colors.marketing + '14',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-              <Ionicons name="shuffle-outline" size={20} color={colors.marketing} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                {rerolling ? 'Finding new roles…' : 'Show me new roles'}
-              </Text>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary, lineHeight: 17 }}>
-                Refresh your deck with fresh jobs, including ones a little outside your field.
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-          </Card>
-        </Pressable>
+        {/* "Show me new roles" moved OUT of here to the Feed action bar (the
+            shuffle button, Rylan 2026-08-10): a deck refresh is a Feed action,
+            not a setting, and its big card crowded this screen. */}
 
         {/* What the swipe does */}
         <View style={{ gap: 8 }}>

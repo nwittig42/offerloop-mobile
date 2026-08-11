@@ -21,6 +21,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
+import NightSky from '@/components/NightSky';
 import ReferralCard from '@/components/ReferralCard';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -51,6 +52,12 @@ const splitList = (s: string) =>
     .filter(Boolean);
 
 /** A soft, borderless personalization row with a hairline under it. */
+/** Display-only capitalization for parsed resume text: LinkedIn-sourced
+ *  bullets often arrive lowercase, which reads sloppy in the gathered view. */
+function capFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 function SoftRow({ label, children, last }: { label: string; children: ReactNode; last?: boolean }) {
   const colors = useColors();
   return (
@@ -254,7 +261,10 @@ function AppearanceSelector() {
 
 const TABS = [
   { key: 'personal', label: 'Personal', icon: 'person-outline' },
-  { key: 'applications', label: 'Applications', icon: 'briefcase-outline' },
+  // "Apply kit", not "Applications": Network already has an Applications view
+  // (the in-progress auto-applies), and two tabs with one name is a maze.
+  // This tab is the stuff you apply WITH; that one is the applying itself.
+  { key: 'applications', label: 'Apply kit', icon: 'briefcase-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings-outline' },
   { key: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
 ] as const;
@@ -465,6 +475,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <NightSky />
       <Header
         title="Profile"
         mark
@@ -891,77 +902,83 @@ export default function ProfileScreen() {
                 </Card>
               </Pressable>
 
-              {/* ONE resume container (Rylan 2026-08-10): file + status on
-                  top, the gathered-parse dropdown inside, replace as the
-                  bottom hairline row. Tapping the file row opens the PDF. */}
+              {/* ONE resume container (Rylan 2026-08-10, round 2): the file
+                  row IS the card. The chevron on the row expands the parse
+                  inline (no separate "what we gathered" row), row tap opens
+                  the PDF, and Replace / Remove share a proper split bottom
+                  row instead of floating loose. */}
               <Card padded={false}>
-                <Pressable
-                  disabled={!profile.hasResume || !profile.resume.url}
-                  onPress={() => {
-                    if (profile.resume.url) void WebBrowser.openBrowserAsync(profile.resume.url);
-                  }}
-                  accessibilityLabel="View resume PDF"
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
-                  <View
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="document-text-outline" size={19} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
-                      {profile.resume.name}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      {profile.hasResume && profile.resume.url
-                        ? 'Tap to view the PDF'
-                        : profile.resume.updatedLabel}
-                    </Text>
-                  </View>
-                  {resumeBusy ? (
-                    <ActivityIndicator size="small" color={colors.accent} />
-                  ) : profile.hasResume ? (
-                    <Chip label="Attached" tone="positive" dot />
-                  ) : (
-                    <Chip label="Not added" tone="neutral" />
-                  )}
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setParseOpen((v) => !v)}
-                  accessibilityRole="button"
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    borderTopWidth: 1,
-                    borderTopColor: colors.hairlineLight,
-                  }}>
-                  <Ionicons name="scan-outline" size={17} color={colors.navy} />
-                  {/* Without a resume on file, the backend fills this parse
-                      from the LinkedIn enrichment. Say so; "from your resume"
-                      when there is no resume reads as invented data. */}
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {profile.hasResume
-                      ? 'Here is what we gathered from your resume'
-                      : 'What we know so far, from your LinkedIn'}
-                  </Text>
-                  <Ionicons
-                    name={parseOpen ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color={colors.inkTertiary}
-                  />
-                </Pressable>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
+                  <Pressable
+                    disabled={!profile.hasResume || !profile.resume.url}
+                    onPress={() => {
+                      // Cache-buster: the stored PDF keeps ONE fixed URL, so
+                      // after a replace/rebuild both iOS and the CDN happily
+                      // serve the stale bytes. A unique query forces a fresh
+                      // fetch (Rylan hit this: rebuilt resume, old PDF shown).
+                      if (profile.resume.url) {
+                        const u = profile.resume.url;
+                        void WebBrowser.openBrowserAsync(
+                          `${u}${u.includes('?') ? '&' : '?'}cb=${Date.now()}`,
+                        );
+                      }
+                    }}
+                    accessibilityLabel="View resume PDF"
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        backgroundColor: colors.accent + '14',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                      <Ionicons name="document-text-outline" size={19} color={colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
+                        {profile.resume.name}
+                      </Text>
+                      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                        {profile.hasResume && profile.resume.url
+                          ? 'Attached to every email · tap to view'
+                          : profile.resume.updatedLabel}
+                      </Text>
+                    </View>
+                    {resumeBusy ? (
+                      <ActivityIndicator size="small" color={colors.accent} />
+                    ) : profile.hasResume ? (
+                      <Chip label="Attached" tone="positive" dot />
+                    ) : (
+                      <Chip label="Not added" tone="neutral" />
+                    )}
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setParseOpen((v) => !v)}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Show what we gathered from your resume">
+                    <Ionicons
+                      name={parseOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.inkTertiary}
+                    />
+                  </Pressable>
+                </View>
 
                 {parseOpen ? (
-                  <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 14 }}>
+                  <View
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingBottom: 14,
+                      gap: 14,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.hairlineLight,
+                      paddingTop: 12,
+                    }}>
                     {resumeExperiences.length === 0 ? (
                       <Text
                         style={{
@@ -978,14 +995,14 @@ export default function ProfileScreen() {
                         <View key={exp.id} style={{ gap: 6 }}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
                             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, flex: 1 }}>
-                              {exp.role}
+                              {capFirst(exp.role)}
                             </Text>
                             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
                               {exp.dates}
                             </Text>
                           </View>
                           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
-                            {exp.org}
+                            {capFirst(exp.org)}
                             {exp.location ? `  ·  ${exp.location}` : ''}
                           </Text>
                           <View style={{ gap: 5, marginTop: 2 }}>
@@ -994,7 +1011,7 @@ export default function ProfileScreen() {
                                 <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
                                 <Text
                                   style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
-                                  {b}
+                                  {capFirst(b)}
                                 </Text>
                               </View>
                             ))}
@@ -1005,42 +1022,55 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
 
-                <Pressable
-                  onPress={onPickResume}
-                  disabled={resumeBusy}
-                  accessibilityRole="button"
-                  style={({ pressed }) => ({
+                <View
+                  style={{
                     flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    paddingVertical: 13,
                     borderTopWidth: 1,
                     borderTopColor: colors.hairlineLight,
-                    opacity: pressed || resumeBusy ? 0.5 : 1,
-                  })}>
-                  <Ionicons name="cloud-upload-outline" size={16} color={colors.accent} />
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
-                    {profile.hasResume ? 'Replace resume' : 'Upload resume'}
-                  </Text>
-                </Pressable>
+                  }}>
+                  <Pressable
+                    onPress={onPickResume}
+                    disabled={resumeBusy}
+                    accessibilityRole="button"
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                      paddingVertical: 13,
+                      opacity: pressed || resumeBusy ? 0.5 : 1,
+                    })}>
+                    <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
+                      {profile.hasResume ? 'Replace' : 'Upload resume'}
+                    </Text>
+                  </Pressable>
+                  {profile.hasResume ? (
+                    <>
+                      <View style={{ width: 1, backgroundColor: colors.hairlineLight }} />
+                      <Pressable
+                        onPress={onRemoveResume}
+                        disabled={resumeBusy}
+                        accessibilityRole="button"
+                        style={({ pressed }) => ({
+                          flex: 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 7,
+                          paddingVertical: 13,
+                          opacity: pressed || resumeBusy ? 0.5 : 1,
+                        })}>
+                        <Ionicons name="trash-outline" size={15} color={colors.negative} />
+                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.negative }}>
+                          Remove
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+                </View>
               </Card>
-
-              {profile.hasResume ? (
-                <Pressable
-                  onPress={onRemoveResume}
-                  disabled={resumeBusy}
-                  accessibilityRole="button"
-                  style={({ pressed }) => ({
-                    alignItems: 'center',
-                    paddingVertical: 6,
-                    opacity: pressed || resumeBusy ? 0.5 : 1,
-                  })}>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.negative }}>
-                    Remove resume
-                  </Text>
-                </Pressable>
-              ) : null}
 
               {/* Doors two and three, permanent home: build from LinkedIn or
                   from a typed description. The Feed's blocked-swipe sheet

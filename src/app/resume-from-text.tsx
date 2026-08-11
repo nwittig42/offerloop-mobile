@@ -174,14 +174,30 @@ export default function ResumeFromTextScreen() {
               </Text>
             </View>
           ) : state.phase === 'ready' ? (
-            <ResumePreview
-              fileName="Offerloop_Resume.pdf"
-              sections={sectionsFromCanonical(state.resume)}
-              onUse={adopt}
-              busy={adopting}
-              onSecondary={() => setState({ phase: 'input' })}
-              secondaryLabel="Edit my description"
-            />
+            <View style={{ flex: 1, gap: 12 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: colors.navy + '0D',
+                }}>
+                <Ionicons name="information-circle-outline" size={18} color={colors.navy} />
+                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary, lineHeight: 18 }}>
+                  A solid start, good enough to apply with today. The strongest resumes back
+                  bullets with real numbers only you know, so plan to sharpen this over time.
+                </Text>
+              </View>
+              <ResumePreview
+                fileName="Offerloop_Resume.pdf"
+                sections={sectionsFromCanonical(state.resume)}
+                onUse={adopt}
+                busy={adopting}
+                onSecondary={() => setState({ phase: 'input' })}
+                secondaryLabel="Edit my description"
+              />
+            </View>
           ) : state.phase === 'limit' ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
               <Ionicons name="hourglass-outline" size={34} color={colors.inkTertiary} />

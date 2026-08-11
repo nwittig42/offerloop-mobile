@@ -109,14 +109,32 @@ export default function ResumePreviewScreen() {
             </Text>
           </View>
         ) : state.phase === 'ready' ? (
-          <ResumePreview
-            fileName="Offerloop_Resume.pdf"
-            sections={sectionsFromCanonical(state.resume)}
-            onUse={adopt}
-            busy={adopting}
-            onSecondary={() => router.back()}
-            secondaryLabel="Not yet"
-          />
+          <View style={{ flex: 1, gap: 12 }}>
+            {/* Honest expectations (Rylan 2026-08-10): this is a solid floor,
+                not a polished ceiling, and users should hear that from us. */}
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 10,
+                padding: 12,
+                borderRadius: 10,
+                backgroundColor: colors.navy + '0D',
+              }}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.navy} />
+              <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary, lineHeight: 18 }}>
+                A solid start, good enough to apply with today. The strongest resumes back
+                bullets with real numbers only you know, so plan to sharpen this over time.
+              </Text>
+            </View>
+            <ResumePreview
+              fileName="Offerloop_Resume.pdf"
+              sections={sectionsFromCanonical(state.resume)}
+              onUse={adopt}
+              busy={adopting}
+              onSecondary={() => router.back()}
+              secondaryLabel="Not yet"
+            />
+          </View>
         ) : state.phase === 'thin' ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 12 }}>
             <Ionicons name="document-outline" size={34} color={colors.inkTertiary} />

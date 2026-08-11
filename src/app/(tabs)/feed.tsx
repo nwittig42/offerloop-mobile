@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Modal, Platform, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -14,8 +14,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { APP_DOWNLOAD_URL } from '@/lib/links';
 import GlassBar from '@/components/GlassBar';
+import NightSky from '@/components/NightSky';
 import Header from '@/components/Header';
 import ReferralCard from '@/components/ReferralCard';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
@@ -37,7 +37,7 @@ import { ActionCircle } from '@/components/ui/Button';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
-import { useColors } from '@/theme/ThemeProvider';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
@@ -56,6 +56,10 @@ import type { Job } from '@/types';
 const FEED_RIDGES = require('../../../assets/images/ridges-day.png');
 
 function FeedRidgeline() {
+  // Light mode only: in dark mode this day art reads as a washed-gray ghost
+  // (Rylan flagged it); NightSky supplies the night ridgeline instead.
+  const { pref } = useTheme();
+  if (pref === 'dark') return null;
   return (
     <View
       pointerEvents="none"
@@ -259,35 +263,6 @@ export default function FeedScreen() {
     }
   }, [canDraft, draftJob, passJob, saveJob, autoApplyJob, swipeSettings.autoApply, canAutoApply, showToast]);
 
-  // Share the top card (native share sheet).
-  //
-  // This used to send a bare sentence with NO link — the most viral moment in
-  // the app ("look at this role") and it handed the recipient nowhere to go.
-  // Now it carries the job (title, company, location, comp) and a link to get
-  // the app, so a share can actually become a user.
-  const shareTopJob = useCallback(() => {
-    const job = jobs[0];
-    if (!job) return;
-    const facts = [job.location, job.compensation, job.workArrangement]
-      .filter(Boolean)
-      .join(' · ');
-    const message = [
-      `${job.title} at ${job.company}`,
-      facts,
-      '',
-      'Found it on Offerloop — it finds real people at the company and drafts your intro for you.',
-      APP_DOWNLOAD_URL,
-    ]
-      .filter((l) => l !== undefined && l !== null)
-      .join('\n');
-    Share.share({
-      message,
-      // iOS renders a rich preview for the url and appends it; Android folds it
-      // into the message above.
-      ...(Platform.OS === 'ios' ? { url: APP_DOWNLOAD_URL } : {}),
-    }).catch(() => {});
-  }, [jobs]);
-
   // The pill was an outline around empty space — a plan border with nothing
   // inside it, which read as unfinished rather than minimal. Fill it with a soft
   // brand wash so it has presence at a glance without shouting over the deck.
@@ -317,6 +292,7 @@ export default function FeedScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+      <NightSky />
       <FeedRidgeline />
       <Header
         title="Offerloop"
@@ -448,7 +424,16 @@ export default function FeedScreen() {
                 barStyle,
               ]}>
               <GlassBar style={{ gap: 6 }}>
-                <ActionCircle icon="share-outline" size={38} onPress={shareTopJob} />
+                {/* Shuffle replaced share here (Rylan 2026-08-10): sharing
+                    confused people, and "show me new roles" deserved a spot
+                    in reach instead of living deep in swipe settings. */}
+                <ActionCircle
+                  icon="shuffle-outline"
+                  size={38}
+                  onPress={() => {
+                    if (!rerolling) rerollFeed();
+                  }}
+                />
                 <ActionCircle
                   icon="bookmark-outline"
                   size={40}

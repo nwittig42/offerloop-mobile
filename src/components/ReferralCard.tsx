@@ -29,8 +29,9 @@ export default function ReferralCard({ compact }: { compact?: boolean }) {
   };
 
   // Compact = one slim row (Profile uses this: the full card pushed the tab
-  // strip below the fold). Same gradient identity, real progress count, no
-  // paragraph, no progress bar, no pill button.
+  // strip below the fold). Same gradient identity, real progress count, plus
+  // the segmented tick-off bar underneath (Rylan 2026-08-10): progress you
+  // can SEE beats a fraction you have to read.
   if (compact) {
     return (
       <Pressable onPress={invite} accessibilityRole="button">
@@ -42,22 +43,37 @@ export default function ReferralCard({ compact }: { compact?: boolean }) {
             borderRadius: 12,
             paddingHorizontal: 14,
             paddingVertical: 11,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
+            gap: 9,
           }}>
-          <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={15} color="#FFFFFF" />
-          <Text
-            numberOfLines={1}
-            style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
-            {r.unlocked ? 'Elite unlocked, thank you!' : 'Invite friends, unlock Elite free'}
-          </Text>
-          {!r.unlocked ? (
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#EAF0FF' }}>
-              {r.joined}/{r.goal}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={15} color="#FFFFFF" />
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
+              {r.unlocked ? 'Elite unlocked, thank you!' : 'Invite friends, unlock Elite free'}
             </Text>
+            {!r.unlocked ? (
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#EAF0FF' }}>
+                {r.joined}/{r.goal}
+              </Text>
+            ) : null}
+            <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+          </View>
+          {!r.unlocked ? (
+            <View style={{ flexDirection: 'row', gap: 4 }}>
+              {Array.from({ length: r.goal }).map((_, i) => (
+                <View
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: i < r.joined ? '#FFFFFF' : 'rgba(255,255,255,0.28)',
+                  }}
+                />
+              ))}
+            </View>
           ) : null}
-          <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
         </LinearGradient>
       </Pressable>
     );
