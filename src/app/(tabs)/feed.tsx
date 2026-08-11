@@ -447,19 +447,19 @@ export default function FeedScreen() {
                 },
                 barStyle,
               ]}>
-              <GlassBar style={{ gap: 8 }}>
-                <ActionCircle icon="share-outline" size={42} onPress={shareTopJob} />
+              <GlassBar style={{ gap: 6 }}>
+                <ActionCircle icon="share-outline" size={38} onPress={shareTopJob} />
                 <ActionCircle
                   icon="bookmark-outline"
-                  size={46}
+                  size={40}
                   onPress={() => deckRef.current?.save()}
                 />
                 <Animated.View style={passStyle}>
-                  <PlayfulPass size={64} onPress={() => deckRef.current?.swipe('left')} />
+                  <PlayfulPass size={58} onPress={() => deckRef.current?.swipe('left')} />
                 </Animated.View>
                 <Animated.View style={draftStyle}>
                   <SendButton
-                    size={64}
+                    size={58}
                     disabled={!canDraft}
                     onPress={() => deckRef.current?.swipe('right')}
                   />
@@ -479,6 +479,10 @@ export default function FeedScreen() {
                   }}
                   accessibilityLabel="Auto-apply on swipe"
                   accessibilityState={{ selected: swipeSettings.autoApply }}>
+                  {/* Compact two-line pill: the single-line label pushed the
+                      outer buttons off screen edges (Rylan's screenshot,
+                      2026-08-10), worse with enlarged text. Fixed-size chrome,
+                      so font scaling is pinned here. */}
                   {swipeSettings.autoApply ? (
                     <LinearGradient
                       colors={['#2563EB', '#4F46E5', '#7C3AED']}
@@ -487,15 +491,22 @@ export default function FeedScreen() {
                       style={{
                         height: 46,
                         borderRadius: 23,
-                        paddingHorizontal: 14,
+                        paddingHorizontal: 10,
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 6,
+                        gap: 4,
                       }}>
-                      <Ionicons name="flash" size={16} color="#FFFFFF" />
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: '#FFFFFF' }}>
-                        Auto-apply
+                      <Ionicons name="flash" size={15} color="#FFFFFF" />
+                      <Text
+                        maxFontSizeMultiplier={1}
+                        style={{
+                          fontFamily: fonts.sansSemibold,
+                          fontSize: 10,
+                          lineHeight: 12,
+                          color: '#FFFFFF',
+                        }}>
+                        Auto{'\n'}apply
                       </Text>
                     </LinearGradient>
                   ) : (
@@ -503,25 +514,32 @@ export default function FeedScreen() {
                       style={{
                         height: 46,
                         borderRadius: 23,
-                        paddingHorizontal: 14,
+                        paddingHorizontal: 10,
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 6,
+                        gap: 4,
                         backgroundColor: colors.paper2,
                         borderWidth: 1,
                         borderColor: colors.hairline,
                       }}>
-                      <Ionicons name="flash-outline" size={16} color={colors.inkTertiary} />
-                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.inkTertiary }}>
-                        Auto-apply
+                      <Ionicons name="flash-outline" size={15} color={colors.inkTertiary} />
+                      <Text
+                        maxFontSizeMultiplier={1}
+                        style={{
+                          fontFamily: fonts.sansMedium,
+                          fontSize: 10,
+                          lineHeight: 12,
+                          color: colors.inkTertiary,
+                        }}>
+                        Auto{'\n'}apply
                       </Text>
                     </View>
                   )}
                 </Pressable>
                 <ActionCircle
                   icon="options-outline"
-                  size={42}
+                  size={38}
                   onPress={() => router.push('/swipe-settings')}
                 />
               </GlassBar>

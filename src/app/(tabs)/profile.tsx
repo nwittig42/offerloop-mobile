@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
 import ReferralCard from '@/components/ReferralCard';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import { OTA_NOTES, otaStamp, SHOW_BUILD_STAMP } from '@/lib/buildInfo';
@@ -766,8 +767,8 @@ export default function ProfileScreen() {
                 What travels with your applications and outreach.
               </Text>
 
-              {/* Application profile lives here and in Settings, it is what
-                  auto-apply fills on every job, so keep it easy to reach. */}
+              {/* Application profile lives here ONLY (removed from Settings,
+                  Rylan 2026-08-10, no duplicated rows). */}
               <Pressable onPress={() => router.push('/application-profile')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View
@@ -831,6 +832,20 @@ export default function ProfileScreen() {
                 onPress={onPickResume}
               />
 
+              {/* The second door, permanent home: build one from LinkedIn.
+                  The Feed's blocked-swipe sheet offers this too, but nobody
+                  should need a blocked swipe to find the builder. */}
+              {RESUME_BUILDER_LIVE && !profile.hasResume ? (
+                <Button
+                  label="Build one from your LinkedIn"
+                  variant="outline"
+                  fullWidth
+                  icon="logo-linkedin"
+                  disabled={resumeBusy}
+                  onPress={() => router.push('/resume-preview')}
+                />
+              ) : null}
+
               {/* LinkedIn, the second source we gather from, above the parse.
                   Only expandable when we actually have gathered highlights —
                   otherwise it's an honest status row (no fabricated bullets). */}
@@ -872,8 +887,13 @@ export default function ProfileScreen() {
               <Pressable onPress={() => setParseOpen((v) => !v)}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Ionicons name="scan-outline" size={17} color={colors.navy} />
+                  {/* Without a resume on file, the backend fills this parse
+                      from the LinkedIn enrichment. Say so; "from your resume"
+                      when there is no resume reads as invented data. */}
                   <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    Here is what we gathered from your resume
+                    {profile.hasResume
+                      ? 'Here is what we gathered from your resume'
+                      : 'What we know so far, from your LinkedIn'}
                   </Text>
                   <Ionicons
                     name={parseOpen ? 'chevron-up' : 'chevron-down'}
@@ -892,7 +912,8 @@ export default function ProfileScreen() {
                       color: colors.inkTertiary,
                       lineHeight: 18,
                     }}>
-                    No resume on file yet. Upload one above and the parse shows up here.
+                    No resume on file yet. Upload one above, or build one from your
+                    LinkedIn, and the parse shows up here.
                   </Text>
                 </Card>
               ) : null}
@@ -948,8 +969,7 @@ export default function ProfileScreen() {
               ) : null}
 
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                Rebuild your resume or update your LinkedIn on offerloop.ai and the parse
-                updates here.
+                Replace your resume or update your LinkedIn and this view refreshes with it.
               </Text>
             </>
           ) : null}
@@ -1028,31 +1048,6 @@ export default function ProfileScreen() {
                         ? profile.preferredLocations.slice(0, 3).join(' · ') +
                           (profile.preferredLocations.length > 3 ? ' …' : '')
                         : 'Where you’d actually take a job'}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              <Pressable onPress={() => router.push('/application-profile')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Application profile
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      Work authorization + details for auto-apply
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
