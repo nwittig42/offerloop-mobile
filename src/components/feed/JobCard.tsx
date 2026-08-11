@@ -10,7 +10,7 @@ import { USE_MOCKS } from '@/api/config';
 import { fetchJobDescription } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
-import { cardArt, cardFlair } from '@/components/feed/cardArt';
+import { cardArt, cardFlair, listingTags, targetMatches } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
@@ -112,9 +112,30 @@ function DetailGroup({
 function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
   const colors = useColors();
   const { accentTheme } = useTheme();
+  const { swipeSettings, profile } = useApp();
   const art = cardArt(job.id);
-  const flair = cardFlair(job);
+  // "One-swipe apply" flair only when auto-apply is actually ON, otherwise a
+  // right swipe just drafts and the ribbon would be a lie.
+  const flair = cardFlair({
+    ...job,
+    autoApplyEligible: job.autoApplyEligible && swipeSettings.autoApply,
+  });
   const details = dedupeDetails(job);
+
+  // Sparse-card fill (Rylan 2026-08-11): when the structured fields leave a
+  // void, fill it with TRUE glanceables: the user's own targets that appear
+  // in this listing, then buzzword phrases pulled from the listing text.
+  const detailCount =
+    (job.compensation ? 1 : 0) +
+    (details.roleType ? 1 : 0) +
+    (details.arrangement ? 1 : 0) +
+    (details.experience ? 1 : 0);
+  const jobText = `${job.title} ${job.description || ''}`;
+  const matches =
+    detailCount < 3
+      ? targetMatches(jobText, [...profile.targetRoles, ...profile.industries], 2)
+      : [];
+  const tags = detailCount < 3 ? listingTags(job.description, 6 - detailCount * 2) : [];
   return (
     <View style={{ flex: 1 }}>
       {/* Full-bleed palette wash + hand-drawn loop watermark, breaking out of
@@ -245,6 +266,26 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         {details.experience ? (
           <DetailGroup label="Experience level" center={false}>
             <Chip label={details.experience} tone="accent" icon="school-outline" size="lg" />
+          </DetailGroup>
+        ) : null}
+
+        {/* Personal fit, only when TRUE: the user's own stated targets that
+            literally appear in this listing. */}
+        {matches.length ? (
+          <DetailGroup label="Matches your targets" center={false}>
+            {matches.map((m) => (
+              <Chip key={m} label={m} tone="accent" icon="checkmark-circle-outline" size="lg" />
+            ))}
+          </DetailGroup>
+        ) : null}
+
+        {/* Real phrases from the listing itself, so a sparse card still gives
+            a feel for the company at a glance. */}
+        {tags.length ? (
+          <DetailGroup label="From the listing" center={false}>
+            {tags.map((t) => (
+              <Chip key={t} label={t} tone="neutral" size="sm" />
+            ))}
           </DetailGroup>
         ) : null}
       </View>

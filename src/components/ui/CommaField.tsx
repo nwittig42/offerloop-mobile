@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react';
+import { type RefObject } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useColors } from '@/theme/ThemeProvider';
@@ -7,7 +7,7 @@ import { fonts } from '@/theme/tokens';
 /**
  * A soft, borderless comma field: the selected values live inside the text
  * box as a comma-separated string the user can edit freely. Suggestions
- * appear under it when focused and append on tap. Less boxy than a chip
+ * always visible under it, appended on tap (a soft multi-select menu). Less boxy than a chip
  * pile, easier to read at a glance.
  */
 export function CommaField({
@@ -25,7 +25,6 @@ export function CommaField({
   inputRef?: RefObject<TextInput | null>;
 }) {
   const colors = useColors();
-  const [focused, setFocused] = useState(false);
 
   const selected = value
     .split(',')
@@ -66,8 +65,6 @@ export function CommaField({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.inkTertiary}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         multiline
         style={{
           fontFamily: fonts.sans,
@@ -77,7 +74,10 @@ export function CommaField({
           lineHeight: 21,
         }}
       />
-      {focused && available.length ? (
+      {/* Always visible (Rylan 2026-08-11): they read as a tappable
+          multi-select menu, not a hidden autocomplete. Typing still narrows
+          them via the fragment filter above. */}
+      {available.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           {available.map((s) => (
             <Pressable

@@ -96,6 +96,41 @@ export async function generateResumeFromPrompt(prompt: string): Promise<ResumeBu
   }
 }
 
+/** Refine a draft: the backend applies the user's typed instructions to the
+ *  previous resume, changing only what the instructions require (the system
+ *  prompt's rule 16). context 'editor' uses the free daily edit cap, not the
+ *  lifetime generation cap. */
+export async function refineResume(
+  prompt: string,
+  previous: CanonicalResume,
+): Promise<ResumeBuildResult> {
+  try {
+    const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
+      `${WEB_BASE}/api/resume-builder/generate`,
+      { method: 'POST', body: { prompt, previous, context: 'editor' }, timeoutMs: 90000 },
+    );
+    if (!r.success || !r.resume) return { status: 'error', message: 'Edit failed.' };
+    return { status: 'ok', resume: r.resume, html: r.html };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 429) return { status: 'limit' };
+    return { status: 'error', message: 'Could not apply that change right now.' };
+  }
+}
+
+/** The stored resume in editable (canonical) form, for the edit loop.
+ *  null resume = nothing stored (or stored in a shape we cannot convert). */
+export async function currentResume(): Promise<CanonicalResume | null> {
+  try {
+    const r = await apiFetch<{ success: boolean; resume: CanonicalResume | null }>(
+      `${WEB_BASE}/api/resume-builder/current`,
+      { timeoutMs: 30000 },
+    );
+    return r.resume ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Adopt: the explicit, user-approved save. Flips hasResume via resumeUrl. */
 export async function finalizeResume(resume: CanonicalResume): Promise<boolean> {
   try {

@@ -215,6 +215,7 @@ function ThemedShell() {
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="resume-preview" options={{ presentation: 'modal' }} />
         <Stack.Screen name="resume-from-text" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="resume-edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />

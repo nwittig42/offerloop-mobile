@@ -23,6 +23,7 @@ import {
 } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
 import { ResumePreview } from '@/components/resume/ResumePreview';
+import { ResumeRefine } from '@/components/resume/ResumeRefine';
 import { Button } from '@/components/ui/Button';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -196,6 +197,12 @@ export default function ResumeFromTextScreen() {
                 busy={adopting}
                 onSecondary={() => setState({ phase: 'input' })}
                 secondaryLabel="Edit my description"
+              />
+              <ResumeRefine
+                resume={state.resume}
+                onRefined={(next) => setState({ phase: 'ready', resume: next })}
+                onLimit={() => showToast('Daily edit limit reached. It resets tomorrow.')}
+                onError={(m) => showToast(m)}
               />
             </View>
           ) : state.phase === 'limit' ? (

@@ -38,6 +38,7 @@ export function ResumePreview({
   fileName,
   sections,
   onUse,
+  useLabel = 'Use this resume',
   onSecondary,
   secondaryLabel = 'Edit in profile',
   busy = false,
@@ -48,6 +49,8 @@ export function ResumePreview({
   /** Parsed content, shown as titled sections under the page. */
   sections: ResumePreviewSection[];
   onUse: () => void;
+  /** Override the primary button label (the edit screen says "Save changes"). */
+  useLabel?: string;
   onSecondary?: () => void;
   secondaryLabel?: string;
   busy?: boolean;
@@ -166,7 +169,7 @@ export function ResumePreview({
 
       <View style={{ gap: 8 }}>
         <Button
-          label={busy ? 'Saving' : 'Use this resume'}
+          label={busy ? 'Saving' : useLabel}
           variant="brand"
           size="lg"
           fullWidth

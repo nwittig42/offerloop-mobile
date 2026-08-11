@@ -657,7 +657,23 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          <ProfileCompletion profile={profile} onAction={onCompletionAction} />
+          {/* Checklist reads the LIVE typed values, not just the saved
+              profile: Rylan typed his grad year and the list still nagged him
+              because he had not hit Save yet. Saving still persists; the
+              checkmark just should not wait for the round trip. */}
+          <ProfileCompletion
+            profile={{
+              ...profile,
+              linkedinUrl: linkedinUrl || profile.linkedinUrl,
+              gradYear: gradYear || profile.gradYear,
+              about: about || profile.about,
+              targetRoles: splitList(rolesText).length ? splitList(rolesText) : profile.targetRoles,
+              industries: splitList(industriesText).length
+                ? splitList(industriesText)
+                : profile.industries,
+            }}
+            onAction={onCompletionAction}
+          />
 
           <ReferralCard compact />
 
@@ -1029,18 +1045,37 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
 
-                {/* Replace sits centered on the card's full width (icon +
-                    label, one line); Remove is just a quiet trash icon in the
-                    bottom-right corner. The 50/50 split made Replace hug the
-                    left and gave a destructive action equal billing. */}
+                {/* Bottom actions (Rylan 2026-08-11): Edit and Replace share
+                    the center; the trash is pinned flush to the card's far
+                    bottom-right, well away from both. */}
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: 4,
                     borderTopWidth: 1,
                     borderTopColor: colors.hairlineLight,
                   }}>
+                  {RESUME_BUILDER_LIVE && profile.hasResume ? (
+                    <Pressable
+                      onPress={() => router.push('/resume-edit')}
+                      disabled={resumeBusy}
+                      accessibilityRole="button"
+                      style={({ pressed }) => ({
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 7,
+                        paddingVertical: 13,
+                        paddingHorizontal: 14,
+                        opacity: pressed || resumeBusy ? 0.5 : 1,
+                      })}>
+                      <Ionicons name="create-outline" size={15} color={colors.accent} />
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
+                        Edit
+                      </Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     onPress={onPickResume}
                     disabled={resumeBusy}
@@ -1048,10 +1083,9 @@ export default function ProfileScreen() {
                     style={({ pressed }) => ({
                       flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'center',
                       gap: 7,
                       paddingVertical: 13,
-                      paddingHorizontal: 24,
+                      paddingHorizontal: 14,
                       opacity: pressed || resumeBusy ? 0.5 : 1,
                     })}>
                     <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
@@ -1068,11 +1102,11 @@ export default function ProfileScreen() {
                       hitSlop={8}
                       style={({ pressed }) => ({
                         position: 'absolute',
-                        right: 6,
+                        right: 0,
                         top: 0,
                         bottom: 0,
                         justifyContent: 'center',
-                        paddingHorizontal: 10,
+                        paddingHorizontal: 14,
                         opacity: pressed || resumeBusy ? 0.5 : 1,
                       })}>
                       <Ionicons name="trash-outline" size={15} color={colors.negative} />
