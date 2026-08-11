@@ -3,6 +3,9 @@ import { Redirect, useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ResumeDoors } from '@/components/resume/ResumeDoors';
+import { ResumePreview } from '@/components/resume/ResumePreview';
+import { UpgradeNudgeCard } from '@/components/resume/UpgradeNudgeCard';
 import { ActionCircle, Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
@@ -165,6 +168,30 @@ export default function DesignGallery() {
             <Input placeholder="Tap to test the focus ring" />
             <Input placeholder="Multiline body" multiline />
           </Card>
+        </Section>
+
+        <Section title="Resume path (unwired specimens, fake fixture data)">
+          <Card style={{ paddingVertical: 24 }}>
+            <ResumeDoors
+              hasResume={false}
+              hasLinkedin
+              onUpload={() => {}}
+              onBuildFromLinkedin={() => {}}
+              onNotNow={() => {}}
+            />
+          </Card>
+          <View style={{ height: 460 }}>
+            <ResumePreview
+              fileName="sample-resume.pdf"
+              sections={[
+                { title: 'Experience', lines: ['Sample Job Title, Acme Test Co', 'Sample Second Role, Placeholder Industries'] },
+                { title: 'Education', lines: ['Sample University, Sample Degree'] },
+              ]}
+              onUse={() => {}}
+              onSecondary={() => {}}
+            />
+          </View>
+          <UpgradeNudgeCard onTry={() => {}} onDismiss={() => {}} />
         </Section>
 
         <Section title="Swipe card specimen (fake fixture data)">
