@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -32,12 +41,17 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Social buttons exist only when the native modules are in this binary
-  // (build 17+). On older builds both checks fail closed and the screen is
-  // exactly the email flow that App Review already approved.
+  // Social sign-in exists only when the native modules are in this binary
+  // (build 19+). On older builds both checks fail closed, the Sign in button
+  // goes straight to the email screen, and nothing else renders.
   const [appleReady, setAppleReady] = useState(false);
   const googleReady = googleSignInAvailable();
   const [socialBusy, setSocialBusy] = useState<'apple' | 'google' | null>(null);
+  // One entry point, then a chooser sheet (Rylan 2026-08-11): the stacked
+  // per-provider buttons read as clutter. The blue Sign in wears the logos;
+  // tapping it offers Apple, Google, or email in one place.
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const hasSocial = appleReady || googleReady;
   useEffect(() => {
     let alive = true;
     void appleSignInAvailable().then((ok) => {
@@ -67,14 +81,21 @@ export default function WelcomeScreen() {
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.feedBg,
-        paddingTop: insets.top + 36,
-        paddingHorizontal: 28,
-        paddingBottom: insets.bottom + 20,
-      }}>
+    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+      {/* ScrollView + centered max-width column (App Review rejection
+          2026-08-11, Guideline 4): on iPad the fixed flex layout overlapped
+          into an unreadable pile. A scrolling column cannot overlap, and the
+          width cap keeps it presentable on any screen. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + 36,
+          paddingHorizontal: 28,
+          paddingBottom: insets.bottom + 20,
+        }}
+        showsVerticalScrollIndicator={false}>
+        <View style={{ flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
       <View style={{ alignItems: 'center', gap: 12 }}>
         <Image
           source={require('../../../assets/images/offerloop-logo.png')}
@@ -95,7 +116,7 @@ export default function WelcomeScreen() {
         </Text>
       </View>
 
-      <View style={{ flex: 1, justifyContent: 'center', gap: 22 }}>
+      <View style={{ flexGrow: 1, justifyContent: 'center', gap: 22, paddingVertical: 28 }}>
         {FEATURES.map((f) => (
           <View key={f.title} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             <View
@@ -122,79 +143,36 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={{ gap: 12 }}>
-        {/* Sign in with Apple first and equally prominent (Guideline 4.8 +
-            Apple HIG). Both buttons are one tap into the same account system
-            as email; Firebase links providers by address. */}
-        {appleReady ? (
-          <Pressable
-            onPress={() => void runSocial('apple')}
-            disabled={!!socialBusy}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with Apple"
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              backgroundColor: '#000000',
-              borderRadius: 8,
-              paddingVertical: 15,
-              opacity: pressed || socialBusy ? 0.75 : 1,
-            })}>
-            {socialBusy === 'apple' ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
-            )}
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: '#FFFFFF' }}>
-              Sign in with Apple
-            </Text>
-          </Pressable>
-        ) : null}
-        {googleReady ? (
-          <Pressable
-            onPress={() => void runSocial('google')}
-            disabled={!!socialBusy}
-            accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              backgroundColor: '#FFFFFF',
-              borderWidth: 1,
-              borderColor: colors.hairline,
-              borderRadius: 8,
-              paddingVertical: 15,
-              opacity: pressed || socialBusy ? 0.75 : 1,
-            })}>
-            {socialBusy === 'google' ? (
-              <ActivityIndicator size="small" color={colors.ink} />
-            ) : (
-              <Ionicons name="logo-google" size={17} color="#4285F4" />
-            )}
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: '#1F1F1F' }}>
-              Continue with Google
-            </Text>
-          </Pressable>
-        ) : null}
-        {appleReady || googleReady ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 }}>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-              or use email
-            </Text>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
-          </View>
-        ) : null}
-        <Button
-          label="Sign in"
-          variant="primary"
-          size="lg"
-          fullWidth
-          onPress={() => router.push('/(auth)/sign-in')}
-        />
+        {/* The single entry: when social providers exist it wears their
+            logos and opens the chooser; on old builds it is the plain email
+            Sign in button App Review already approved. */}
+        <Pressable
+          onPress={() => (hasSocial ? setChooserOpen(true) : router.push('/(auth)/sign-in'))}
+          disabled={!!socialBusy}
+          accessibilityRole="button"
+          accessibilityLabel="Sign in"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 9,
+            backgroundColor: colors.ink,
+            borderRadius: 8,
+            paddingVertical: 15,
+            opacity: socialBusy ? 0.8 : 1,
+          }}>
+          {socialBusy ? (
+            <ActivityIndicator size="small" color={colors.paper} />
+          ) : hasSocial ? (
+            <>
+              {appleReady ? <Ionicons name="logo-apple" size={18} color={colors.paper} /> : null}
+              {googleReady ? <Ionicons name="logo-google" size={15} color={colors.paper} /> : null}
+            </>
+          ) : null}
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16.5, color: colors.paper }}>
+            Sign in
+          </Text>
+        </Pressable>
         <Button
           label="Create your account"
           variant="outline"
@@ -213,6 +191,115 @@ export default function WelcomeScreen() {
           New here? Set up takes about a minute, right in the app.
         </Text>
       </View>
+        </View>
+      </ScrollView>
+
+      {/* The sign-in chooser: Apple first (Guideline 4.8 prominence), then
+          Google, then email. One sheet, one decision. */}
+      <Modal
+        visible={chooserOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setChooserOpen(false)}>
+        <Pressable
+          onPress={() => setChooserOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(10,14,25,0.5)', justifyContent: 'flex-end' }}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: colors.paper,
+              borderTopLeftRadius: 22,
+              borderTopRightRadius: 22,
+              padding: 20,
+              paddingBottom: insets.bottom + 24,
+              gap: 10,
+            }}>
+            <Text
+              style={{
+                fontFamily: fonts.sansSemibold,
+                fontSize: 16,
+                color: colors.ink,
+                textAlign: 'center',
+                marginBottom: 4,
+              }}>
+              How do you want to sign in?
+            </Text>
+            {appleReady ? (
+              <Pressable
+                onPress={() => {
+                  setChooserOpen(false);
+                  void runSocial('apple');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in with Apple"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#000000',
+                  borderRadius: 8,
+                  paddingVertical: 14,
+                  opacity: 1,
+                }}>
+                <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: '#FFFFFF' }}>
+                  Sign in with Apple
+                </Text>
+              </Pressable>
+            ) : null}
+            {googleReady ? (
+              <Pressable
+                onPress={() => {
+                  setChooserOpen(false);
+                  void runSocial('google');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1,
+                  borderColor: colors.hairline,
+                  borderRadius: 8,
+                  paddingVertical: 14,
+                  opacity: 1,
+                }}>
+                <Ionicons name="logo-google" size={17} color="#4285F4" />
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: '#1F1F1F' }}>
+                  Continue with Google
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => {
+                setChooserOpen(false);
+                router.push('/(auth)/sign-in');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with email"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                borderRadius: 8,
+                paddingVertical: 14,
+                opacity: 1,
+              }}>
+              <Ionicons name="mail-outline" size={17} color={colors.ink} />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
+                Continue with email
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

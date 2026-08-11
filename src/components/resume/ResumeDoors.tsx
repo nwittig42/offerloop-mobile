@@ -109,7 +109,7 @@ export function ResumeDoors({
               onPress={pressFor(door.key)}
               accessibilityRole="button"
               accessibilityLabel={door.title}
-              style={({ pressed }) => ({
+              style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 14,
@@ -119,8 +119,8 @@ export function ResumeDoors({
                 backgroundColor: strong ? colors.accent + '0A' : colors.paper,
                 paddingHorizontal: 16,
                 paddingVertical: 14,
-                opacity: pressed ? 0.85 : 1,
-              })}>
+                opacity: 1,
+              }}>
               <View
                 style={{
                   width: 40,
@@ -166,11 +166,11 @@ export function ResumeDoors({
         <Pressable
           onPress={onNotNow}
           accessibilityRole="button"
-          style={({ pressed }) => ({
+          style={{
             alignItems: 'center',
             paddingVertical: 10,
-            opacity: pressed ? 0.6 : 1,
-          })}>
+            opacity: 1,
+          }}>
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
             Not now
           </Text>

@@ -1062,14 +1062,14 @@ export default function ProfileScreen() {
                       onPress={() => router.push('/resume-edit')}
                       disabled={resumeBusy}
                       accessibilityRole="button"
-                      style={({ pressed }) => ({
+                      style={{
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: 7,
                         paddingVertical: 13,
                         paddingHorizontal: 14,
-                        opacity: pressed || resumeBusy ? 0.5 : 1,
-                      })}>
+                        opacity: resumeBusy ? 0.5 : 1,
+                      }}>
                       <Ionicons name="create-outline" size={15} color={colors.accent} />
                       <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
                         Edit
@@ -1080,14 +1080,14 @@ export default function ProfileScreen() {
                     onPress={onPickResume}
                     disabled={resumeBusy}
                     accessibilityRole="button"
-                    style={({ pressed }) => ({
+                    style={{
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: 7,
                       paddingVertical: 13,
                       paddingHorizontal: 14,
-                      opacity: pressed || resumeBusy ? 0.5 : 1,
-                    })}>
+                      opacity: resumeBusy ? 0.5 : 1,
+                    }}>
                     <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
                     <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
                       {profile.hasResume ? 'Replace' : 'Upload resume'}
@@ -1100,11 +1100,11 @@ export default function ProfileScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Remove resume"
                       hitSlop={8}
-                      style={({ pressed }) => ({
+                      style={{
                         paddingVertical: 13,
                         paddingHorizontal: 14,
-                        opacity: pressed || resumeBusy ? 0.5 : 1,
-                      })}>
+                        opacity: resumeBusy ? 0.5 : 1,
+                      }}>
                       <Ionicons name="trash-outline" size={15} color={colors.negative} />
                     </Pressable>
                   ) : null}

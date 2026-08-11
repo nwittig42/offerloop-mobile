@@ -334,10 +334,10 @@ export default function CreditsScreen() {
                           loadPacks();
                         }
                       }}
-                      style={({ pressed }) => ({
+                      style={{
                         opacity: buyingId && !busyThis ? 0.55 : 1,
-                        transform: [{ scale: pressed ? 0.98 : 1 }],
-                      })}>
+                        transform: [{ scale: 1 }],
+                      }}>
                       {/* Luminous rim, Clash-panel style: a thin gradient frame. */}
                       <LinearGradient
                         colors={style.rim}

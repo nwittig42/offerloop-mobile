@@ -23,14 +23,12 @@ import PlanBorder from '@/components/PlanBorder';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
 import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
-import { UpgradeNudgeCard } from '@/components/resume/UpgradeNudgeCard';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ActionCircle } from '@/components/ui/Button';
@@ -119,19 +117,9 @@ export default function FeedScreen() {
     );
   }, [updateSwipeSettings, showToast]);
 
-  // Earned-upgrade nudge: only after real drafting activity, only while
-  // auto-apply is off, dismissed forever on request (persisted on device).
-  const [nudgeDismissed, setNudgeDismissed] = useState(true);
-  useEffect(() => {
-    AsyncStorage.getItem('offerloop.autoApplyNudgeDismissed')
-      .then((v) => setNudgeDismissed(v === '1'))
-      .catch(() => {});
-  }, []);
-  const dismissNudge = useCallback(() => {
-    setNudgeDismissed(true);
-    AsyncStorage.setItem('offerloop.autoApplyNudgeDismissed', '1').catch(() => {});
-  }, []);
-  const showNudge = !swipeSettings.autoApply && !nudgeDismissed && outreach.length >= 2;
+  // The auto-apply nudge card lived here for one release; Rylan cut it
+  // 2026-08-11 (it ate feed space). Auto-apply discovery now rests on the
+  // labeled pill in the action bar alone.
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
   const [referralPromptOpen, setReferralPromptOpen] = useState(false);
@@ -365,11 +353,6 @@ export default function FeedScreen() {
               passing and saving cost nothing, and browsing is how you line up
               tomorrow's targets — only DRAFTING is unaffordable. Keep the deck
               live; the right-swipe bounces on its own via canDraft. */}
-          {showNudge ? (
-            <View style={{ marginTop: 8 }}>
-              <UpgradeNudgeCard onTry={askEnableAutoApply} onDismiss={dismissNudge} />
-            </View>
-          ) : null}
           <View style={{ flex: 1, marginTop: 8, paddingBottom: 56 }}>
             <SwipeDeck
               ref={deckRef}

@@ -58,14 +58,14 @@ export function UpgradeNudgeCard({
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
           hitSlop={8}
-          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 2 })}>
+          style={{ opacity: 1, padding: 2 }}>
           <Ionicons name="close" size={16} color={colors.inkTertiary} />
         </Pressable>
       </View>
       <Pressable
         onPress={onTry}
         accessibilityRole="button"
-        style={({ pressed }) => ({
+        style={{
           alignSelf: 'flex-start',
           flexDirection: 'row',
           alignItems: 'center',
@@ -75,8 +75,8 @@ export function UpgradeNudgeCard({
           borderColor: colors.accent,
           paddingHorizontal: 12,
           paddingVertical: 7,
-          opacity: pressed ? 0.7 : 1,
-        })}>
+          opacity: 1,
+        }}>
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
           Set it up
         </Text>

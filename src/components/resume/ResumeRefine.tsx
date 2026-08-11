@@ -51,7 +51,7 @@ export function ResumeRefine({
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        style={({ pressed }) => ({
+        style={{
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
@@ -60,8 +60,8 @@ export function ResumeRefine({
           borderColor: colors.accent,
           borderRadius: 8,
           paddingVertical: 11,
-          opacity: pressed ? 0.7 : 1,
-        })}>
+          opacity: 1,
+        }}>
         <Ionicons name="create-outline" size={16} color={colors.accent} />
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.accent }}>
           Describe your changes
@@ -100,15 +100,15 @@ export function ResumeRefine({
             setText('');
           }}
           disabled={busy}
-          style={({ pressed }) => ({
+          style={{
             flex: 1,
             alignItems: 'center',
             paddingVertical: 11,
             borderRadius: 8,
             borderWidth: 1,
             borderColor: colors.hairline,
-            opacity: pressed ? 0.7 : 1,
-          })}>
+            opacity: 1,
+          }}>
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
             Cancel
           </Text>
@@ -116,7 +116,7 @@ export function ResumeRefine({
         <Pressable
           onPress={() => void apply()}
           disabled={busy || !text.trim()}
-          style={({ pressed }) => ({
+          style={{
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
@@ -125,8 +125,8 @@ export function ResumeRefine({
             paddingVertical: 11,
             borderRadius: 8,
             backgroundColor: colors.ink,
-            opacity: pressed || busy || !text.trim() ? 0.6 : 1,
-          })}>
+            opacity: busy || !text.trim() ? 0.6 : 1,
+          }}>
           {busy ? (
             <ActivityIndicator size="small" color={colors.paper} />
           ) : (
