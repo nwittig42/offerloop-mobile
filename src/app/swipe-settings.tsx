@@ -19,8 +19,8 @@ import type { SwipeSettings } from '@/types';
  */
 
 const ACTIONS: { key: SwipeSettings['action']; label: string; sub: string }[] = [
-  { key: 'draft', label: 'Draft outreach', sub: 'You review and send each one. Safest.' },
-  { key: 'send', label: 'Draft and auto-send', sub: 'Sends from your Gmail without review.' },
+  { key: 'draft', label: 'Draft my intro', sub: 'You review and send each one. Safest.' },
+  { key: 'send', label: 'Draft and auto-send', sub: 'Sends your intro from Gmail without review.' },
 ];
 
 // The teammates -> hiring-managers dial, rendered as a 3-stop slider.
@@ -163,7 +163,7 @@ export default function SwipeSettingsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
               <Ionicons name="warning-outline" size={14} color={colors.waiting} />
               <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 11.5, color: colors.waiting, lineHeight: 16 }}>
-                Auto-send emails go out without review. Overnight swipes (10pm to 8am)
+                Auto-send intros go out without review. Overnight swipes (10pm to 8am)
                 are saved as drafts instead.
               </Text>
             </View>

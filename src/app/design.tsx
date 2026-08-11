@@ -3,6 +3,8 @@ import { Redirect, useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DeckIntroCard } from '@/components/feed/DeckIntroCard';
+import { PersonReveal } from '@/components/feed/PersonReveal';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
 import { ResumePreview } from '@/components/resume/ResumePreview';
 import { UpgradeNudgeCard } from '@/components/resume/UpgradeNudgeCard';
@@ -205,6 +207,21 @@ export default function DesignGallery() {
             />
           </View>
           <UpgradeNudgeCard onTry={() => {}} onDismiss={() => {}} />
+        </Section>
+
+        <Section title="Concept clarity (unwired specimens, fake fixture data)">
+          <Card elevated="lg" style={{ height: 420 }}>
+            <DeckIntroCard tally="1 hiring manager · 1 teammate" />
+          </Card>
+          <Card style={{ paddingVertical: 24 }}>
+            <PersonReveal
+              name="Sample Person"
+              role="Sample Job Title"
+              company="Acme Test Co"
+              applied
+              onViewIntro={() => {}}
+            />
+          </Card>
         </Section>
 
         <Section title="Swipe card specimen (fake fixture data)">

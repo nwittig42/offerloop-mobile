@@ -151,7 +151,7 @@ export default function LoopsScreen() {
     showToast(
       autoSend
         ? 'Loop created — it sends for you once contacts are verified'
-        : 'Loop created — it drafts outreach for your review',
+        : 'Loop created, it drafts intros for your review',
     );
   };
 
@@ -197,7 +197,7 @@ export default function LoopsScreen() {
           <Text
             style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
             A Loop is your swipe on autopilot. Describe who you want to meet and Offerloop
-            finds contacts and drafts outreach on a schedule, into the same Inbox.
+            finds people and drafts your intros on a schedule, into the same Inbox.
           </Text>
 
           {composing ? (
@@ -420,7 +420,7 @@ export default function LoopsScreen() {
                 </View>
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                {loop.draftsCreated} drafts created all time
+                {loop.draftsCreated} intros drafted all time
               </Text>
               </Pressable>
               <View style={{ flexDirection: 'row', gap: 8 }}>

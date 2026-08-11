@@ -79,7 +79,7 @@ function draftOpener(item: OutreachItem): string {
       .find((l) => l && !/^(hi|hey|hello|dear)\b/i.test(l));
     if (opener) return opener;
   }
-  return item.subject ?? 'Draft ready to send';
+  return item.subject ?? 'Intro ready to send';
 }
 
 /** The message-preview line. State is carried as a short prefix ("Draft ·",
@@ -92,7 +92,7 @@ function previewFor(item: OutreachItem, c: Palette): { text: string; color: stri
     case 'failed':
       return { text: 'Couldn’t draft. Tap to retry.', color: c.negative };
     case 'sent':
-      return { text: `Sent · ${item.subject ?? 'Outreach sent'}`, color: c.inkSecondary };
+      return { text: `Sent · ${item.subject ?? 'Intro sent'}`, color: c.inkSecondary };
     case 'replied': {
       const last = item.thread?.[item.thread.length - 1];
       const text = last && last.from === 'them' ? last.text : item.snippet ?? 'Replied';
@@ -184,7 +184,7 @@ function DraftingRow({ item, onPress }: { item: OutreachItem; onPress: () => voi
               color: queued ? colors.inkSecondary : DRAFTING_GREEN,
             }}>
             {queued
-              ? 'In line — drafting starts in a moment…'
+              ? 'In line, drafting starts in a moment…'
               : item.stageLabel
                 ? `${item.stageLabel}…`
                 : `${phrases[phrase]}…`}
