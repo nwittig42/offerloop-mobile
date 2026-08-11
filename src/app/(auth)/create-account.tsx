@@ -123,7 +123,7 @@ export default function CreateAccountScreen() {
           <TextInput
             value={email}
             onChangeText={setEmail}
-            placeholder="you@school.edu"
+            placeholder="you@gmail.com"
             placeholderTextColor={colors.inkTertiary}
             autoCapitalize="none"
             autoCorrect={false}

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Linking, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -161,6 +161,25 @@ export default function SignInScreen() {
             <Ionicons name="mail-unread-outline" size={30} color={colors.accent} />
           </View>
           <Button
+            label="Open my email app"
+            variant="brand"
+            fullWidth
+            onPress={async () => {
+              // Gmail first (most of our users), Apple Mail as fallback.
+              // openURL does not need LSApplicationQueriesSchemes, so this
+              // stays OTA-safe; a failed scheme just falls through.
+              try {
+                await Linking.openURL('googlegmail://');
+              } catch {
+                try {
+                  await Linking.openURL('message://');
+                } catch {
+                  setResendNote('Could not open a mail app. Check your inbox manually.');
+                }
+              }
+            }}
+          />
+          <Button
             label={resendIn > 0 ? `Resend link (${resendIn}s)` : 'Resend link'}
             variant="outline"
             disabled={resendIn > 0}
@@ -185,7 +204,7 @@ export default function SignInScreen() {
           <TextInput
             value={email}
             onChangeText={setEmail}
-            placeholder="you@school.edu"
+            placeholder="you@gmail.com"
             placeholderTextColor={colors.inkTertiary}
             autoCapitalize="none"
             autoCorrect={false}
