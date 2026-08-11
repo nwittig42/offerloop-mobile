@@ -16,6 +16,7 @@ import Animated, {
 
 import Avatar from '@/components/Avatar';
 import Header from '@/components/Header';
+import NightSky from '@/components/NightSky';
 import SearchBar from '@/components/ui/SearchBar';
 import SnakeBorder from '@/components/ui/SnakeBorder';
 import { InboxSkeleton } from '@/components/ui/Skeleton';
@@ -415,6 +416,8 @@ export default function InboxScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      {/* Dense list screen: keep the ridge faint so rows stay the focus. */}
+      <NightSky ridgeOpacity={0.4} />
       <Header
         title="Inbox"
         mark

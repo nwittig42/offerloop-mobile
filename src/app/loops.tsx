@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
 import Header from '@/components/Header';
+import NightSky from '@/components/NightSky';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
@@ -156,6 +157,7 @@ export default function LoopsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+      <NightSky />
       <Header
         title="Loops"
         mark

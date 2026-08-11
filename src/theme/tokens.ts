@@ -35,25 +35,25 @@ export const lightColors = {
 export type Palette = { [K in keyof typeof lightColors]: string };
 
 /**
- * Dark palette, built on the brand navy. Surfaces step up from a deep navy
- * screen (#0E1320) through lifted cards; text steps down from near-white.
- * Brand/accent blues are lightened so they read as accents on dark, while
- * still working as button fills with white text. Semantic colors are brightened
- * a notch for contrast against the dark ground.
+ * Dark palette = Scout's night room, app-wide (Rylan 2026-08-10). The Scout
+ * tab's always-night look (deep navy sky, blue-tinted ink, periwinkle lines)
+ * is the reference; dark mode everywhere reads as the same place instead of
+ * inverted light screens. Values track the NIGHT constants in the Scout tab.
+ * Semantic colors stay brightened a notch for contrast against the dark ground.
  */
 export const darkColors: Palette = {
-  paper: '#161C2B', // cards, header, raised surfaces
-  paper2: '#1E2638', // subtly raised (neutral chips, scout circle, inputs)
-  surface: '#0E1320', // screen background behind cards
-  ink: '#F3F6FC', // primary text
-  inkSecondary: '#B6BECE', // secondary text
-  inkTertiary: '#7B8499', // tertiary text / icons
+  paper: '#152137', // cards, header, raised surfaces (blue-lifted navy)
+  paper2: '#1C2A46', // subtly raised (chips, scout circle, inputs)
+  surface: '#0C1526', // screen background: Scout's NIGHT.bg
+  ink: '#EAF0FF', // primary text: Scout's night ink
+  inkSecondary: '#8FA3CC', // secondary text
+  inkTertiary: '#5A6B8F', // tertiary text / icons
   navy: '#4E6BB0', // brand fill + accent (lightened to read on dark)
   navyDeep: '#3F5A97', // brand pressed
   heading: '#EAF0FA', // serif titles
   accent: '#8AA0DA', // accent text / tints / icons
-  hairline: '#2A3343', // borders / dividers
-  hairlineLight: '#222A39', // softer dividers
+  hairline: '#2C3A5C', // borders / dividers (periwinkle-leaning)
+  hairlineLight: '#22304E', // softer dividers
   positive: '#3DCB82',
   negative: '#FF6B6B',
   waiting: '#E2B53F',
@@ -61,8 +61,15 @@ export const darkColors: Palette = {
   applyLink: '#C4B0FF', // light purple, brightened to read on the dark ground
   coffee: '#C08552',
   bolt: '#FACC15',
-  feedBg: '#0E1320', // keep the dark screen background in dark mode
+  feedBg: '#0C1526', // same night sky behind the Feed in dark mode
 };
+
+/** The Scout night-sky gradient stops, shared by NightSky and the Scout tab. */
+export const darkSky = {
+  top: '#12203A',
+  mid: '#0C1526',
+  bottom: '#0A111F',
+} as const;
 
 /** Default export stays the light palette (module-scope/back-compat reads). */
 export const colors = lightColors;

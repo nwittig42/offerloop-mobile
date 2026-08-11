@@ -24,6 +24,7 @@ import {
 import { sameCompany } from '@/lib/company';
 import CompanyLogo from '@/components/CompanyLogo';
 import Header from '@/components/Header';
+import NightSky from '@/components/NightSky';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
@@ -305,24 +306,31 @@ export default function NetworkScreen() {
           drifts beneath — keeping logos, names and cards legible while the
           painting shows through the transparent gaps (the company grid especially,
           where tiles have no card of their own). */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          { position: 'absolute', top: 0, left: 0, right: 0, height: windowHeight + PARALLAX_TRAVEL },
-          bgStyle,
-        ]}>
-        <Image
-          source={require('../../../assets/images/foggy-trees.jpeg')}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="cover"
-        />
-      </Animated.View>
-      <LinearGradient
-        pointerEvents="none"
-        colors={scrimColors}
-        locations={scrimLocations}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Dark mode swaps the daytime forest for the shared night room; the fog
+          photo under a heavy scrim read as muddy gray at night. */}
+      <NightSky />
+      {!isDark ? (
+        <>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              { position: 'absolute', top: 0, left: 0, right: 0, height: windowHeight + PARALLAX_TRAVEL },
+              bgStyle,
+            ]}>
+            <Image
+              source={require('../../../assets/images/foggy-trees.jpeg')}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          </Animated.View>
+          <LinearGradient
+            pointerEvents="none"
+            colors={scrimColors}
+            locations={scrimLocations}
+            style={StyleSheet.absoluteFill}
+          />
+        </>
+      ) : null}
 
       <Header
         title="Network"
