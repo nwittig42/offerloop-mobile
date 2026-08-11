@@ -1,7 +1,20 @@
 # CLAUDE.md, offerloop-mobile
 
 Native iOS app for Offerloop (offerloop.ai). Brand-new codebase, separate from the
-web monorepo at `~/Downloads/Final_offerloop`.
+web monorepo. TWO backend branches, two truths, do not mix them up:
+
+- `origin/main` = the live WEBSITE (offerloop.ai, Stripe, web features). Clean
+  checkout at `~/Downloads/Final_offerloop-live-main`.
+- `origin/staging/mobile-field` = the MOBILE backend. Both Render services the
+  app calls (offerloop-staging and offerloop-mobile-prod) deploy from it: the
+  RevenueCat webhook, /api/mobile/*, the credit ledger. When wiring app API
+  calls, THIS branch is the truth; read it via
+  `git show origin/staging/mobile-field:backend/...` from any checkout of the
+  repo (github.com/deenabandi004-byte/Final_offerloop).
+
+A route existing on main does not mean the app can call it (example that bit
+us: resume_builder.py exists only on main). The old working copy at
+`~/Downloads/Final_offerloop` is a dirty side branch, never a reference.
 
 ## Source-of-truth documents (read these first)
 
@@ -19,8 +32,9 @@ web monorepo at `~/Downloads/Final_offerloop`.
   go. Never commit or push without explicit approval.
 - Rylan is the CMO, not a senior engineer. Explain technical choices in plain
   language with tradeoffs.
-- Phases 0 to 2 are mock-data only. No real API call is written until Rylan pulls the
-  merged backend (the local web repo copy is stale).
+- Phases 0 to 2 are mock-data only. When wiring real API calls, read the actual
+  route definitions from `~/Downloads/Final_offerloop-live-main/backend/app/routes/`
+  (the up-to-date live code), never from memory or handoff notes.
 - No purchase or upgrade links anywhere in the app (App Store rule 3.1.1). Show the
   credit balance, sell nothing, link to no checkout.
 
