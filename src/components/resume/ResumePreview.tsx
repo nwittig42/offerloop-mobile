@@ -15,9 +15,22 @@ import { fonts, shadows } from '@/theme/tokens';
  * both buttons. No data fetching, no navigation.
  */
 
+/**
+ * One entry inside a section, shaped to take CanonicalResume content directly:
+ * an experience maps heading=role, sub=org, meta=dates, bullets=bullets; a
+ * skills section can be a single entry with only bullets. Everything optional
+ * so thin data renders honestly instead of with placeholder rows.
+ */
+export type ResumePreviewEntry = {
+  heading?: string;
+  sub?: string;
+  meta?: string;
+  bullets?: string[];
+};
+
 export type ResumePreviewSection = {
   title: string;
-  lines: string[];
+  entries: ResumePreviewEntry[];
 };
 
 export function ResumePreview({
@@ -108,17 +121,44 @@ export function ResumePreview({
               }}>
               {s.title}
             </Text>
-            {s.lines.map((line, i) => (
-              <Text
-                key={i}
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 13.5,
-                  color: colors.ink,
-                  lineHeight: 20,
-                }}>
-                {line}
-              </Text>
+            {s.entries.map((e, i) => (
+              <View key={i} style={{ gap: 4, marginTop: i > 0 ? 6 : 0 }}>
+                {e.heading || e.meta ? (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                    {e.heading ? (
+                      <Text
+                        style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, flex: 1 }}>
+                        {e.heading}
+                      </Text>
+                    ) : null}
+                    {e.meta ? (
+                      <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                        {e.meta}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+                {e.sub ? (
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+                    {e.sub}
+                  </Text>
+                ) : null}
+                {(e.bullets ?? []).map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', gap: 8 }}>
+                    <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: fonts.sans,
+                        fontSize: 13,
+                        color: colors.inkSecondary,
+                        lineHeight: 19,
+                      }}>
+                      {b}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             ))}
           </View>
         ))}

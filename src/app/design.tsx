@@ -184,8 +184,20 @@ export default function DesignGallery() {
             <ResumePreview
               fileName="sample-resume.pdf"
               sections={[
-                { title: 'Experience', lines: ['Sample Job Title, Acme Test Co', 'Sample Second Role, Placeholder Industries'] },
-                { title: 'Education', lines: ['Sample University, Sample Degree'] },
+                {
+                  title: 'Experience',
+                  entries: [
+                    {
+                      heading: 'Sample Job Title',
+                      sub: 'Acme Test Co',
+                      meta: 'Sample Dates',
+                      bullets: ['Sample bullet describing fake work.', 'Second sample bullet.'],
+                    },
+                    { heading: 'Sample Second Role', sub: 'Placeholder Industries', meta: 'Sample Dates' },
+                  ],
+                },
+                { title: 'Education', entries: [{ heading: 'Sample University', sub: 'Sample Degree' }] },
+                { title: 'Skills', entries: [{ bullets: ['Sample skill one, sample skill two'] }] },
               ]}
               onUse={() => {}}
               onSecondary={() => {}}
