@@ -34,6 +34,41 @@ const PRIORITY_STOPS: {
   { key: 'mix', label: 'Mix', icon: 'git-merge-outline' },
 ];
 
+/**
+ * Section header with a tinted icon chip. The screen used to be five plain
+ * bold labels over gray cards, which read washed-out and technical; a color
+ * per section gives each block an identity at a glance.
+ */
+function SectionHeader({
+  icon,
+  label,
+  color,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+}) {
+  const colors = useColors();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 8,
+          backgroundColor: color + '14',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <Ionicons name={icon} size={14} color={color} />
+      </View>
+      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 /** The split a swipe will produce, given the dial + how many people it reaches. */
 function targetingTally(priority: SwipeSettings['priority'], contacts: number): string {
   const team = (n: number) => `${n} ${n === 1 ? 'teammate' : 'teammates'}`;
@@ -76,8 +111,7 @@ export default function SwipeSettingsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: insets.bottom + 32 }}>
         <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
-          A right swipe always reaches real people at the company. Set what it does once,
-          and every swipe stays a single tap.
+          Set this once. After that, every right swipe is a single tap.
         </Text>
 
         {/* Reroll the feed — pull in a fresh, wider set of roles on demand. Keeps
@@ -122,9 +156,7 @@ export default function SwipeSettingsScreen() {
 
         {/* What the swipe does */}
         <View style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            When you swipe right
-          </Text>
+          <SectionHeader icon="flash-outline" label="When you swipe right" color={colors.marketing} />
           {ACTIONS.map((a) => {
             const selected = action === a.key;
             return (
@@ -167,19 +199,28 @@ export default function SwipeSettingsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
               <Ionicons name="warning-outline" size={14} color={colors.waiting} />
               <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 11.5, color: colors.waiting, lineHeight: 16 }}>
-                Auto-send fires real emails with no review. Your daily cap protects you,
-                but the draft has to be good every time. Swipes after 10pm or before 8am
-                are saved as drafts instead, so nothing lands overnight.
+                Auto-send emails go out without review. Overnight swipes (10pm to 8am)
+                are saved as drafts instead.
               </Text>
             </View>
           ) : null}
+          {/* The template decides what those emails actually say, so it lives
+              with the swipe action, not buried in Profile settings. */}
+          <Pressable
+            onPress={() => router.push('/outreach-template')}
+            accessibilityRole="button"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, paddingVertical: 6 }}>
+            <Ionicons name="mail-open-outline" size={16} color={colors.accent} />
+            <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
+              Outreach template, what your emails ask for
+            </Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.accent} />
+          </Pressable>
         </View>
 
         {/* Who we reach — a teammates -> hiring-managers dial */}
         <View style={{ gap: 10 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            Who we reach out to
-          </Text>
+          <SectionHeader icon="people-outline" label="Who we reach out to" color={colors.accent} />
           <View
             style={{
               flexDirection: 'row',
@@ -228,8 +269,8 @@ export default function SwipeSettingsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
               <Ionicons name="information-circle-outline" size={14} color={colors.inkSecondary} />
               <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkSecondary, lineHeight: 16 }}>
-                We verify hiring managers, so this can take a little longer, and it always comes
-                back as a draft to review, never auto-sent.
+                Hiring managers are verified first, so they can take a little longer and
+                always arrive as drafts.
               </Text>
             </View>
           ) : null}
@@ -237,9 +278,7 @@ export default function SwipeSettingsScreen() {
 
         {/* How many people */}
         <View style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            Reach out to
-          </Text>
+          <SectionHeader icon="person-add-outline" label="How many people" color={colors.navy} />
           <Card style={{ gap: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
@@ -300,17 +339,14 @@ export default function SwipeSettingsScreen() {
               {profile.creditsPerSwipe})
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 16 }}>
-              A swipe always costs one swipe from your daily batch. Reaching more people
-              just spends more credits, so going wide is generous on swipes.
+              More people spends more credits, never more of your daily swipes.
             </Text>
           </Card>
         </View>
 
         {/* Auto-apply */}
         <View style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            Auto-apply
-          </Text>
+          <SectionHeader icon="paper-plane-outline" label="Auto-apply" color={colors.applyLink} />
           <Card style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View
@@ -339,10 +375,8 @@ export default function SwipeSettingsScreen() {
               />
             </View>
             <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 17 }}>
-              Applying is the accent, not the point. Offerloop is about networking your way in,
-              and the application just gives your outreach a reason to exist. The first few may
-              ask you for a detail or two to get started, and every answer you give trains your
-              auto-apply so it needs you less each time.
+              The first few applications may ask you a detail or two. Every answer teaches
+              auto-apply to need you less.
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 }}>
               <View
@@ -361,7 +395,7 @@ export default function SwipeSettingsScreen() {
                   Scout confirms before spending
                 </Text>
                 <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
-                  Voice asks show one Run-it tap before credits go — mishears can't spend for you
+                  One Run-it tap before voice asks spend credits
                 </Text>
               </View>
               <Switch
@@ -400,9 +434,7 @@ export default function SwipeSettingsScreen() {
 
         {/* What rides along with every swipe */}
         <View style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-            Attached to every email
-          </Text>
+          <SectionHeader icon="attach-outline" label="Attached to every email" color={colors.coffee} />
           <Pressable onPress={() => router.push('/attachments')}>
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View
@@ -427,9 +459,6 @@ export default function SwipeSettingsScreen() {
               <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
             </Card>
           </Pressable>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-            Your resume goes out with every drafted email. Tap to manage attachments.
-          </Text>
         </View>
       </ScrollView>
     </View>

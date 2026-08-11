@@ -15,7 +15,7 @@ import { fonts } from '@/theme/tokens';
  * the referral endpoint answers, so it can't show a broken card.
  */
 const shareMessage = (url: string) =>
-  `Join me on Offerloop — it finds real people at your target companies and writes your intro emails for you. Sign up with my link: ${url}`;
+  `Join me on Offerloop, it finds real people at your target companies and writes your intro emails for you. Sign up with my link: ${url}`;
 
 export default function ReferralCard({ compact }: { compact?: boolean }) {
   const q = useQuery({ queryKey: ['referral'], queryFn: fetchReferral, staleTime: 60_000 });
@@ -28,25 +28,60 @@ export default function ReferralCard({ compact }: { compact?: boolean }) {
     Share.share({ message: shareMessage(r.shareUrl), url: r.shareUrl }).catch(() => {});
   };
 
+  // Compact = one slim row (Profile uses this: the full card pushed the tab
+  // strip below the fold). Same gradient identity, real progress count, no
+  // paragraph, no progress bar, no pill button.
+  if (compact) {
+    return (
+      <Pressable onPress={invite} accessibilityRole="button">
+        <LinearGradient
+          colors={r.unlocked ? (['#059669', '#10B981'] as const) : (['#2563EB', '#7C3AED'] as const)}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 11,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+          <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={15} color="#FFFFFF" />
+          <Text
+            numberOfLines={1}
+            style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
+            {r.unlocked ? 'Elite unlocked, thank you!' : 'Invite friends, unlock Elite free'}
+          </Text>
+          {!r.unlocked ? (
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#EAF0FF' }}>
+              {r.joined}/{r.goal}
+            </Text>
+          ) : null}
+          <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+        </LinearGradient>
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable onPress={invite} accessibilityRole="button">
       <LinearGradient
         colors={r.unlocked ? (['#059669', '#10B981'] as const) : (['#2563EB', '#7C3AED'] as const)}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ borderRadius: 16, padding: compact ? 14 : 16, gap: compact ? 8 : 12 }}>
+        style={{ borderRadius: 16, padding: 16, gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={compact ? 16 : 18} color="#FFFFFF" />
-          <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: compact ? 14 : 15.5, color: '#FFFFFF' }}>
-            {r.unlocked ? 'Elite unlocked — thank you!' : 'Invite friends, unlock Elite free'}
+          <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={18} color="#FFFFFF" />
+          <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 15.5, color: '#FFFFFF' }}>
+            {r.unlocked ? 'Elite unlocked, thank you!' : 'Invite friends, unlock Elite free'}
           </Text>
-          {!compact ? <Ionicons name="share-outline" size={17} color="#FFFFFF" /> : null}
+          <Ionicons name="share-outline" size={17} color="#FFFFFF" />
         </View>
 
-        <Text style={{ fontFamily: fonts.sans, fontSize: compact ? 12 : 13, color: '#EAF0FF', lineHeight: compact ? 17 : 19 }}>
+        <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: '#EAF0FF', lineHeight: 19 }}>
           {r.unlocked
-            ? 'You brought 5 friends to Offerloop — Elite is on us.'
-            : `${r.joined} of ${r.goal} joined — invite ${remaining} more friend${remaining === 1 ? '' : 's'} who make an account and Elite is yours, free.`}
+            ? 'You brought 5 friends to Offerloop, Elite is on us.'
+            : `${r.joined} of ${r.goal} joined. Invite ${remaining} more friend${remaining === 1 ? '' : 's'} who make an account and Elite is yours, free.`}
         </Text>
 
         {/* Segmented progress toward the goal. */}
