@@ -15,9 +15,14 @@ import type { ResumePreviewEntry, ResumePreviewSection } from '@/components/resu
  *   3. the user approves, finalizeResume() adopts it (the ONLY save).
  */
 
-/** Flip to true the moment Nick's preview variant is live on staging.
- *  Everything downstream ships dark behind this. */
-export const RESUME_BUILDER_LIVE = false;
+/** LIVE since 2026-08-10: PR #181 on the web repo shipped the preview
+ *  variant, thin guard, and cap fix; smoke-tested against the deployed
+ *  service (200, real sections, verified no save side effect). */
+export const RESUME_BUILDER_LIVE = true;
+
+/** The resume-builder lives on the WEB backend (deploys from main), not the
+ *  mobile services. Same Firebase project, so the bearer token just works. */
+const WEB_BASE = 'https://final-offerloop.onrender.com';
 
 type Entryish = {
   org?: string;
@@ -51,7 +56,7 @@ export type ResumeBuildResult =
 export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
   try {
     const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
-      '/api/resume-builder/from-linkedin/preview',
+      `${WEB_BASE}/api/resume-builder/from-linkedin/preview`,
       { method: 'POST', timeoutMs: 45000 },
     );
     if (!r.success || !r.resume) return { status: 'error', message: 'Generation failed.' };
@@ -72,7 +77,7 @@ export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
 export async function finalizeResume(resume: CanonicalResume): Promise<boolean> {
   try {
     const r = await apiFetch<{ success: boolean; resumeUrl?: string }>(
-      '/api/resume-builder/finalize',
+      `${WEB_BASE}/api/resume-builder/finalize`,
       { method: 'POST', body: { resume }, timeoutMs: 45000 },
     );
     return !!r.success && !!r.resumeUrl;

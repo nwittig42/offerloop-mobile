@@ -23,7 +23,9 @@ type FetchOptions = {
 const MAX_503_RETRIES = 2;
 
 function buildUrl(path: string, query?: FetchOptions['query']): string {
-  const url = `${API_BASE_URL}${path}`;
+  // Absolute URLs pass through: the resume-builder lives on the WEB backend
+  // (main branch service), not the mobile backend, and shares Firebase auth.
+  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
   if (!query) return url;
   const params = Object.entries(query)
     .filter(([, v]) => v !== undefined)
