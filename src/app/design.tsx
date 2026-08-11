@@ -215,6 +215,7 @@ export default function DesignGallery() {
           </Card>
           <Card style={{ paddingVertical: 24 }}>
             <PersonReveal
+              framing="This is what a right swipe does"
               name="Sample Person"
               role="Sample Job Title"
               company="Acme Test Co"

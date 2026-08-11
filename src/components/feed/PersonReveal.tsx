@@ -23,6 +23,7 @@ export function PersonReveal({
   applied = false,
   onViewIntro,
   viewLabel = 'Read your intro',
+  framing,
 }: {
   name: string;
   role?: string;
@@ -31,11 +32,25 @@ export function PersonReveal({
   applied?: boolean;
   onViewIntro: () => void;
   viewLabel?: string;
+  /** Small context line above the reveal. Onboarding uses it to teach the
+      mechanic against fixture content ("This is what a right swipe does"). */
+  framing?: string;
 }) {
   const colors = useColors();
 
   return (
     <View style={{ alignItems: 'center', gap: 14 }}>
+      {framing ? (
+        <Text
+          style={{
+            fontFamily: fonts.sansMedium,
+            fontSize: 12.5,
+            color: colors.inkTertiary,
+            textAlign: 'center',
+          }}>
+          {framing}
+        </Text>
+      ) : null}
       <Avatar name={name} size={64} />
 
       <View style={{ alignItems: 'center', gap: 3 }}>

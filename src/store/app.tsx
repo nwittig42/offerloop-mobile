@@ -1213,6 +1213,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 foundCount === 1 ? 'that one' : 'those'
               }`,
             );
+          } else {
+            // Full success used to complete silently. This is the real payoff
+            // beat (Rylan 2026-08-11): a human came back, so the person leads.
+            // Onboarding teaches the mechanic; this moment proves it.
+            const firstName = items.find(Boolean)?.contact?.name;
+            showToast(
+              foundCount === 1 && firstName
+                ? `Meet ${firstName}, your intro is ready in your Inbox`
+                : `${foundCount} intros ready in your Inbox`,
+              true,
+            );
           }
           if (typeof creditsRemaining === 'number') {
             patchProfile({ credits: creditsRemaining });
