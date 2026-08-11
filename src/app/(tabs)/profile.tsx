@@ -251,6 +251,7 @@ function AppearanceSelector() {
 
 const TABS = [
   { key: 'personal', label: 'Personal', icon: 'person-outline' },
+  { key: 'applications', label: 'Applications', icon: 'briefcase-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings-outline' },
   { key: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
 ] as const;
@@ -351,9 +352,9 @@ export default function ProfileScreen() {
   // flows fire immediately, text fields get the cursor placed in them.
   const onCompletionAction = (action: StepAction) => {
     if (action === 'resume') {
-      // Show Personal (where the resume section lives) and open the picker
-      // right away, the step is the action.
-      setTab('personal');
+      // Show Applications (where the resume lives) and open the picker right
+      // away, the step is the action.
+      setTab('applications');
       void onPickResume();
     } else if (action === 'gmail') {
       setTab('settings');
@@ -654,33 +655,6 @@ export default function ProfileScreen() {
                 This is what Offerloop uses to write like you. Keep it loose and human.
               </Text>
 
-              {/* Application profile lives here too (also in Settings) — it's what
-                  auto-apply fills on every job, so keep it easy to reach. */}
-              <Pressable onPress={() => router.push('/application-profile')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Application profile
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      What auto-apply fills in for you on every job
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
               {/* One soft card, rows separated by hairlines, no boxy inputs. */}
               <Card padded={false} style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
                 <SoftRow label="LinkedIn">
@@ -776,9 +750,49 @@ export default function ProfileScreen() {
                 disabled={!dirty}
                 onPress={saveProfile}
               />
-              {/* What we gathered: the old Resume tab, merged in here (Rylan
-                  2026-08-10) so the evidence sits right under the inputs that
-                  produced it instead of one tab away. */}
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                Deeper personalization, templates, and tone live on offerloop.ai
+              </Text>
+            </>
+          ) : null}
+
+          {/* Applications: everything that touches a real application in one
+              place (Rylan 2026-08-10). Application profile, the resume file,
+              and what we gathered from resume + LinkedIn. Personal stays "who
+              you are"; this tab is "what you apply with". */}
+          {tab === 'applications' ? (
+            <>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
+                What travels with your applications and outreach.
+              </Text>
+
+              {/* Application profile lives here and in Settings, it is what
+                  auto-apply fills on every job, so keep it easy to reach. */}
+              <Pressable onPress={() => router.push('/application-profile')}>
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: colors.accent + '14',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                      Application profile
+                    </Text>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                      What auto-apply fills in for you on every job
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+                </Card>
+              </Pressable>
+
               <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View
                   style={{
@@ -826,7 +840,7 @@ export default function ProfileScreen() {
                   <Ionicons name="logo-linkedin" size={17} color={colors.accent} />
                   <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
                     {!linkedinUrl.trim()
-                      ? 'Add your LinkedIn above'
+                      ? 'Add your LinkedIn in Personal'
                       : profile.linkedinHighlights.length
                         ? 'What we gathered from your LinkedIn'
                         : linkedinUrl.trim()}
@@ -934,8 +948,8 @@ export default function ProfileScreen() {
               ) : null}
 
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                Rebuild your resume on offerloop.ai and the parse updates here. Deeper
-                personalization, templates, and tone live there too.
+                Rebuild your resume or update your LinkedIn on offerloop.ai and the parse
+                updates here.
               </Text>
             </>
           ) : null}
