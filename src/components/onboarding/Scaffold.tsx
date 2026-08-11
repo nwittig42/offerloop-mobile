@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
@@ -75,23 +75,31 @@ export function OnboardingScaffold({
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 28, paddingBottom: 24, flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled">
-        <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading, lineHeight: 35 }}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.inkSecondary, lineHeight: 22, marginTop: 10 }}>
-            {subtitle}
+      {/* KeyboardAvoidingView shrinks the scroll viewport above the keyboard:
+          steps with inputs (LinkedIn, city search) were unscrollable while
+          typing, hiding dropdowns and pinning the CTA under the keys. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 28, paddingBottom: 24, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
+          <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading, lineHeight: 35 }}>
+            {title}
           </Text>
-        ) : null}
-        <View style={{ marginTop: 24, flex: 1 }}>{children}</View>
-      </ScrollView>
+          {subtitle ? (
+            <Text style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.inkSecondary, lineHeight: 22, marginTop: 10 }}>
+              {subtitle}
+            </Text>
+          ) : null}
+          <View style={{ marginTop: 24, flex: 1 }}>{children}</View>
+        </ScrollView>
 
-      <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 8, gap: 10 }}>
-        {footer}
-      </View>
+        <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 8, gap: 10 }}>
+          {footer}
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

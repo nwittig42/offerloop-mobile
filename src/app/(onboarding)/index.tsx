@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 
 import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
 import { enrichLinkedin } from '@/api/endpoints/profile';
+import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
-import { matchCities } from '@/data/cities';
+import { matchCities, RECRUITING_CITIES } from '@/data/cities';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import SnakeBorder from '@/components/ui/SnakeBorder';
@@ -51,6 +52,29 @@ const TRACKS: Track[] = [
   { key: 'other', label: 'Something else', icon: 'compass-outline', industries: [], roles: [] },
 ];
 const SUGGESTED_LOCS = ['New York', 'San Francisco', 'Chicago', 'Los Angeles', 'Boston', 'Remote'];
+
+/** "Los Angeles" (chip) and "Los Angeles, CA" (city list) are the same place.
+ *  Everything is stored as the CANONICAL city-list label (which is also what
+ *  the backend's metro filter expects); comparisons happen on the base name,
+ *  so the two spellings can never coexist as duplicates. */
+const baseName = (s: string) => s.split(',')[0].trim().toLowerCase();
+const canonicalCity = (bare: string) =>
+  RECRUITING_CITIES.find((c) => baseName(c) === baseName(bare)) ?? bare;
+const sameCity = (a: string, b: string) => baseName(a) === baseName(b);
+
+/** Accept anything a student might paste or type: a full URL (with tracking
+ *  junk), "linkedin.com/in/handle", "in/handle", "@handle", or a bare handle.
+ *  Returns the normalized https URL, or null if it can't be a profile. */
+function normalizeLinkedin(raw: string): string | null {
+  const s = raw.trim().replace(/^@/, '');
+  if (!s) return null;
+  const fromUrl = s.match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
+  if (fromUrl) return `https://www.linkedin.com/in/${fromUrl[1]}`;
+  const fromPrefix = s.match(/^in\/([A-Za-z0-9\-_%.]+)\/?$/i);
+  if (fromPrefix) return `https://www.linkedin.com/in/${fromPrefix[1]}`;
+  if (/^[A-Za-z0-9\-_%.]+$/.test(s)) return `https://www.linkedin.com/in/${s}`;
+  return null;
+}
 
 /** The intro-being-written card: the same snake-border loading we use in the
  *  Inbox, with rotating research phrases so the wait reads as magic, not lag. */
@@ -117,6 +141,11 @@ export default function Onboarding() {
   const [linkedin, setLinkedin] = useState(profile.linkedinUrl ?? '');
   const [enriching, setEnriching] = useState(false);
   const [linkedinError, setLinkedinError] = useState<string | null>(null);
+  // Optional resume, right where motivation peaks. Never required, never
+  // blocks Continue; students without one just move on.
+  const [resumeState, setResumeState] = useState<'none' | 'uploading' | 'done' | 'failed'>(
+    profile.resume ? 'done' : 'none',
+  );
   const [locQuery, setLocQuery] = useState('');
   const { connect: connectGmail, connecting: gmailConnecting } = useGmailConnect();
   const [gmailError, setGmailError] = useState<string | null>(null);
@@ -252,31 +281,58 @@ export default function Onboarding() {
   // ── Step 2: confirm + locations ────────────────────────────────────────
   // ── Step 2: LinkedIn — the personalization engine's fuel ───────────────
   if (step === 2) {
-    const clean = linkedin.trim();
-    const looksValid = /linkedin\.com\/in\//i.test(clean);
+    const normalized = normalizeLinkedin(linkedin);
     const submit = async () => {
-      if (!looksValid) {
-        setLinkedinError('Paste the full URL of your LinkedIn profile.');
+      if (!normalized) {
+        setLinkedinError(
+          'Paste your profile link, or just type your handle (the part after linkedin.com/in/).',
+        );
         return;
       }
       setLinkedinError(null);
       setEnriching(true);
       // Enrich in the background — never block the flow on a scrape. Whatever
       // lands by the time the demo draft writes makes it sharper; the rest
-      // arrives before their first real send.
-      void enrichLinkedin(clean)
+      // arrives before their first real send. This is what auto-populates
+      // their Profile (experience, about, skills) from LinkedIn.
+      void enrichLinkedin(normalized)
         .catch(() => {})
         .finally(() => setEnriching(false));
-      updateProfile({ linkedinUrl: clean });
+      updateProfile({ linkedinUrl: normalized });
       next();
+    };
+    const openLinkedIn = async () => {
+      // The app if they have it, the site if they don't; both let them grab
+      // the profile link without hunting.
+      try {
+        await Linking.openURL('linkedin://');
+      } catch {
+        try {
+          await Linking.openURL('https://www.linkedin.com/');
+        } catch {
+          /* nothing to open; the instructions card still guides them */
+        }
+      }
+    };
+    const addResume = async () => {
+      try {
+        const file = await pickResume();
+        if (!file) return;
+        setResumeState('uploading');
+        await uploadResume(file);
+        setResumeState('done');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        setResumeState('failed');
+      }
     };
     return (
       <OnboardingScaffold
         step={3}
         total={TOTAL}
         onBack={back}
-        title="Paste your LinkedIn"
-        subtitle="This is what makes your intros sound like you — your school, your roles, your story. It takes one paste."
+        title="Add your LinkedIn"
+        subtitle="This is what makes your intros sound like you — your school, your roles, your story. One paste (or just your handle) does it."
         footer={
           <>
             <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={submit} />
@@ -289,7 +345,7 @@ export default function Onboarding() {
             setLinkedin(t);
             if (linkedinError) setLinkedinError(null);
           }}
-          placeholder="linkedin.com/in/yourname"
+          placeholder="linkedin.com/in/yourname — or just yourname"
           placeholderTextColor={colors.inkTertiary}
           autoCapitalize="none"
           autoCorrect={false}
@@ -299,25 +355,74 @@ export default function Onboarding() {
         {linkedinError ? (
           <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, marginTop: 8 }}>{linkedinError}</Text>
         ) : null}
-        <Card style={{ gap: 6, marginTop: 20 }}>
+        {normalized && !linkedinError ? (
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.positive, marginTop: 8 }} numberOfLines={1}>
+            ✓ {normalized.replace('https://www.', '')}
+          </Text>
+        ) : null}
+        <Pressable
+          onPress={openLinkedIn}
+          accessibilityRole="button"
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#0A66C2' + '55', backgroundColor: '#0A66C2' + '0D' }}>
+          <Ionicons name="logo-linkedin" size={18} color="#0A66C2" />
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: '#0A66C2' }}>
+            Open LinkedIn to grab my link
+          </Text>
+        </Pressable>
+        <Card style={{ gap: 6, marginTop: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="sparkles-outline" size={16} color={colors.marketing} />
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Why this matters</Text>
+            <Ionicons name="help-circle-outline" size={16} color={colors.marketing} />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Where's my link?</Text>
           </View>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Generic cold emails get ignored. We read your background and find the
-            overlap with the person you're writing to. Add your resume anytime in
-            Profile for even sharper drafts.
+            In the LinkedIn app: tap your photo, then View profile, then the three dots,
+            then Share profile via… and Copy link. Come back and paste it here.
           </Text>
+        </Card>
+        {/* Optional resume, while they're already in profile-building mode. */}
+        <Card style={{ gap: 10, marginTop: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons
+              name={resumeState === 'done' ? 'checkmark-circle' : 'document-attach-outline'}
+              size={16}
+              color={resumeState === 'done' ? colors.positive : colors.marketing}
+            />
+            <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>
+              {resumeState === 'done' ? 'Resume added' : 'Have your resume handy?'}
+            </Text>
+          </View>
+          {resumeState === 'done' ? (
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
+              We'll use it to sharpen every draft. You can swap it anytime in Profile.
+            </Text>
+          ) : (
+            <>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
+                Totally optional — you can add it anytime in Profile. But if it's on this
+                phone, one tap now makes your drafts sharper from the first send.
+              </Text>
+              <Button
+                label={resumeState === 'uploading' ? 'Uploading…' : resumeState === 'failed' ? 'Try again' : 'Add resume (optional)'}
+                variant="outline"
+                disabled={resumeState === 'uploading'}
+                onPress={addResume}
+              />
+            </>
+          )}
         </Card>
       </OnboardingScaffold>
     );
   }
 
   if (step === 3) {
+    // Store the canonical label; match on base name. "Los Angeles" (chip) and
+    // "Los Angeles, CA" (search) used to coexist as duplicates.
     const toggle = (loc: string) => {
       Haptics.selectionAsync();
-      setLocations((p) => (p.includes(loc) ? p.filter((l) => l !== loc) : [...p, loc]));
+      const canon = canonicalCity(loc);
+      setLocations((p) =>
+        p.some((l) => sameCity(l, canon)) ? p.filter((l) => !sameCity(l, canon)) : [...p, canon],
+      );
     };
     return (
       <OnboardingScaffold
@@ -357,7 +462,7 @@ export default function Onboarding() {
               "Bosto" no longer saves a fake place (no-fake-data rule). */}
           {locQuery.trim().length > 0 ? (
             <View style={{ marginTop: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, overflow: 'hidden' }}>
-              {matchCities(locQuery).filter((c) => !locations.includes(c)).map((c, i, arr) => (
+              {matchCities(locQuery).filter((c) => !locations.some((l) => sameCity(l, c))).map((c, i, arr) => (
                 <Pressable
                   key={c}
                   onPress={() => {
@@ -369,7 +474,7 @@ export default function Onboarding() {
                   <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>{c}</Text>
                 </Pressable>
               ))}
-              {matchCities(locQuery).filter((c) => !locations.includes(c)).length === 0 ? (
+              {matchCities(locQuery).filter((c) => !locations.some((l) => sameCity(l, c))).length === 0 ? (
                 <Text style={{ paddingVertical: 12, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
                   No match — try a major metro or Remote.
                 </Text>
@@ -379,7 +484,7 @@ export default function Onboarding() {
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {locations
-            .filter((l) => !SUGGESTED_LOCS.includes(l))
+            .filter((l) => !SUGGESTED_LOCS.some((s) => sameCity(s, l)))
             .map((loc) => (
               <Pressable key={loc} onPress={() => toggle(loc)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1.5, borderColor: colors.marketing, backgroundColor: colors.marketing + '12', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.marketing }}>{loc}</Text>
@@ -387,7 +492,7 @@ export default function Onboarding() {
               </Pressable>
             ))}
           {SUGGESTED_LOCS.map((loc) => {
-            const on = locations.includes(loc);
+            const on = locations.some((l) => sameCity(l, loc));
             return (
               <Pressable key={loc} onPress={() => toggle(loc)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: on ? 1.5 : 1, borderColor: on ? colors.marketing : colors.hairline, backgroundColor: on ? colors.marketing + '12' : colors.paper }}>
                 <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: on ? colors.marketing : colors.ink }}>{loc}</Text>
