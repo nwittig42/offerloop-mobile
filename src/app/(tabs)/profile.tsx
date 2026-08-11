@@ -4,7 +4,7 @@ import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -65,6 +65,9 @@ function SoftRow({ label, children, last }: { label: string; children: ReactNode
   );
 }
 
+/** A step the completion card can act on: focus a field, or fire a flow. */
+type StepAction = 'linkedin' | 'roles' | 'industries' | 'gradYear' | 'about' | 'resume' | 'gmail';
+
 /**
  * Profile completeness nudge (Sorce-style): a ring gauge + a CTA into the
  * Personal tab. Counts the fields that steer Scout's writing; once they're all
@@ -72,26 +75,25 @@ function SoftRow({ label, children, last }: { label: string; children: ReactNode
  */
 function ProfileCompletion({
   profile,
-  onGoTo,
+  onAction,
 }: {
   profile: ReturnType<typeof useApp>['profile'];
-  onGoTo: (tab: 'personal' | 'resume' | 'settings') => void;
+  onAction: (action: StepAction) => void;
 }) {
   const colors = useColors();
 
-  // Each item knows whether it's done AND where to fix it. The button used to
-  // just switch to the Personal tab regardless of what was missing — so if you
-  // hadn't added a resume (Resume tab) or connected Gmail (Settings), "Finish
-  // profile" took you to the wrong place and told you nothing. Now it names the
-  // gaps and jumps to the first one.
-  const items: { label: string; done: boolean; tab: 'personal' | 'resume' | 'settings' }[] = [
-    { label: 'Add your LinkedIn', done: !!profile.linkedinUrl?.trim(), tab: 'personal' },
-    { label: 'Pick target roles', done: profile.targetRoles.length > 0, tab: 'personal' },
-    { label: 'Pick target industries', done: profile.industries.length > 0, tab: 'personal' },
-    { label: 'Add your grad year', done: !!profile.gradYear?.trim(), tab: 'personal' },
-    { label: 'Write a short About', done: !!profile.about?.trim(), tab: 'personal' },
-    { label: 'Upload your resume', done: profile.hasResume, tab: 'resume' },
-    { label: 'Connect Gmail', done: profile.gmailConnected, tab: 'settings' },
+  // Each item names its action, not just a tab. Tab-switching alone left the
+  // user hunting for the right field ("Add your LinkedIn" dropped you at the
+  // top of Personal and stopped helping); the parent now focuses the exact
+  // field, opens the resume picker, or starts the Gmail connect directly.
+  const items: { label: string; done: boolean; action: StepAction }[] = [
+    { label: 'Add your LinkedIn', done: !!profile.linkedinUrl?.trim(), action: 'linkedin' },
+    { label: 'Pick target roles', done: profile.targetRoles.length > 0, action: 'roles' },
+    { label: 'Pick target industries', done: profile.industries.length > 0, action: 'industries' },
+    { label: 'Add your grad year', done: !!profile.gradYear?.trim(), action: 'gradYear' },
+    { label: 'Write a short About', done: !!profile.about?.trim(), action: 'about' },
+    { label: 'Upload your resume', done: profile.hasResume, action: 'resume' },
+    { label: 'Connect Gmail', done: profile.gmailConnected, action: 'gmail' },
   ];
   const done = items.filter((i) => i.done).length;
   const ratio = done / items.length;
@@ -120,7 +122,7 @@ function ProfileCompletion({
         {missing.map((i) => (
           <Pressable
             key={i.label}
-            onPress={() => onGoTo(i.tab)}
+            onPress={() => onAction(i.action)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 }}>
             <Ionicons name="ellipse-outline" size={15} color={colors.inkTertiary} />
             <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}>
@@ -135,7 +137,7 @@ function ProfileCompletion({
         label={first ? first.label : 'Finish profile'}
         variant="brand"
         fullWidth
-        onPress={() => first && onGoTo(first.tab)}
+        onPress={() => first && onAction(first.action)}
       />
     </Card>
   );
@@ -317,6 +319,51 @@ export default function ProfileScreen() {
   const [gradYear, setGradYear] = useState(profile.gradYear);
   const [about, setAbout] = useState(profile.about);
 
+  const scrollRef = useRef<ScrollView>(null);
+  const fieldRefs = {
+    linkedin: useRef<TextInput>(null),
+    roles: useRef<TextInput>(null),
+    industries: useRef<TextInput>(null),
+    gradYear: useRef<TextInput>(null),
+    about: useRef<TextInput>(null),
+  };
+
+  // Jump-to-field for the completion card: switch to Personal, then (after the
+  // tab's fields mount) scroll the field under the header and open the keyboard
+  // in it. If measuring fails we still focus; worst case the keyboard covers it.
+  const focusField = (which: keyof typeof fieldRefs) => {
+    setTab('personal');
+    setTimeout(() => {
+      const input = fieldRefs[which].current;
+      const scroller = scrollRef.current;
+      if (!input || !scroller) return;
+      try {
+        input.measureLayout(
+          scroller.getInnerViewNode(),
+          (_x, y) => scroller.scrollTo({ y: Math.max(0, y - 120), animated: true }),
+          () => {},
+        );
+      } catch {}
+      input.focus();
+    }, 150);
+  };
+
+  // Completion-card steps ACT instead of just switching tabs: one-tap system
+  // flows fire immediately, text fields get the cursor placed in them.
+  const onCompletionAction = (action: StepAction) => {
+    if (action === 'resume') {
+      // Land on the Resume tab so upload progress and the parse are visible,
+      // and open the picker right away, the step is the action.
+      setTab('resume');
+      void onPickResume();
+    } else if (action === 'gmail') {
+      setTab('settings');
+      if (!profile.gmailConnected && !gmailConnecting) void connectGmail();
+    } else {
+      focusField(action);
+    }
+  };
+
   // When the profile refetches (e.g. after LinkedIn enrichment populates it),
   // fill any *empty* form fields from it — never clobber what the user typed.
   useEffect(() => {
@@ -409,6 +456,7 @@ export default function ProfileScreen() {
         />
 
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1, backgroundColor: 'transparent' }}
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
@@ -558,7 +606,7 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          <ProfileCompletion profile={profile} onGoTo={setTab} />
+          <ProfileCompletion profile={profile} onAction={onCompletionAction} />
 
           <ReferralCard compact />
 
@@ -638,6 +686,7 @@ export default function ProfileScreen() {
               <Card padded={false} style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
                 <SoftRow label="LinkedIn">
                   <TextInput
+                    ref={fieldRefs.linkedin}
                     value={linkedinUrl}
                     onChangeText={setLinkedinUrl}
                     placeholder="linkedin.com/in/you"
@@ -648,6 +697,7 @@ export default function ProfileScreen() {
                 </SoftRow>
                 <SoftRow label="Target roles">
                   <CommaField
+                    inputRef={fieldRefs.roles}
                     value={rolesText}
                     onChangeText={setRolesText}
                     suggestions={TARGET_ROLE_SUGGESTIONS}
@@ -656,6 +706,7 @@ export default function ProfileScreen() {
                 </SoftRow>
                 <SoftRow label="Industries">
                   <CommaField
+                    inputRef={fieldRefs.industries}
                     value={industriesText}
                     onChangeText={setIndustriesText}
                     suggestions={INDUSTRY_SUGGESTIONS}
@@ -664,6 +715,7 @@ export default function ProfileScreen() {
                 </SoftRow>
                 <SoftRow label="Grad year">
                   <TextInput
+                    ref={fieldRefs.gradYear}
                     value={gradYear}
                     onChangeText={setGradYear}
                     placeholderTextColor={colors.inkTertiary}
@@ -672,6 +724,7 @@ export default function ProfileScreen() {
                 </SoftRow>
                 <SoftRow label="About you" last>
                   <TextInput
+                    ref={fieldRefs.about}
                     value={about}
                     onChangeText={setAbout}
                     multiline

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useColors } from '@/theme/ThemeProvider';
@@ -15,11 +15,14 @@ export function CommaField({
   onChangeText,
   suggestions,
   placeholder,
+  inputRef,
 }: {
   value: string;
   onChangeText: (next: string) => void;
   suggestions: string[];
   placeholder?: string;
+  /** Lets a parent focus the field programmatically (profile "jump to this step"). */
+  inputRef?: RefObject<TextInput | null>;
 }) {
   const colors = useColors();
   const [focused, setFocused] = useState(false);
@@ -58,6 +61,7 @@ export function CommaField({
   return (
     <View style={{ gap: 8 }}>
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
