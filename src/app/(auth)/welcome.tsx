@@ -1,8 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Image, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  appleSignInAvailable,
+  googleSignInAvailable,
+  signInWithAppleNative,
+  signInWithGoogleNative,
+} from '@/auth/socialSignIn';
 import { Button } from '@/components/ui/Button';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -24,6 +31,40 @@ export default function WelcomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // Social buttons exist only when the native modules are in this binary
+  // (build 17+). On older builds both checks fail closed and the screen is
+  // exactly the email flow that App Review already approved.
+  const [appleReady, setAppleReady] = useState(false);
+  const googleReady = googleSignInAvailable();
+  const [socialBusy, setSocialBusy] = useState<'apple' | 'google' | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void appleSignInAvailable().then((ok) => {
+      if (alive) setAppleReady(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const runSocial = async (which: 'apple' | 'google') => {
+    if (socialBusy) return;
+    setSocialBusy(which);
+    try {
+      const result =
+        which === 'apple' ? await signInWithAppleNative() : await signInWithGoogleNative();
+      // 'ok' flips auth state and the gate routes onward; 'cancelled' is quiet.
+      if (result === 'cancelled') return;
+    } catch (e) {
+      Alert.alert(
+        'Could not sign you in',
+        e instanceof Error ? e.message : 'Something went wrong. Try again.',
+      );
+    } finally {
+      setSocialBusy(null);
+    }
+  };
 
   return (
     <View
@@ -81,6 +122,72 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={{ gap: 12 }}>
+        {/* Sign in with Apple first and equally prominent (Guideline 4.8 +
+            Apple HIG). Both buttons are one tap into the same account system
+            as email; Firebase links providers by address. */}
+        {appleReady ? (
+          <Pressable
+            onPress={() => void runSocial('apple')}
+            disabled={!!socialBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in with Apple"
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              backgroundColor: '#000000',
+              borderRadius: 8,
+              paddingVertical: 15,
+              opacity: pressed || socialBusy ? 0.75 : 1,
+            })}>
+            {socialBusy === 'apple' ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
+            )}
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: '#FFFFFF' }}>
+              Sign in with Apple
+            </Text>
+          </Pressable>
+        ) : null}
+        {googleReady ? (
+          <Pressable
+            onPress={() => void runSocial('google')}
+            disabled={!!socialBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              borderRadius: 8,
+              paddingVertical: 15,
+              opacity: pressed || socialBusy ? 0.75 : 1,
+            })}>
+            {socialBusy === 'google' ? (
+              <ActivityIndicator size="small" color={colors.ink} />
+            ) : (
+              <Ionicons name="logo-google" size={17} color="#4285F4" />
+            )}
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: '#1F1F1F' }}>
+              Continue with Google
+            </Text>
+          </Pressable>
+        ) : null}
+        {appleReady || googleReady ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+              or use email
+            </Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+          </View>
+        ) : null}
         <Button
           label="Sign in"
           variant="primary"
