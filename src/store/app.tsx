@@ -100,11 +100,12 @@ function enqueueDraft<T>(task: () => Promise<T>, onStart: () => void): Promise<T
 const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   action: 'draft',
   contacts: 1,
-  // On by default (Rylan, 2026-07-21): a right swipe should apply to the job
-  // AND warm up the team without a settings trip. The backend still gates
-  // eligibility and tier, and the user can turn it off in Swipe settings
-  // (their choice now persists per-user, see swipeSettingsStorageKey).
-  autoApply: true,
+  // OFF by default (Rylan, 2026-08-10, reversing the 07-21 call): submitting
+  // applications on someone's behalf is opt-in trust, it spends credits, and
+  // most new users lack the application profile it needs (they hit a wall on
+  // their first swipe). Auto-apply is now an earned upgrade the user turns on
+  // deliberately; the choice persists per-user (swipeSettingsStorageKey).
+  autoApply: false,
   priority: 'employee',
   scoutConfirmSpend: true,
 };

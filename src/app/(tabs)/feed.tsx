@@ -24,6 +24,7 @@ import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
+import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ActionCircle } from '@/components/ui/Button';
@@ -395,38 +396,71 @@ export default function FeedScreen() {
                     onPress={() => deckRef.current?.swipe('right')}
                   />
                 </Animated.View>
-                {/* Auto-apply MODE toggle: lit purple gradient when ON (a right
-                    swipe also auto-applies), muted when OFF (swipe just networks). */}
+                {/* Auto-apply MODE control. A bare bolt read as "boost", not
+                    "submit applications for me" (Rylan, 2026-08-10), so the
+                    control says its name. Turning it ON asks first: it spends
+                    credits and acts on the user's behalf. */}
                 <Pressable
-                  onPress={() => updateSwipeSettings({ autoApply: !swipeSettings.autoApply })}
-                  accessibilityLabel="Toggle auto-apply on swipe">
+                  onPress={() => {
+                    if (swipeSettings.autoApply) {
+                      updateSwipeSettings({ autoApply: false });
+                      showToast('Auto-apply off. Swipes just draft outreach.');
+                      return;
+                    }
+                    Alert.alert(
+                      'Turn on auto-apply?',
+                      `When a job supports it, a right swipe will also submit an application for you (${AUTO_APPLY_CREDITS} credits per apply). You'll need your application profile set up, and we'll walk you through it if anything is missing.`,
+                      [
+                        { text: 'Not now', style: 'cancel' },
+                        {
+                          text: 'Turn on',
+                          onPress: () => {
+                            updateSwipeSettings({ autoApply: true });
+                            showToast('Auto-apply on for eligible jobs');
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                  accessibilityLabel="Auto-apply on swipe"
+                  accessibilityState={{ selected: swipeSettings.autoApply }}>
                   {swipeSettings.autoApply ? (
                     <LinearGradient
                       colors={['#2563EB', '#4F46E5', '#7C3AED']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={{
-                        width: 46,
                         height: 46,
                         borderRadius: 23,
+                        paddingHorizontal: 14,
+                        flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        gap: 6,
                       }}>
-                      <Ionicons name="flash" size={20} color="#FFFFFF" />
+                      <Ionicons name="flash" size={16} color="#FFFFFF" />
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: '#FFFFFF' }}>
+                        Auto-apply
+                      </Text>
                     </LinearGradient>
                   ) : (
                     <View
                       style={{
-                        width: 46,
                         height: 46,
                         borderRadius: 23,
+                        paddingHorizontal: 14,
+                        flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        gap: 6,
                         backgroundColor: colors.paper2,
                         borderWidth: 1,
                         borderColor: colors.hairline,
                       }}>
-                      <Ionicons name="flash-outline" size={20} color={colors.inkTertiary} />
+                      <Ionicons name="flash-outline" size={16} color={colors.inkTertiary} />
+                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.inkTertiary }}>
+                        Auto-apply
+                      </Text>
                     </View>
                   )}
                 </Pressable>
