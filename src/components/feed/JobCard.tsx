@@ -10,7 +10,7 @@ import { USE_MOCKS } from '@/api/config';
 import { fetchJobDescription } from '@/api/endpoints/feed';
 import { qk } from '@/api/queryKeys';
 import CompanyLogo from '@/components/CompanyLogo';
-import { cardArt } from '@/components/feed/cardArt';
+import { cardArt, cardFlair } from '@/components/feed/cardArt';
 import Chip from '@/components/ui/Chip';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
@@ -51,6 +51,30 @@ function arrangementIcon(value: string): keyof typeof Ionicons.glyphMap {
   return 'business-outline';
 }
 
+/** Clean up backend compensation strings for display: "$55 - $55USD" is a
+ *  real example (equal bounds + jammed unit). Dedupe equal bounds and space
+ *  the unit; never invent a period ("/hr") the data does not state. */
+function formatComp(s: string): string {
+  const out = s.trim().replace(/(\d)(USD|CAD|EUR|GBP)\b/gi, '$1 $2');
+  const m = out.match(/^\$?([\d.,]+)\s*-\s*\$?([\d.,]+)(.*)$/);
+  if (m && m[1] === m[2]) return `$${m[1]}${m[3] || ''}`;
+  return out;
+}
+
+/** Work arrangement and experience level sometimes carry the SAME value
+ *  (both "Internship" on scraped jobs). Two identical chips under two labels
+ *  reads broken; collapse them into one "Role type" group. */
+function dedupeDetails(job: Job): {
+  arrangement?: string;
+  experience?: string;
+  roleType?: string;
+} {
+  const a = job.workArrangement?.trim();
+  const e = job.experienceLevel?.trim();
+  if (a && e && a.toLowerCase() === e.toLowerCase()) return { roleType: a };
+  return { arrangement: a || undefined, experience: e || undefined };
+}
+
 function DetailGroup({
   label,
   children,
@@ -89,10 +113,13 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
   const colors = useColors();
   const { accentTheme } = useTheme();
   const art = cardArt(job.id);
+  const flair = cardFlair(job);
+  const details = dedupeDetails(job);
   return (
     <View style={{ flex: 1 }}>
       {/* Full-bleed palette wash + hand-drawn loop watermark, breaking out of
-          the Card's 20px padding and clipped to its corners. */}
+          the Card's 20px padding and clipped to its corners. The wash tint
+          rotates per card (cardArt) so the deck has color variety. */}
       <View
         pointerEvents="none"
         style={{
@@ -105,7 +132,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           overflow: 'hidden',
         }}>
         <LinearGradient
-          colors={[BRAND_BLUE + '12', '#FAFBFF00']}
+          colors={[art.tint + '14', '#FAFBFF00']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.9, y: 0.6 }}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 190 }}
@@ -119,7 +146,32 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
 
       {accentTheme === 'school' ? <SchoolStripe /> : null}
 
-      {/* Title — left-aligned, the focal point (Sorce-style). */}
+      {/* Flair ribbon: one colorful, TRUE fact about the role (salary listed,
+          one-swipe apply, remote). Pure real data; renders nothing when the
+          job has no standout field. */}
+      {flair ? (
+        <LinearGradient
+          colors={flair.colors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            alignSelf: 'flex-start',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            borderRadius: 999,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            marginBottom: 12,
+          }}>
+          <Ionicons name={flair.icon as keyof typeof Ionicons.glyphMap} size={13} color="#FFFFFF" />
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#FFFFFF' }}>
+            {flair.label}
+          </Text>
+        </LinearGradient>
+      ) : null}
+
+      {/* Title, left-aligned, the focal point (Sorce-style). */}
       <Text
         numberOfLines={2}
         style={{
@@ -138,7 +190,7 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         style={{ width: 120, height: 12, marginTop: 4, tintColor: BRAND_ORANGE, opacity: 0.9 }}
       />
 
-      {/* Company + location with the logo beside it — flex-contained and
+      {/* Company + location with the logo beside it, flex-contained and
           single-line so a long name/location can never clip off the edge.
           Sized up for at-a-glance readability (Sorce-style). */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 16 }}>
@@ -160,12 +212,14 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
         </View>
       </View>
 
-      {/* Labeled detail sections — each renders only when the data exists. */}
-      <View style={{ gap: 14, marginTop: 18 }}>
+      {/* Labeled detail sections, each renders only when the data exists.
+          These ARE the card body now (Rylan 2026-08-10): a student swipes on
+          comp + arrangement + level, not on a wall of description text. */}
+      <View style={{ gap: 15, marginTop: 20 }}>
         {job.compensation ? (
           <DetailGroup label="Compensation" center={false}>
             <Chip
-              label={job.compensation}
+              label={formatComp(job.compensation)}
               tone="positive"
               icon="cash-outline"
               size="lg"
@@ -173,46 +227,48 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
             />
           </DetailGroup>
         ) : null}
-        {job.workArrangement ? (
+        {details.roleType ? (
+          <DetailGroup label="Role type" center={false}>
+            <Chip label={details.roleType} tone="brand" icon="briefcase-outline" size="lg" />
+          </DetailGroup>
+        ) : null}
+        {details.arrangement ? (
           <DetailGroup label="Work arrangement" center={false}>
             <Chip
-              label={job.workArrangement}
+              label={details.arrangement}
               tone="brand"
-              icon={arrangementIcon(job.workArrangement)}
+              icon={arrangementIcon(details.arrangement)}
               size="lg"
             />
           </DetailGroup>
         ) : null}
-        {job.experienceLevel ? (
+        {details.experience ? (
           <DetailGroup label="Experience level" center={false}>
-            <Chip label={job.experienceLevel} tone="accent" icon="school-outline" size="lg" />
+            <Chip label={details.experience} tone="accent" icon="school-outline" size="lg" />
           </DetailGroup>
         ) : null}
       </View>
 
-      {/* Job description fills whatever space is left. It's a nested ScrollView so
-          a long description can be read in place (scroll down) instead of clipping;
-          the horizontal swipe still wins sideways drags (pan uses activeOffsetX). */}
-      <View style={{ flex: 1, minHeight: 0, marginTop: 14, gap: 6 }}>
+      {/* Description is a PEEK, not the card body: a few lines pinned above
+          the enlarge cue. The full text (and everything else) lives one tap
+          away in the expanded view. Spacer pushes it to the bottom so the
+          glanceable chips own the middle of the card. */}
+      <View style={{ flex: 1 }} />
+      <View style={{ marginTop: 14, gap: 6 }}>
         <Text
           style={{ fontFamily: fonts.sansMedium, fontSize: 12, letterSpacing: 0.3, color: colors.inkTertiary }}>
           Job description
         </Text>
-        <ScrollView
-          style={{ flex: 1, minHeight: 0 }}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          contentContainerStyle={{ paddingBottom: 4 }}>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 15,
-              color: colors.inkSecondary,
-              lineHeight: 23,
-            }}>
-            {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing — tap to apply and read the details there.')}
-          </Text>
-        </ScrollView>
+        <Text
+          numberOfLines={3}
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 14.5,
+            color: colors.inkSecondary,
+            lineHeight: 21,
+          }}>
+          {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing, tap to apply and read the details there.')}
+        </Text>
         {/* Lifted clear of the floating action bar that overlaps the card's
             lower edge, so the cue is never hidden behind the buttons. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 36 }}>
@@ -292,14 +348,19 @@ export function ExpandedCard({
     autoApplyJob(job);
   };
 
+  const details = dedupeDetails(job);
   const tiles: { icon: keyof typeof Ionicons.glyphMap; label: string; tone: string; full?: boolean }[] = [];
-  if (job.compensation)
-    // Comp can be a long multi-location range — give it the full row to wrap.
-    tiles.push({ icon: 'cash-outline', label: job.compensation, tone: colors.positive, full: job.compensation.length > 28 });
-  if (job.workArrangement)
-    tiles.push({ icon: arrangementIcon(job.workArrangement), label: job.workArrangement, tone: colors.marketing });
-  if (job.experienceLevel)
-    tiles.push({ icon: 'school-outline', label: job.experienceLevel, tone: colors.accent });
+  if (job.compensation) {
+    // Comp can be a long multi-location range; give it the full row to wrap.
+    const comp = formatComp(job.compensation);
+    tiles.push({ icon: 'cash-outline', label: comp, tone: colors.positive, full: comp.length > 28 });
+  }
+  if (details.roleType)
+    tiles.push({ icon: 'briefcase-outline', label: details.roleType, tone: colors.marketing });
+  if (details.arrangement)
+    tiles.push({ icon: arrangementIcon(details.arrangement), label: details.arrangement, tone: colors.marketing });
+  if (details.experience)
+    tiles.push({ icon: 'school-outline', label: details.experience, tone: colors.accent });
 
   return (
     <View style={{ flex: 1 }}>
@@ -410,7 +471,7 @@ export function ExpandedCard({
             Job description
           </Text>
           <Text style={{ fontFamily: fonts.sans, fontSize: 15.5, color: colors.inkSecondary, lineHeight: 24 }}>
-            {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing — tap to apply and read the details there.')}
+            {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing, tap to apply and read the details there.')}
           </Text>
         </View>
 
