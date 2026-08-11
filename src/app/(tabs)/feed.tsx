@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,8 +23,14 @@ import PlanBorder from '@/components/PlanBorder';
 import PlayfulPass from '@/components/feed/PlayfulPass';
 import SendButton from '@/components/feed/SendButton';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
+import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
+import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
+import { ResumeDoors } from '@/components/resume/ResumeDoors';
+import { UpgradeNudgeCard } from '@/components/resume/UpgradeNudgeCard';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ActionCircle } from '@/components/ui/Button';
@@ -80,6 +86,7 @@ export default function FeedScreen() {
     saveJob,
     draftJob,
     autoApplyJob,
+    outreach,
     undoLastPass,
     resetDeck,
     rerollFeed,
@@ -88,6 +95,39 @@ export default function FeedScreen() {
     feedState,
   } = useApp();
   const colors = useColors();
+  const queryClient = useQueryClient();
+
+  // Auto-apply ask-first flow, shared by the pill and the upgrade nudge.
+  const askEnableAutoApply = useCallback(() => {
+    Alert.alert(
+      'Turn on auto-apply?',
+      `When a job supports it, a right swipe will also submit an application for you (${AUTO_APPLY_CREDITS} credits per apply). You'll need your application profile set up, and we'll walk you through it if anything is missing.`,
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Turn on',
+          onPress: () => {
+            updateSwipeSettings({ autoApply: true });
+            showToast('Auto-apply on for eligible jobs');
+          },
+        },
+      ],
+    );
+  }, [updateSwipeSettings, showToast]);
+
+  // Earned-upgrade nudge: only after real drafting activity, only while
+  // auto-apply is off, dismissed forever on request (persisted on device).
+  const [nudgeDismissed, setNudgeDismissed] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem('offerloop.autoApplyNudgeDismissed')
+      .then((v) => setNudgeDismissed(v === '1'))
+      .catch(() => {});
+  }, []);
+  const dismissNudge = useCallback(() => {
+    setNudgeDismissed(true);
+    AsyncStorage.setItem('offerloop.autoApplyNudgeDismissed', '1').catch(() => {});
+  }, []);
+  const showNudge = !swipeSettings.autoApply && !nudgeDismissed && outreach.length >= 2;
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
   const [referralPromptOpen, setReferralPromptOpen] = useState(false);
@@ -145,19 +185,42 @@ export default function FeedScreen() {
   });
 
   // Auto-apply is on but the application profile is unfinished: the card hit
-  // the wall (SwipeDeck blockRight). Say why and offer the fix; the swipe
-  // itself already bounced, so nothing was spent and the card is still there.
+  // the wall (SwipeDeck blockRight). The doors sheet routes each user through
+  // whichever resume path they can actually walk (upload now, build from
+  // LinkedIn once the backend flag flips, or bail politely).
+  const [doorsOpen, setDoorsOpen] = useState(false);
+  const [resumeUploading, setResumeUploading] = useState(false);
   const onApplyProfileBlocked = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      'Finish your application profile',
-      'Auto-apply needs your application details (work authorization and basics) before it can submit for you. It takes about a minute.',
-      [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Set it up', onPress: () => router.push('/application-profile') },
-      ],
-    );
-  }, [router]);
+    setDoorsOpen(true);
+  }, []);
+
+  const doorUpload = useCallback(async () => {
+    if (resumeUploading) return;
+    try {
+      const file = await pickResume();
+      if (!file) return;
+      setResumeUploading(true);
+      await uploadResume(file);
+      setDoorsOpen(false);
+      showToast('Resume added. One more minute of basics.');
+      await queryClient.invalidateQueries({ queryKey: ['applicationProfile'] });
+      router.push('/application-profile');
+    } catch {
+      showToast('Could not add that file. Try a PDF.');
+    } finally {
+      setResumeUploading(false);
+    }
+  }, [resumeUploading, showToast, queryClient, router]);
+
+  const doorLinkedin = useCallback(() => {
+    setDoorsOpen(false);
+    if (!RESUME_BUILDER_LIVE) {
+      showToast('Building from LinkedIn arrives this week. Upload works today.');
+      return;
+    }
+    router.push('/resume-preview');
+  }, [router, showToast]);
 
   // Stable across renders so SwipeDeck (memoized) doesn't re-render on every
   // store change / 60s poll — only when the swipe-relevant inputs change.
@@ -326,6 +389,11 @@ export default function FeedScreen() {
               passing and saving cost nothing, and browsing is how you line up
               tomorrow's targets — only DRAFTING is unaffordable. Keep the deck
               live; the right-swipe bounces on its own via canDraft. */}
+          {showNudge ? (
+            <View style={{ marginTop: 8 }}>
+              <UpgradeNudgeCard onTry={askEnableAutoApply} onDismiss={dismissNudge} />
+            </View>
+          ) : null}
           <View style={{ flex: 1, marginTop: 8, paddingBottom: 56 }}>
             <SwipeDeck
               ref={deckRef}
@@ -407,20 +475,7 @@ export default function FeedScreen() {
                       showToast('Auto-apply off. Swipes just draft outreach.');
                       return;
                     }
-                    Alert.alert(
-                      'Turn on auto-apply?',
-                      `When a job supports it, a right swipe will also submit an application for you (${AUTO_APPLY_CREDITS} credits per apply). You'll need your application profile set up, and we'll walk you through it if anything is missing.`,
-                      [
-                        { text: 'Not now', style: 'cancel' },
-                        {
-                          text: 'Turn on',
-                          onPress: () => {
-                            updateSwipeSettings({ autoApply: true });
-                            showToast('Auto-apply on for eligible jobs');
-                          },
-                        },
-                      ],
-                    );
+                    askEnableAutoApply();
                   }}
                   accessibilityLabel="Auto-apply on swipe"
                   accessibilityState={{ selected: swipeSettings.autoApply }}>
@@ -485,6 +540,37 @@ export default function FeedScreen() {
           onSecondary={resetDeck}
         />
       )}
+
+      {/* The resume doors: shown when the swipe wall blocks an auto-apply
+          because the application profile is unfinished. Same bottom-sheet
+          pattern as the referral nudge below. */}
+      <Modal
+        visible={doorsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDoorsOpen(false)}>
+        <Pressable
+          onPress={() => setDoorsOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(10,14,25,0.5)', justifyContent: 'flex-end' }}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: colors.paper,
+              borderTopLeftRadius: 22,
+              borderTopRightRadius: 22,
+              padding: 20,
+              paddingBottom: 36,
+            }}>
+            <ResumeDoors
+              hasResume={!!profile.hasResume}
+              hasLinkedin={!!profile.linkedinUrl?.trim()}
+              onUpload={doorUpload}
+              onBuildFromLinkedin={doorLinkedin}
+              onNotNow={() => setDoorsOpen(false)}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Post-win referral nudge — paced (every 3rd draft, ~daily cap) so it's a
           celebration, not a nag. Dismissible; ReferralCard hides itself if the
