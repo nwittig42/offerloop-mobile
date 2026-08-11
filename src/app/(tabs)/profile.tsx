@@ -1045,17 +1045,17 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
 
-                {/* Bottom actions (Rylan 2026-08-11): Edit and Replace share
-                    the center; the trash is pinned flush to the card's far
-                    bottom-right, well away from both. */}
+                {/* Bottom actions (Rylan 2026-08-11, round 3): Edit far left,
+                    Replace center, trash far right, evenly spread across the
+                    row. With no resume yet, the lone Upload button centers. */}
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 4,
+                    justifyContent: profile.hasResume ? 'space-between' : 'center',
                     borderTopWidth: 1,
                     borderTopColor: colors.hairlineLight,
+                    paddingHorizontal: 4,
                   }}>
                   {RESUME_BUILDER_LIVE && profile.hasResume ? (
                     <Pressable
@@ -1101,11 +1101,7 @@ export default function ProfileScreen() {
                       accessibilityLabel="Remove resume"
                       hitSlop={8}
                       style={({ pressed }) => ({
-                        position: 'absolute',
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        justifyContent: 'center',
+                        paddingVertical: 13,
                         paddingHorizontal: 14,
                         opacity: pressed || resumeBusy ? 0.5 : 1,
                       })}>
