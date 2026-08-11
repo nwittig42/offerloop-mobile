@@ -39,9 +39,10 @@ type ThemeContextValue = {
   /** Unlockable accent skin (milestone reward), layered on Light/Dark. */
   accentTheme: AccentTheme;
   setAccentTheme: (accent: AccentTheme) => void;
-  /** The user's school colors (resolved from their profile), for the accent skin. */
-  school: SchoolPalette;
-  setSchool: (school: SchoolPalette) => void;
+  /** The user's school colors (resolved from their profile), null until we
+      actually know their school, which hides the skin entirely. */
+  school: SchoolPalette | null;
+  setSchool: (school: SchoolPalette | null) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -55,7 +56,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [pref, setPref] = useState<ThemePref>(() => normalize(Appearance.getColorScheme()));
   const [accentTheme, setAccentTheme] = useState<AccentTheme>('default');
   // Synced from the user's profile.school by the app shell; default until then.
-  const [school, setSchool] = useState<SchoolPalette>(() => resolveSchool());
+  const [school, setSchool] = useState<SchoolPalette | null>(() => resolveSchool());
 
   const scheme: Scheme = pref;
   const base = scheme === 'dark' ? darkColors : lightColors;

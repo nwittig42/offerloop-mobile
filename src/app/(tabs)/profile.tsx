@@ -223,29 +223,36 @@ function AppearanceSelector() {
         })}
       </View>
 
-      <View style={{ height: 1, backgroundColor: colors.hairlineLight, marginVertical: 2 }} />
+      {/* Only offered when the profile matched a real school: with no match
+          the old fallback tinted everyone in USC colors, which is fake data
+          wearing a reward costume. */}
+      {school ? (
+        <>
+          <View style={{ height: 1, backgroundColor: colors.hairlineLight, marginVertical: 2 }} />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-          <Ionicons name="color-palette-outline" size={18} color={colors.inkSecondary} />
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                {school.name} colors
-              </Text>
-              <Chip label="Milestone reward" tone="accent" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+              <Ionicons name="color-palette-outline" size={18} color={colors.inkSecondary} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                    {school.name} colors
+                  </Text>
+                  <Chip label="Milestone reward" tone="accent" />
+                </View>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                  Tint the app in your school's colors. Earned in Milestones.
+                </Text>
+              </View>
             </View>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-              Tint the app in your school's colors. Earned in Milestones.
-            </Text>
+            <Switch
+              value={accentTheme === 'school'}
+              onValueChange={(on) => setAccentTheme(on ? 'school' : 'default')}
+              trackColor={{ true: colors.accent, false: colors.hairline }}
+            />
           </View>
-        </View>
-        <Switch
-          value={accentTheme === 'school'}
-          onValueChange={(on) => setAccentTheme(on ? 'school' : 'default')}
-          trackColor={{ true: colors.accent, false: colors.hairline }}
-        />
-      </View>
+        </>
+      ) : null}
     </Card>
   );
 }
@@ -1022,9 +1029,15 @@ export default function ProfileScreen() {
                   </View>
                 ) : null}
 
+                {/* Replace sits centered on the card's full width (icon +
+                    label, one line); Remove is just a quiet trash icon in the
+                    bottom-right corner. The 50/50 split made Replace hug the
+                    left and gave a destructive action equal billing. */}
                 <View
                   style={{
                     flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     borderTopWidth: 1,
                     borderTopColor: colors.hairlineLight,
                   }}>
@@ -1033,12 +1046,12 @@ export default function ProfileScreen() {
                     disabled={resumeBusy}
                     accessibilityRole="button"
                     style={({ pressed }) => ({
-                      flex: 1,
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 7,
                       paddingVertical: 13,
+                      paddingHorizontal: 24,
                       opacity: pressed || resumeBusy ? 0.5 : 1,
                     })}>
                     <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
@@ -1047,27 +1060,23 @@ export default function ProfileScreen() {
                     </Text>
                   </Pressable>
                   {profile.hasResume ? (
-                    <>
-                      <View style={{ width: 1, backgroundColor: colors.hairlineLight }} />
-                      <Pressable
-                        onPress={onRemoveResume}
-                        disabled={resumeBusy}
-                        accessibilityRole="button"
-                        style={({ pressed }) => ({
-                          flex: 1,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 7,
-                          paddingVertical: 13,
-                          opacity: pressed || resumeBusy ? 0.5 : 1,
-                        })}>
-                        <Ionicons name="trash-outline" size={15} color={colors.negative} />
-                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.negative }}>
-                          Remove
-                        </Text>
-                      </Pressable>
-                    </>
+                    <Pressable
+                      onPress={onRemoveResume}
+                      disabled={resumeBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove resume"
+                      hitSlop={8}
+                      style={({ pressed }) => ({
+                        position: 'absolute',
+                        right: 6,
+                        top: 0,
+                        bottom: 0,
+                        justifyContent: 'center',
+                        paddingHorizontal: 10,
+                        opacity: pressed || resumeBusy ? 0.5 : 1,
+                      })}>
+                      <Ionicons name="trash-outline" size={15} color={colors.negative} />
+                    </Pressable>
                   ) : null}
                 </View>
               </Card>

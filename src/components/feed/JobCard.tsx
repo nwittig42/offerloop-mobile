@@ -24,6 +24,7 @@ const BRAND_ORANGE = '#DE8040';
 /** A short school-colors pennant stripe, shown on cards when the school theme is on. */
 function SchoolStripe() {
   const { school } = useTheme();
+  if (!school) return null;
   return (
     <View style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
       <View style={{ width: 22, height: 5, borderRadius: 3, backgroundColor: school.primary }} />

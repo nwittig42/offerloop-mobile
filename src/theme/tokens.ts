@@ -154,16 +154,20 @@ const SCHOOL_TABLE: { match: string[]; palette: SchoolPalette }[] = [
   { match: ['pennsylvania', 'upenn', 'penn'], palette: { name: 'Penn', primary: '#011F5B', darkPrimary: '#5E83C4', secondary: '#990000' } },
 ];
 
-// Fallback for any school not in the table yet, so the theme always works.
-const DEFAULT_SCHOOL: SchoolPalette = { name: 'School', primary: '#990000', darkPrimary: '#E0484A', secondary: '#FFC72C' };
-
-/** Resolve the user's school string to a color palette (always returns one). */
-export function resolveSchool(school?: string): SchoolPalette {
+/**
+ * Resolve the user's school string to a color palette, or null when we do not
+ * actually know their school. The old fallback handed USC cardinal and gold
+ * (labeled "School") to every unmatched user, which broke the no-fake-data
+ * rule in spirit: the reward claimed colors we never verified. No match now
+ * means the school theme simply is not offered.
+ */
+export function resolveSchool(school?: string): SchoolPalette | null {
   const s = (school ?? '').toLowerCase();
+  if (!s.trim()) return null;
   for (const entry of SCHOOL_TABLE) {
     if (entry.match.some((m) => s.includes(m))) return entry.palette;
   }
-  return DEFAULT_SCHOOL;
+  return null;
 }
 
 /**
@@ -174,9 +178,9 @@ export function applyAccent(
   base: Palette,
   accent: AccentTheme,
   dark: boolean,
-  school: SchoolPalette,
+  school: SchoolPalette | null,
 ): Palette {
-  if (accent === 'default') return base;
+  if (accent === 'default' || !school) return base;
   const primary = dark ? school.darkPrimary : school.primary;
   return { ...base, navy: primary, navyDeep: primary, accent: primary, marketing: primary };
 }
