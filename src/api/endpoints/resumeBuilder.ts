@@ -1,6 +1,6 @@
 import { apiFetch } from '@/api/client';
 import { ApiError } from '@/api/errors';
-import type { ResumePreviewSection } from '@/components/resume/ResumePreview';
+import type { ResumePreviewEntry, ResumePreviewSection } from '@/components/resume/ResumePreview';
 
 /**
  * The website's resume-builder engine, contract agreed with Nick 2026-08-10
@@ -84,25 +84,24 @@ export async function finalizeResume(resume: CanonicalResume): Promise<boolean> 
 /** Shape CanonicalResume into the preview component's titled sections. */
 export function sectionsFromCanonical(resume: CanonicalResume): ResumePreviewSection[] {
   const sections: ResumePreviewSection[] = [];
-  const entryLines = (items?: Entryish[]) =>
+  const toEntries = (items?: Entryish[]): ResumePreviewEntry[] =>
     (items ?? [])
-      .map((it) => {
-        const head = [it.role ?? it.degree ?? it.title ?? it.name, it.org ?? it.school]
-          .filter(Boolean)
-          .join(', ');
-        const dated = [head, it.dates].filter(Boolean).join(' · ');
-        return [dated, ...(it.bullets ?? []).map((b) => `• ${b}`)].filter(Boolean).join('\n');
-      })
-      .filter(Boolean);
+      .map((it) => ({
+        heading: it.role ?? it.degree ?? it.title ?? it.name,
+        sub: it.org ?? it.school,
+        meta: it.dates,
+        bullets: it.bullets ?? [],
+      }))
+      .filter((e) => e.heading || e.sub || e.bullets.length);
 
-  const push = (title: string, lines: string[]) => {
-    if (lines.length) sections.push({ title, lines });
+  const push = (title: string, entries: ResumePreviewEntry[]) => {
+    if (entries.length) sections.push({ title, entries });
   };
-  push('Experience', entryLines(resume.experience));
-  push('Education', entryLines(resume.education));
-  push('Projects', entryLines(resume.projects));
-  push('Leadership', entryLines(resume.leadership));
-  push('Skills', resume.skills?.length ? [resume.skills.join(' · ')] : []);
-  push('Interests', resume.interests?.length ? [resume.interests.join(' · ')] : []);
+  push('Experience', toEntries(resume.experience));
+  push('Education', toEntries(resume.education));
+  push('Projects', toEntries(resume.projects));
+  push('Leadership', toEntries(resume.leadership));
+  push('Skills', resume.skills?.length ? [{ bullets: [resume.skills.join(' · ')] }] : []);
+  push('Interests', resume.interests?.length ? [{ bullets: [resume.interests.join(' · ')] }] : []);
   return sections;
 }
