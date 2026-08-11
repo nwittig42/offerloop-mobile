@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Modal, Platform, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Image, Modal, Platform, Pressable, Share, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -142,6 +142,21 @@ export default function FeedScreen() {
     const t = interpolate(dragX.value, [0, SWIPE_FULL], [0, 1], Extrapolation.CLAMP);
     return { transform: [{ scale: 1 + 0.22 * t }] };
   });
+
+  // Auto-apply is on but the application profile is unfinished: the card hit
+  // the wall (SwipeDeck blockRight). Say why and offer the fix; the swipe
+  // itself already bounced, so nothing was spent and the card is still there.
+  const onApplyProfileBlocked = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'Finish your application profile',
+      'Auto-apply needs your application details (work authorization and basics) before it can submit for you. It takes about a minute.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Set it up', onPress: () => router.push('/application-profile') },
+      ],
+    );
+  }, [router]);
 
   // Stable across renders so SwipeDeck (memoized) doesn't re-render on every
   // store change / 60s poll — only when the swipe-relevant inputs change.
@@ -318,6 +333,8 @@ export default function FeedScreen() {
               onToggleExpand={setExpanded}
               onSwiped={handleSwiped}
               drag={dragX}
+              blockRight={needsApplyProfile && !!top?.autoApplyEligible}
+              onBlockedRight={onApplyProfileBlocked}
               rightStamp={
                 swipeSettings.autoApply && canAutoApply && top?.autoApplyEligible
                   ? 'apply'

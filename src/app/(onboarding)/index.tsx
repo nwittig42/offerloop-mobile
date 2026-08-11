@@ -134,6 +134,8 @@ export default function Onboarding() {
   const [locations, setLocations] = useState<string[]>(profile.preferredLocations ?? []);
   const [drafted, setDrafted] = useState(false);
   const [referral, setReferral] = useState<string | null>(null);
+  // "Somewhere else" gets a free-text detail: real attribution beats a bucket.
+  const [referralOther, setReferralOther] = useState('');
   const [expanded, setExpanded] = useState(false);
   // LinkedIn: the one profile input a student can actually produce on a phone
   // (nobody has a resume handy). It powers the personalization the whole
@@ -212,10 +214,16 @@ export default function Onboarding() {
 
   const chooseReferral = () => {
     if (referral) {
-      void saveReferralSource(referral).catch(() => {});
+      const detail = referralOther.trim().slice(0, 120);
+      const source = referral === 'other' && detail ? `other: ${detail}` : referral;
+      void saveReferralSource(source).catch(() => {});
       // $set referral_source as a person property — the channel attribution the
       // CMO can break every downstream metric (activation, conversion) down by.
-      track('onboarding_referral_selected', { source: referral, $set: { referral_source: referral } });
+      track('onboarding_referral_selected', {
+        source: referral,
+        detail: referral === 'other' ? detail : undefined,
+        $set: { referral_source: referral },
+      });
     }
     next();
   };
@@ -228,7 +236,7 @@ export default function Onboarding() {
         total={TOTAL}
         canBack={false}
         title={`Welcome, ${firstName}`}
-        subtitle="A quick 30 seconds to tune Offerloop to your search — then you're swiping."
+        subtitle="A quick 30 seconds to tune Offerloop to your search, then you're swiping."
         footer={<Button label="Let's go" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />}>
         {school ? (
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -332,7 +340,7 @@ export default function Onboarding() {
         total={TOTAL}
         onBack={back}
         title="Add your LinkedIn"
-        subtitle="This is what makes your intros sound like you — your school, your roles, your story. One paste (or just your handle) does it."
+        subtitle="This is what makes your intros sound like you: your school, your roles, your story. One paste (or just your handle) does it."
         footer={
           <>
             <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={submit} />
@@ -345,7 +353,7 @@ export default function Onboarding() {
             setLinkedin(t);
             if (linkedinError) setLinkedinError(null);
           }}
-          placeholder="linkedin.com/in/yourname — or just yourname"
+          placeholder="Link or handle"
           placeholderTextColor={colors.inkTertiary}
           autoCapitalize="none"
           autoCorrect={false}
@@ -369,14 +377,41 @@ export default function Onboarding() {
             Open LinkedIn to grab my link
           </Text>
         </Pressable>
-        <Card style={{ gap: 6, marginTop: 14 }}>
+        <Card style={{ gap: 12, marginTop: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="help-circle-outline" size={16} color={colors.marketing} />
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Where's my link?</Text>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Where’s my link?</Text>
           </View>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            In the LinkedIn app: tap your photo, then View profile, then the three dots,
-            then Share profile via… and Copy link. Come back and paste it here.
+          {/* Visual path through the LinkedIn app: icon steps beat a wall of
+              words when someone is bouncing between two apps. */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            {(
+              [
+                { icon: 'person-circle-outline', label: 'Your profile' },
+                { icon: 'ellipsis-horizontal-circle-outline', label: 'Three dots' },
+                { icon: 'share-social-outline', label: 'Share via' },
+                { icon: 'copy-outline', label: 'Copy link' },
+              ] as const
+            ).map((s, i, arr) => (
+              <View key={s.label} style={{ flexDirection: 'row', alignItems: 'center', flex: i < arr.length - 1 ? 1 : 0 }}>
+                <View style={{ alignItems: 'center', gap: 4, width: 62 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A66C2' + '12', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={s.icon} size={20} color="#0A66C2" />
+                  </View>
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: colors.inkSecondary, textAlign: 'center' }}>
+                    {s.label}
+                  </Text>
+                </View>
+                {i < arr.length - 1 ? (
+                  <View style={{ flex: 1, alignItems: 'center', paddingBottom: 16 }}>
+                    <Ionicons name="arrow-forward" size={14} color={colors.inkTertiary} />
+                  </View>
+                ) : null}
+              </View>
+            ))}
+          </View>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, textAlign: 'center' }}>
+            Then come back and paste it here.
           </Text>
         </Card>
         {/* Optional resume, while they're already in profile-building mode. */}
@@ -393,12 +428,12 @@ export default function Onboarding() {
           </View>
           {resumeState === 'done' ? (
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
-              We'll use it to sharpen every draft. You can swap it anytime in Profile.
+              We’ll use it to sharpen every draft. You can swap it anytime in Profile.
             </Text>
           ) : (
             <>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
-                Totally optional — you can add it anytime in Profile. But if it's on this
+                Totally optional, you can add it anytime in Profile. But if it’s on this
                 phone, one tap now makes your drafts sharper from the first send.
               </Text>
               <Button
@@ -518,7 +553,7 @@ export default function Onboarding() {
           total={TOTAL}
           canBack={false}
           title="That's the magic"
-          subtitle="Offerloop is writing your personalized intro right now. Keep going — it's ready by the time you finish."
+          subtitle="Offerloop is writing your personalized intro right now. Keep going, it's ready by the time you finish."
           footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />}>
           <View style={{ alignItems: 'center', paddingTop: 6, gap: 16 }}>
             <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.positive + '18', alignItems: 'center', justifyContent: 'center' }}>
@@ -550,7 +585,7 @@ export default function Onboarding() {
         ) : (
           <Card style={{ gap: 8 }}>
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>Your feed is loading</Text>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>We're pulling jobs that fit your targets. Your first swipe is waiting on the Feed.</Text>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>We’re pulling jobs that fit your targets. Your first swipe is waiting on the Feed.</Text>
           </Card>
         )}
       </OnboardingScaffold>
@@ -627,7 +662,7 @@ export default function Onboarding() {
           <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, textAlign: 'center', marginTop: 16 }}>{gmailError}</Text>
         ) : null}
         <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center', marginTop: 16, lineHeight: 17 }}>
-          Google's screen will ask you to allow drafting and sending. Nothing sends without you tapping send.
+          Google’s screen will ask you to allow drafting and sending. Nothing sends without you tapping send.
         </Text>
       </OnboardingScaffold>
     );
@@ -640,7 +675,7 @@ export default function Onboarding() {
         total={TOTAL}
         onBack={back}
         title="How'd you find Offerloop?"
-        subtitle="Last thing — it helps us reach more students like you."
+        subtitle="Last thing: it helps us reach more students like you."
         footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!referral} onPress={chooseReferral} />}>
         <View style={{ gap: 10 }}>
           {REFERRAL_OPTIONS.map((o) => {
@@ -660,6 +695,17 @@ export default function Onboarding() {
               </Pressable>
             );
           })}
+          {referral === 'other' ? (
+            <TextInput
+              value={referralOther}
+              onChangeText={setReferralOther}
+              placeholder="Tell us where"
+              placeholderTextColor={colors.inkTertiary}
+              autoCapitalize="sentences"
+              returnKeyType="done"
+              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
+            />
+          ) : null}
         </View>
       </OnboardingScaffold>
     );
@@ -677,7 +723,7 @@ export default function Onboarding() {
         total={TOTAL}
         onBack={back}
         title="Know the moment they reply"
-        subtitle="Networking is won on fast follow-ups. We'll ping you the second someone writes back — and when a draft is ready."
+        subtitle="Networking is won on fast follow-ups. We'll ping you the second someone writes back, and when a draft is ready."
         footer={
           <>
             <Button label="Turn on notifications" variant="brand" size="lg" fullWidth onPress={enable} />
@@ -693,9 +739,9 @@ export default function Onboarding() {
         </View>
         <View style={{ gap: 12 }}>
           {[
-            { icon: 'chatbubble-ellipses-outline' as const, text: 'A contact replied — follow up while you’re top of mind' },
+            { icon: 'chatbubble-ellipses-outline' as const, text: 'A contact replied: follow up while you’re top of mind' },
             { icon: 'document-text-outline' as const, text: 'Your draft is ready to review and send' },
-            { icon: 'flash-outline' as const, text: 'An auto-apply finished — or needs a decision from you' },
+            { icon: 'flash-outline' as const, text: 'An auto-apply finished, or needs a decision from you' },
             { icon: 'cafe-outline' as const, text: 'Your meeting prep is ready before the chat' },
           ].map((row) => (
             <View key={row.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

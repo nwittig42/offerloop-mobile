@@ -45,6 +45,11 @@ type Props = {
   onSwiped: (direction: 'left' | 'right' | 'up', job: Job) => void;
   /** Mirrors the live horizontal drag so the action buttons can react. */
   drag?: SharedValue<number>;
+  /** When true, a right swipe cannot complete: the card hits an invisible
+   *  wall and springs back, and onBlockedRight fires so the caller can say
+   *  why (e.g. auto-apply is on but the application profile is unfinished). */
+  blockRight?: boolean;
+  onBlockedRight?: () => void;
   /** What a right swipe on the TOP card actually does: 'apply' (green APPLY
    *  stamp) when auto-apply is on and this job is eligible, else 'draft'.
    *  Honest per-card: an ineligible job never flashes a promise to apply. */
@@ -100,7 +105,7 @@ function Stamp({ kind }: { kind: 'pass' | 'draft' | 'save' | 'apply' }) {
 // the cards (jobs) or expand state actually change — not on every store/poll tick.
 export const SwipeDeck = memo(
   forwardRef<SwipeDeckHandle, Props>(
-  ({ jobs, expanded, onToggleExpand, onSwiped, drag, rightStamp = 'draft' }, ref) => {
+  ({ jobs, expanded, onToggleExpand, onSwiped, drag, rightStamp = 'draft', blockRight = false, onBlockedRight }, ref) => {
     const tx = useSharedValue(0);
     const ty = useSharedValue(0);
 
@@ -136,6 +141,11 @@ export const SwipeDeck = memo(
 
     useImperativeHandle(ref, () => ({
       swipe: (direction) => {
+        // The draft BUTTON honors the same wall as the gesture.
+        if (direction === 'right' && blockRight) {
+          onBlockedRight?.();
+          return;
+        }
         flyOut(direction);
       },
       save: () => {
@@ -169,7 +179,16 @@ export const SwipeDeck = memo(
         if (upCommit) {
           flyUp();
         } else if (tx.value > COMMIT_THRESHOLD || e.velocityX > FLING_VELOCITY) {
-          flyOut('right');
+          if (blockRight) {
+            // The wall: a hard bounce back instead of a completed swipe, so
+            // an unfinished application profile can never eat the card.
+            tx.value = withSpring(0, { damping: 11, stiffness: 260 });
+            ty.value = withSpring(0, { damping: 11, stiffness: 260 });
+            if (drag) drag.value = withSpring(0, { damping: 11, stiffness: 260 });
+            if (onBlockedRight) runOnJS(onBlockedRight)();
+          } else {
+            flyOut('right');
+          }
         } else if (tx.value < -COMMIT_THRESHOLD || e.velocityX < -FLING_VELOCITY) {
           flyOut('left');
         } else {
