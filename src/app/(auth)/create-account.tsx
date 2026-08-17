@@ -14,9 +14,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
+import SocialAuthButtons, { useSocialAvailable } from '@/components/auth/SocialAuthButtons';
 import { Button } from '@/components/ui/Button';
-import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { useTheme } from '@/theme/ThemeProvider';
+import { fonts, type Palette } from '@/theme/tokens';
 
 /**
  * In-app registration (App Review guideline 4: account creation may not punt
@@ -30,13 +31,13 @@ import { fonts } from '@/theme/tokens';
 const TERMS_URL = 'https://offerloop.ai/terms-of-service';
 const PRIVACY_URL = 'https://offerloop.ai/privacy';
 
-const inputStyle = (colors: ReturnType<typeof useColors>) =>
+const inputStyle = (colors: Palette, fieldBg: string) =>
   ({
     height: 50,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.hairline,
-    backgroundColor: colors.paper,
+    backgroundColor: fieldBg,
     paddingHorizontal: 16,
     fontFamily: fonts.sans,
     fontSize: 16,
@@ -54,11 +55,17 @@ function friendlyError(e: unknown): string {
 }
 
 export default function CreateAccountScreen() {
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
+  // Paper ground, matching Welcome and the onboarding steps (Nick 2026-08-13).
+  // On white, white inputs would vanish, so the fields take the grey instead:
+  // the page and the field swap roles rather than both going flat.
+  const screenBg = scheme === 'dark' ? colors.surface : colors.paper;
+  const fieldBg = scheme === 'dark' ? colors.paper2 : colors.surface;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { createAccountWithPassword } = useAuth();
 
+  const socialAvailable = useSocialAvailable();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -86,7 +93,7 @@ export default function CreateAccountScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.surface }}
+      style={{ flex: 1, backgroundColor: screenBg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -103,19 +110,11 @@ export default function CreateAccountScreen() {
             resizeMode="contain"
             accessibilityLabel="Offerloop"
           />
+          {/* No subtitle. The heading, three labelled fields, the Google
+              button and the terms line already say everything; anything else
+              here is filler people skip on the way to the email field. */}
           <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading }}>
             Create your account
-          </Text>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 14,
-              color: colors.inkSecondary,
-              textAlign: 'center',
-              lineHeight: 21,
-              maxWidth: 300,
-            }}>
-            Takes under a minute. You will set up your profile right after.
           </Text>
         </View>
 
@@ -130,7 +129,7 @@ export default function CreateAccountScreen() {
             keyboardType="email-address"
             inputMode="email"
             textContentType="username"
-            style={inputStyle(colors)}
+            style={inputStyle(colors, fieldBg)}
           />
           <TextInput
             value={password}
@@ -141,7 +140,7 @@ export default function CreateAccountScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             textContentType="newPassword"
-            style={inputStyle(colors)}
+            style={inputStyle(colors, fieldBg)}
           />
           <TextInput
             value={confirm}
@@ -154,7 +153,7 @@ export default function CreateAccountScreen() {
             textContentType="newPassword"
             returnKeyType="go"
             onSubmitEditing={submit}
-            style={inputStyle(colors)}
+            style={inputStyle(colors, fieldBg)}
           />
           {confirm.length > 0 && !confirmValid ? (
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative }}>
@@ -206,6 +205,24 @@ export default function CreateAccountScreen() {
             . You can delete your account any time in Settings.
           </Text>
         </View>
+
+        {/* Third-party sign-in, on the page rather than in a sheet (Nick
+            2026-08-13). Apple before Google: Guideline 4.8 requires Sign in
+            with Apple wherever another third-party login is offered, shown as
+            an equivalent option. Both are absent on builds without the native
+            modules, and the email form above still stands on its own. */}
+        {socialAvailable ? (
+          <View style={{ marginTop: 24, gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.inkTertiary }}>
+                or
+              </Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+            </View>
+            <SocialAuthButtons onError={setError} />
+          </View>
+        ) : null}
 
         <View style={{ marginTop: 24, alignItems: 'center' }}>
           <Button

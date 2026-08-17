@@ -1,5 +1,6 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
+import { promptToJobQuery, type ParsedPrompt } from '@/lib/jobFilterQuery';
 import { MOCK_JOBS } from '@/mocks/data';
 import type { Job } from '@/types';
 
@@ -210,6 +211,91 @@ export async function fetchSectorJobs(sector: string, limit = 8): Promise<Job[]>
   } catch {
     return [];
   }
+}
+
+/**
+ * Parse a filter prompt server-side. Free, no credits: the backend route says
+ * so in its own docstring, and it is the same parser the web prompt search
+ * uses.
+ *
+ * Returns null when the parser is unavailable (the route is behind
+ * PROMPT_SEARCH_ENABLED and 403s when that flag is off, and older backends 404
+ * it). Null is not an error here: promptToJobQuery degrades to searching the
+ * raw sentence, which is worse but still a filtered feed.
+ */
+export async function parseFilterPrompt(prompt: string): Promise<ParsedPrompt | null> {
+  if (USE_MOCKS) return null;
+  try {
+    return await apiFetch<ParsedPrompt>('/api/search/parse-prompt', {
+      method: 'POST',
+      body: { prompt },
+      timeoutMs: 12_000,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parses are cached for the life of the process, keyed by prompt. Paging a
+ * filtered deck would otherwise re-parse the same sentence on every page, which
+ * is a needless LLM call and a needless second of latency mid-swipe.
+ */
+const parseCache = new Map<string, ParsedPrompt | null>();
+
+/**
+ * One page of the deck built from a filter prompt.
+ *
+ * This is a straight database query, not a ranked feed: no credits, no PDL, no
+ * enrichment. `/api/jobs/search` already takes every parameter we produce, and
+ * returns jobs through the same serializer the feed uses, so mapJob works
+ * unchanged and a filtered card is identical to a ranked one.
+ *
+ * The cursor is the search route's opaque (posted_at, job_id) token, NOT the
+ * numeric offset the ranked feed pages with, so the two sources cannot page
+ * into each other by accident.
+ */
+export type FilteredFeedPage = { jobs: Job[]; nextCursor: string | null };
+
+/**
+ * Either source's page, as the deck consumes it. The ranked feed pages on a
+ * numeric offset and the filtered search on an opaque token, and the deck does
+ * not care which it is holding, it just hands it back on the next call.
+ */
+export type DeckPage = { jobs: Job[]; nextCursor: number | string | null };
+
+export async function fetchFilteredJobsPage(
+  prompt: string,
+  cursor?: string | null,
+  limit = FEED_PAGE_SIZE,
+): Promise<FilteredFeedPage> {
+  const trimmed = (prompt || '').trim();
+  if (USE_MOCKS || !trimmed) return { jobs: [], nextCursor: null };
+
+  if (!parseCache.has(trimmed)) parseCache.set(trimmed, await parseFilterPrompt(trimmed));
+  const query = promptToJobQuery(trimmed, parseCache.get(trimmed) ?? null);
+
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.company) params.set('company', query.company.toLowerCase());
+  if (query.location) params.set('location', query.location);
+  if (query.type) params.set('type', query.type);
+  if (query.seniority) params.set('seniority', query.seniority);
+  params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+
+  const res = await apiFetch<{ results?: RawJob[]; next_cursor?: string | null }>(
+    `/api/jobs/search?${params.toString()}`,
+  );
+  const seen = new Set<string>();
+  const jobs: Job[] = [];
+  for (const raw of res.results || []) {
+    const job = mapJob(raw);
+    if (seen.has(job.id)) continue;
+    seen.add(job.id);
+    jobs.push(job);
+  }
+  return { jobs, nextCursor: res.next_cursor ?? null };
 }
 
 /**

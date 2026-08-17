@@ -2,6 +2,7 @@ import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
 import { MOCK_MEETING_PREPS } from '@/mocks/data';
 import type { MeetingPrep } from '@/types';
+import { requireAIConsent } from '@/lib/aiConsent';
 
 /** Coffee-chat-prep docs (async job). List shape is flat; detail nests contactData. */
 type RawPrep = Record<string, any>;
@@ -100,6 +101,7 @@ export type MeetingPrepPreview = {
 };
 
 export async function previewMeetingPrep(linkedinUrl: string): Promise<MeetingPrepPreview> {
+  requireAIConsent();
   if (USE_MOCKS) {
     return { found: true, name: 'Jordan Avery', title: 'VP, Investment Banking', company: 'Evercore', location: 'New York, NY', school: 'USC' };
   }
@@ -120,6 +122,7 @@ export async function previewMeetingPrep(linkedinUrl: string): Promise<MeetingPr
 
 /** Kick off a prep (15 credits, async). Returns the prep id to poll. */
 export async function createMeetingPrep(linkedinUrl: string): Promise<string> {
+  requireAIConsent();
   if (USE_MOCKS) return MOCK_MEETING_PREPS[0]?.id ?? 'prep-mock';
   const res = await apiFetch<RawPrep>('/api/coffee-chat-prep', {
     method: 'POST',

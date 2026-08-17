@@ -97,3 +97,33 @@ export function useAIConsent(): {
   const consentLoadedFor = useSyncExternalStore(subscribe, () => loadedFor);
   return { consent, consentLoaded, consentLoadedFor };
 }
+
+/** Thrown by requireAIConsent so callers can tell "user has not consented yet"
+ *  apart from a genuine failure and stay quiet about it (the sheet is already
+ *  on screen; an error toast on top would be noise). */
+export class AIConsentRequiredError extends Error {
+  constructor() {
+    super('AI features are off. Allow AI to continue.');
+    this.name = 'AIConsentRequiredError';
+  }
+}
+
+/**
+ * Gate an AI-bound call: open the disclosure and abort if the user has not
+ * consented yet.
+ *
+ * Guideline 5.1.2(i) requires consent BEFORE personal data reaches a
+ * third-party AI, and the reviewer's test is the network call, not the app
+ * launch. Call this at the top of every endpoint function that sends user
+ * content to OpenAI, Anthropic, or Perplexity, OUTSIDE any try/catch, so the
+ * throw propagates instead of being flattened into a generic error state.
+ *
+ * This replaced the blanket consent screen at sign-in (2026-08-13). If you add
+ * a new AI-backed endpoint, it MUST call this; nothing else is guarding the
+ * boundary any more.
+ */
+export function requireAIConsent(): void {
+  if (hasAIConsent()) return;
+  promptAIConsent();
+  throw new AIConsentRequiredError();
+}

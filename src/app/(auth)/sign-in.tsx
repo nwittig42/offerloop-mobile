@@ -6,8 +6,9 @@ import { Image, KeyboardAvoidingView, Linking, Platform, ScrollView, Text, TextI
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
+import SocialAuthButtons, { useSocialAvailable } from '@/components/auth/SocialAuthButtons';
 import { Button } from '@/components/ui/Button';
-import { useColors } from '@/theme/ThemeProvider';
+import { useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
@@ -16,9 +17,11 @@ import { fonts } from '@/theme/tokens';
  *   signed in (completeSignInFromUrl handles the universal-link hand-back).
  * - Password: for accounts created in-app (guideline 4 registration), the
  *   App Review demo account, and dev builds. Includes password reset.
- * First-party email auth only, no social buttons, so no Sign-in-with-Apple
- * requirement (4.8 covers third-party login). Same Firebase project as the
- * website, so accounts are shared by email.
+ * Also carries Apple and Google (added 2026-08-13 alongside the sign-up page):
+ * anyone who created their account with one of those has no password and no
+ * magic-link identity, so omitting them here would lock them out. Apple is
+ * listed first inside SocialAuthButtons, per guideline 4.8. Same Firebase
+ * project as the website, so accounts are shared by email.
  */
 // Hardcoded, NOT an env var: EXPO_PUBLIC_* is inlined by `eas build` but NOT
 // by `eas update`, so an OTA stripped the allowlist and the reviewer panel
@@ -29,10 +32,16 @@ const isReviewerEmail = (email: string): boolean =>
   REVIEWER_EMAILS.includes(email.trim().toLowerCase());
 
 export default function SignInScreen() {
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
+  // Paper ground, matching Welcome and the onboarding steps (Nick 2026-08-13).
+  // On white, white inputs would vanish, so the fields take the grey instead:
+  // the page and the field swap roles rather than both going flat.
+  const screenBg = scheme === 'dark' ? colors.surface : colors.paper;
+  const fieldBg = scheme === 'dark' ? colors.paper2 : colors.surface;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { sendSignInLink, signInWithPassword, sendPasswordReset } = useAuth();
+  const socialAvailable = useSocialAvailable();
 
   const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<'enter' | 'sending' | 'sent'>('enter');
@@ -112,7 +121,7 @@ export default function SignInScreen() {
     // button, and with the keyboard up it used to sit off-screen entirely —
     // the reviewer (and we) could never reach it.
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.surface }}
+      style={{ flex: 1, backgroundColor: screenBg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -217,7 +226,7 @@ export default function SignInScreen() {
               borderRadius: 12,
               borderWidth: 1,
               borderColor: colors.hairline,
-              backgroundColor: colors.paper,
+              backgroundColor: fieldBg,
               paddingHorizontal: 16,
               fontFamily: fonts.sans,
               fontSize: 16,
@@ -254,6 +263,24 @@ export default function SignInScreen() {
               onPress={() => setShowPassword(true)}
             />
           ) : null}
+
+          {/* Apple and Google, matching the sign-up page (2026-08-13). Not
+              optional: once Get started offers them, anyone who signed up that
+              way has no password and no magic-link account to fall back on, so
+              leaving them off this screen locks them out of their own app. */}
+          {socialAvailable ? (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+                <Text
+                  style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.inkTertiary }}>
+                  or
+                </Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+              </View>
+              <SocialAuthButtons />
+            </View>
+          ) : null}
           <Text
             style={{
               fontFamily: fonts.sans,
@@ -284,7 +311,7 @@ export default function SignInScreen() {
             borderRadius: 12,
             padding: 14,
             gap: 8,
-            backgroundColor: colors.paper,
+            backgroundColor: fieldBg,
           }}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, letterSpacing: 1, color: colors.inkTertiary }}>
             {__DEV__ || Updates.channel === 'preview' ? 'DEV SIGN-IN (TEST ACCOUNT)' : 'PASSWORD SIGN-IN'}

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { track } from '@/lib/analytics';
 import { useApp } from '@/store/app';
-import { useColors } from '@/theme/ThemeProvider';
+import { useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
@@ -22,6 +22,8 @@ export function OnboardingScaffold({
   subtitle,
   canBack = true,
   onBack,
+  onSkip,
+  headerRight,
   footer,
   children,
 }: {
@@ -32,19 +34,36 @@ export function OnboardingScaffold({
   canBack?: boolean;
   /** Override the back chevron (used for internal step state instead of routing). */
   onBack?: () => void;
+  /** Override Skip. Required for the PRE-account intake, where the default
+   *  (mark onboarding done, drop into the tabs) would push a signed-out person
+   *  into the app. There it should hand off to the account step instead. */
+  onSkip?: () => void;
+  /** Replaces the Skip control entirely. Intake passes the Offerloop mark:
+   *  there is nothing to skip TO before an account exists, so offering it was
+   *  a dead end. The post-account steps keep Skip, where it is a real escape
+   *  hatch that stops anyone being trapped in the flow. */
+  headerRight?: ReactNode;
   footer: ReactNode;
   children?: ReactNode;
 }) {
-  const colors = useColors();
+  const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { completeOnboarding } = useApp();
   const pct = Math.max(0, Math.min(1, step / total));
+  // Paper ground, matching Welcome (Nick 2026-08-13), rather than the Feed's
+  // baby-blue wash: these are reading-and-typing screens and the tint competed
+  // with the cards sitting on it. Dark keeps the night sky.
+  const screenBg = scheme === 'dark' ? colors.surface : colors.paper;
 
   // Always-available escape: mark done + drop into the app. Guarantees the user
   // can never get trapped in the flow.
   const skip = () => {
     track('onboarding_skipped', { step, total });
+    if (onSkip) {
+      onSkip();
+      return;
+    }
     completeOnboarding();
     // Explicit /(tabs): bare '/' is ambiguous with this group's index and loops
     // back into onboarding.
@@ -52,7 +71,7 @@ export function OnboardingScaffold({
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+    <View style={{ flex: 1, backgroundColor: screenBg }}>
       {/* Progress bar */}
       <View style={{ paddingTop: insets.top + 14, paddingHorizontal: 24 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, height: 28 }}>
@@ -69,9 +88,11 @@ export function OnboardingScaffold({
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary, width: 30, textAlign: 'right' }}>
             {step}/{total}
           </Text>
-          <Pressable onPress={skip} hitSlop={8} accessibilityRole="button">
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>Skip</Text>
-          </Pressable>
+          {headerRight ?? (
+            <Pressable onPress={skip} hitSlop={8} accessibilityRole="button">
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>Skip</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 

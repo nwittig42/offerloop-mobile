@@ -1,177 +1,125 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useEffect, useRef, useState } from 'react';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
-import { savePreferredLocations, saveReferralSource, saveTargetTrack } from '@/api/endpoints/preferences';
-import { enrichLinkedin } from '@/api/endpoints/profile';
-import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
-import { matchCities, RECRUITING_CITIES } from '@/data/cities';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import SnakeBorder from '@/components/ui/SnakeBorder';
 import SwipeDeck from '@/components/feed/SwipeDeck';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
+import GmailLogo from '@/components/auth/GmailLogo';
+import DraftPreviewCard from '@/components/onboarding/DraftPreviewCard';
+import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { track } from '@/lib/analytics';
+import { ONBOARDING_STEPS, ONBOARDING_TOTAL, stepNumber } from '@/lib/onboardingFlow';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
-const STEP_NAMES = ['welcome', 'goal', 'linkedin', 'plan', 'demo', 'gmail', 'referral', 'notifications', 'done'];
+/** This screen's slice of the shared flow (see lib/onboardingFlow). */
+const STEP_NAMES = ONBOARDING_STEPS.slice(1);
 
 /**
- * First-run onboarding — ONE screen, internal step state (no routing between
- * steps). Activation-first: confirm what we know from /me, set the goal, feel
- * the aha (a real draft), prime notifications, then drop into the feed. No
- * paywall. Reached opt-in via the dev Replay button; never force-traps.
+ * First-run onboarding, POST-account half. One screen, internal step state (no
+ * routing between steps): locations, the aha demo swipe, Gmail, notifications,
+ * then the feed. No paywall. Reached opt-in via the dev Replay button; never
+ * force-traps.
+ *
+ * Was nine steps until 2026-08-13. The resume step and a feed preview moved to
+ * the sibling route ./intake.tsx, which the auth gate enters FIRST; that screen
+ * hands off here when it is done. The welcome, goal, and referral steps were
+ * cut outright. By the time this runs, the profile already has the resume and
+ * whatever target the resume implied.
+ *
+ * (Those two steps briefly lived in (auth), ahead of the account, with a
+ * holding pen and a post-signup flush. Nick moved the account first and all of
+ * that came out.) Attribution no longer has an onboarding home; if it comes
+ * back, put it somewhere after activation, not before it.
  */
 
-const TOTAL = 9;
+const TOTAL = 3;
 
-// Acquisition channels — tuned to how students actually find Offerloop (referral,
-// social, Reddit, on-campus clubs). Drives marketing attribution.
-const REFERRAL_OPTIONS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-  { key: 'friend', label: 'Friend or classmate', icon: 'people-outline', color: '#3B82F6' },
-  { key: 'tiktok', label: 'TikTok', icon: 'logo-tiktok', color: '#FE2C55' },
-  { key: 'instagram', label: 'Instagram', icon: 'logo-instagram', color: '#E1306C' },
-  { key: 'linkedin', label: 'LinkedIn', icon: 'logo-linkedin', color: '#0A66C2' },
-  { key: 'reddit', label: 'Reddit', icon: 'logo-reddit', color: '#FF4500' },
-  { key: 'club', label: 'A campus club or event', icon: 'school-outline', color: '#16A34A' },
-  { key: 'search', label: 'Google / search', icon: 'search-outline', color: '#4285F4' },
-  { key: 'other', label: 'Somewhere else', icon: 'ellipsis-horizontal', color: '#8A8F9A' },
-];
 
-type Track = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; industries: string[]; roles: string[] };
-const TRACKS: Track[] = [
-  { key: 'ib', label: 'Investment Banking', icon: 'trending-up-outline', industries: ['Investment Banking'], roles: ['Investment Banking Analyst'] },
-  { key: 'consulting', label: 'Consulting', icon: 'briefcase-outline', industries: ['Consulting'], roles: ['Consultant'] },
-  { key: 'tech', label: 'Tech', icon: 'hardware-chip-outline', industries: ['Technology'], roles: ['Software Engineer'] },
-  { key: 'other', label: 'Something else', icon: 'compass-outline', industries: [], roles: [] },
-];
-const SUGGESTED_LOCS = ['New York', 'San Francisco', 'Chicago', 'Los Angeles', 'Boston', 'Remote'];
 
-/** "Los Angeles" (chip) and "Los Angeles, CA" (city list) are the same place.
- *  Everything is stored as the CANONICAL city-list label (which is also what
- *  the backend's metro filter expects); comparisons happen on the base name,
- *  so the two spellings can never coexist as duplicates. */
-const baseName = (s: string) => s.split(',')[0].trim().toLowerCase();
-const canonicalCity = (bare: string) =>
-  RECRUITING_CITIES.find((c) => baseName(c) === baseName(bare)) ?? bare;
-const sameCity = (a: string, b: string) => baseName(a) === baseName(b);
-
-/** Accept anything a student might paste or type: a full URL (with tracking
- *  junk), "linkedin.com/in/handle", "in/handle", "@handle", or a bare handle.
- *  Returns the normalized https URL, or null if it can't be a profile. */
-function normalizeLinkedin(raw: string): string | null {
-  const s = raw.trim().replace(/^@/, '');
-  if (!s) return null;
-  const fromUrl = s.match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
-  if (fromUrl) return `https://www.linkedin.com/in/${fromUrl[1]}`;
-  const fromPrefix = s.match(/^in\/([A-Za-z0-9\-_%.]+)\/?$/i);
-  if (fromPrefix) return `https://www.linkedin.com/in/${fromPrefix[1]}`;
-  if (/^[A-Za-z0-9\-_%.]+$/.test(s)) return `https://www.linkedin.com/in/${s}`;
-  return null;
-}
-
-/** The intro-being-written card: the same snake-border loading we use in the
- *  Inbox, with rotating research phrases so the wait reads as magic, not lag. */
-function CraftingDraftCard({ who, company }: { who: string; company?: string }) {
-  const colors = useColors();
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const phrases = useMemo(() => {
-    const base = [
-      'Reading their LinkedIn',
-      'Finding your common ground',
-      company ? `Pulling recent ${company} news` : 'Pulling recent news',
-      'Mapping shared experience',
-      'Writing your intro',
-    ];
-    for (let i = base.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [base[i], base[j]] = [base[j], base[i]];
-    }
-    return base;
-  }, [company]);
-  const [pi, setPi] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setPi((p) => (p + 1) % phrases.length), 1500);
-    return () => clearInterval(t);
-  }, [phrases.length]);
+/** Same mark and slot the resume step uses, replacing Skip. */
+function OfferloopMark() {
   return (
-    <View
-      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      style={{ width: '100%', borderRadius: 16, backgroundColor: colors.paper, padding: 16, gap: 10, overflow: 'hidden' }}>
-      {size.w > 0 ? <SnakeBorder w={size.w} h={size.h} color={colors.marketing} radius={16} strokeWidth={3} /> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Ionicons name="document-text-outline" size={15} color={colors.marketing} />
-        <Text numberOfLines={1} style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-          Your intro to {who}
-        </Text>
-      </View>
-      {/* Blurred lines shaped like an email: a short greeting, then a paragraph. */}
-      <View style={{ height: 10, width: '34%', borderRadius: 5, backgroundColor: colors.hairline, opacity: 0.8 }} />
-      <View style={{ gap: 8, marginTop: 2 }}>
-        {['98%', '100%', '92%', '76%'].map((w, i) => (
-          <View key={i} style={{ height: 9, width: w as any, borderRadius: 5, backgroundColor: colors.hairline, opacity: 0.62 - i * 0.08 }} />
-        ))}
-      </View>
-      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.marketing, marginTop: 2 }}>{phrases[pi]}…</Text>
-    </View>
+    <Image
+      source={require('../../../assets/images/offerloop-mark.png')}
+      style={{ width: 30, height: 28 }}
+      resizeMode="contain"
+      accessibilityLabel="Offerloop"
+    />
   );
 }
 
 export default function Onboarding() {
-  const router = useRouter();
   const colors = useColors();
-  const { profile, updateProfile, jobs, outreach, draftJob, passJob, setNotificationsEnabled, completeOnboarding } =
-    useApp();
+  const router = useRouter();
+  const { profile, jobs, setNotificationsEnabled, completeOnboarding } = useApp();
 
   const [step, setStep] = useState(0);
-  const [trackChoice, setTrackChoice] = useState<string | null>(null);
-  const [locations, setLocations] = useState<string[]>(profile.preferredLocations ?? []);
-  const [drafted, setDrafted] = useState(false);
-  const [referral, setReferral] = useState<string | null>(null);
-  // "Somewhere else" gets a free-text detail: real attribution beats a bucket.
-  const [referralOther, setReferralOther] = useState('');
+  const [trackChoice] = useState<string | null>(null);
+  const [swiped, setSwiped] = useState(false);
+  // A LOCAL copy of the deck. The card used to advance only because draftJob
+  // removed it from the store, which meant the teaching swipe was doing real
+  // work: a live contact search, real credits, real outcome toasts. Holding
+  // the three cards here lets them swipe freely and changes nothing.
+  const [demoJobs, setDemoJobs] = useState<Job[]>([]);
+  useEffect(() => {
+    if (!demoJobs.length && jobs.length) setDemoJobs(jobs.slice(0, 3));
+  }, [jobs, demoJobs.length]);
+  const [applied, setApplied] = useState(false);
+  const appliedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (appliedTimer.current) clearTimeout(appliedTimer.current);
+  }, []);
+  const [referral] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  // LinkedIn: the one profile input a student can actually produce on a phone
-  // (nobody has a resume handy). It powers the personalization the whole
-  // product sells, so we ask for it BEFORE the demo draft is written.
-  const [linkedin, setLinkedin] = useState(profile.linkedinUrl ?? '');
-  const [enriching, setEnriching] = useState(false);
-  const [linkedinError, setLinkedinError] = useState<string | null>(null);
-  // Optional resume, right where motivation peaks. Never required, never
-  // blocks Continue; students without one just move on.
-  const [resumeState, setResumeState] = useState<'none' | 'uploading' | 'done' | 'failed'>(
-    profile.resume ? 'done' : 'none',
-  );
-  const [locQuery, setLocQuery] = useState('');
   const { connect: connectGmail, connecting: gmailConnecting } = useGmailConnect();
   const [gmailError, setGmailError] = useState<string | null>(null);
 
-  const firstName = (profile.name || '').trim().split(/\s+/)[0] || 'there';
-  const school = (profile.school || '').trim();
-  const industry = (profile.industries?.[0] || 'your target roles').trim();
-  const job = jobs[0];
 
   // Funnel: one event per step view, so the CMO can see exactly where students
   // drop off in onboarding.
   useEffect(() => {
-    track('onboarding_step_viewed', { step: step + 1, total: TOTAL, name: STEP_NAMES[step] });
+    track('onboarding_step_viewed', {
+      step: stepNumber(STEP_NAMES[step]),
+      total: ONBOARDING_TOTAL,
+      name: STEP_NAMES[step],
+    });
   }, [step]);
 
   const next = () => setStep((s) => Math.min(TOTAL - 1, s + 1));
-  const back = () => setStep((s) => Math.max(0, s - 1));
+
+  /**
+   * Back for EVERY step on this screen. Step 0 here is step 3 of the whole
+   * flow, so it hands off to the intake screen at the feed preview instead of
+   * clamping at zero and doing nothing, which is what it used to do.
+   *
+   * One handler on purpose: the demo step alone renders two different
+   * scaffolds (pre-swipe and post-draft), and fixing them one at a time is how
+   * the dead arrow survived the first attempt.
+   */
+  const back = () => {
+    if (step > 0) {
+      setStep((s) => Math.max(0, s - 1));
+      return;
+    }
+    router.replace('/(onboarding)/intake?step=1');
+  };
 
   const finish = () => {
     track('onboarding_completed', {
       target_track: trackChoice,
       referral_source: referral,
-      locations: locations.length,
-      drafted,
+      // Whether they tried the teaching swipe. Nothing is drafted during
+      // onboarding any more, so this is the swipe itself, not an outcome.
+      swiped,
     });
     // Navigate via the auth gate, NOT a direct router.replace here: the gate
     // already routes onboardingDone + inOnboarding -> /(tabs). Two navigations
@@ -180,411 +128,99 @@ export default function Onboarding() {
     completeOnboarding();
   };
 
-  const chooseTrack = () => {
-    const t = TRACKS.find((x) => x.key === trackChoice);
-    if (t && t.industries.length) {
-      updateProfile({ industries: t.industries, targetRoles: t.roles });
-      void saveTargetTrack({ targetRoles: t.roles, industries: t.industries }).catch(() => {});
-    }
-    // $set makes target_track a person property — segment ALL metrics by it.
-    track('onboarding_goal_selected', { target_track: trackChoice, $set: { target_track: trackChoice } });
-    next();
-  };
-
-  const saveLocations = () => {
-    updateProfile({ preferredLocations: locations });
-    void savePreferredLocations(locations).catch(() => {});
-    next();
-  };
-
   // A real swipe in onboarding: right drafts (and fires the success state),
   // left passes. Same punchy haptics as the Feed so the aha feels real.
   const onDemoSwipe = (direction: 'left' | 'right' | 'up', j: Job) => {
     if (direction === 'up') return; // save isn't part of the onboarding demo
+    // Left counts too: the lesson is the gesture, not which way they went.
+    setSwiped(true);
     if (direction === 'right') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
-      draftJob(j.id);
-      setDrafted(true);
+      // Deliberately does NOT draft. This is a teaching swipe: calling
+      // draftJob ran a real contact search against the live backend, spent
+      // credits, and surfaced its own outcome toasts ("No contact found at
+      // SchoolMint"), which is a real result reported inside a demo. The
+      // lesson is the gesture; the real thing happens on the Feed.
+      // A pill that floats in and leaves, rather than a screen that interrupts
+      // them mid-lesson. They can keep swiping the rest of the deck.
+      setApplied(true);
+      if (appliedTimer.current) clearTimeout(appliedTimer.current);
+      appliedTimer.current = setTimeout(() => setApplied(false), 1800);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      passJob(j.id);
     }
+    // Advance the local deck. Nothing leaves the app.
+    setDemoJobs((prev) => prev.filter((x) => x.id !== j.id));
   };
-
-  const chooseReferral = () => {
-    if (referral) {
-      const detail = referralOther.trim().slice(0, 120);
-      const source = referral === 'other' && detail ? `other: ${detail}` : referral;
-      void saveReferralSource(source).catch(() => {});
-      // $set referral_source as a person property — the channel attribution the
-      // CMO can break every downstream metric (activation, conversion) down by.
-      track('onboarding_referral_selected', {
-        source: referral,
-        detail: referral === 'other' ? detail : undefined,
-        $set: { referral_source: referral },
-      });
-    }
-    next();
-  };
-
-  // ── Step 0: welcome / identity ─────────────────────────────────────────
-  if (step === 0) {
-    return (
-      <OnboardingScaffold
-        step={1}
-        total={TOTAL}
-        canBack={false}
-        title={`Welcome, ${firstName}`}
-        subtitle="A quick 30 seconds to tune Offerloop to your search, then you're swiping."
-        footer={<Button label="Let's go" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />}>
-        {school ? (
-          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.marketing + '14', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="school-outline" size={20} color={colors.marketing} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>Signed in as</Text>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>{school}</Text>
-            </View>
-            <Ionicons name="checkmark-circle" size={20} color={colors.positive} />
-          </Card>
-        ) : null}
-      </OnboardingScaffold>
-    );
-  }
-
-  // ── Step 1: goal ───────────────────────────────────────────────────────
-  if (step === 1) {
-    return (
-      <OnboardingScaffold
-        step={2}
-        total={TOTAL}
-        onBack={back}
-        title="What are you recruiting for?"
-        subtitle="This tunes who shows up in your feed and how your intros are written."
-        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!trackChoice} onPress={chooseTrack} />}>
-        <View style={{ gap: 12 }}>
-          {TRACKS.map((t) => {
-            const on = trackChoice === t.key;
-            return (
-              <Pressable
-                key={t.key}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setTrackChoice(t.key);
-                }}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14, borderWidth: on ? 2 : 1, borderColor: on ? colors.marketing : colors.hairline, backgroundColor: on ? colors.marketing + '0F' : colors.paper }}>
-                <Ionicons name={t.icon} size={22} color={on ? colors.marketing : colors.inkSecondary} />
-                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>{t.label}</Text>
-                {on ? <Ionicons name="checkmark-circle" size={22} color={colors.marketing} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      </OnboardingScaffold>
-    );
-  }
-
-  // ── Step 2: confirm + locations ────────────────────────────────────────
-  // ── Step 2: LinkedIn — the personalization engine's fuel ───────────────
-  if (step === 2) {
-    const normalized = normalizeLinkedin(linkedin);
-    const submit = async () => {
-      if (!normalized) {
-        setLinkedinError(
-          'Paste your profile link, or just type your handle (the part after linkedin.com/in/).',
-        );
-        return;
-      }
-      setLinkedinError(null);
-      setEnriching(true);
-      // Enrich in the background — never block the flow on a scrape. Whatever
-      // lands by the time the demo draft writes makes it sharper; the rest
-      // arrives before their first real send. This is what auto-populates
-      // their Profile (experience, about, skills) from LinkedIn.
-      void enrichLinkedin(normalized)
-        .catch(() => {})
-        .finally(() => setEnriching(false));
-      updateProfile({ linkedinUrl: normalized });
-      next();
-    };
-    const openLinkedIn = async () => {
-      // The app if they have it, the site if they don't; both let them grab
-      // the profile link without hunting.
-      try {
-        await Linking.openURL('linkedin://');
-      } catch {
-        try {
-          await Linking.openURL('https://www.linkedin.com/');
-        } catch {
-          /* nothing to open; the instructions card still guides them */
-        }
-      }
-    };
-    const addResume = async () => {
-      try {
-        const file = await pickResume();
-        if (!file) return;
-        setResumeState('uploading');
-        await uploadResume(file);
-        setResumeState('done');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch {
-        setResumeState('failed');
-      }
-    };
-    return (
-      <OnboardingScaffold
-        step={3}
-        total={TOTAL}
-        onBack={back}
-        title="Add your LinkedIn"
-        subtitle="This is what makes your intros sound like you: your school, your roles, your story. One paste (or just your handle) does it."
-        footer={
-          <>
-            <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={submit} />
-            <Button label="I'll add it later" variant="ghost" fullWidth onPress={next} />
-          </>
-        }>
-        <TextInput
-          value={linkedin}
-          onChangeText={(t) => {
-            setLinkedin(t);
-            if (linkedinError) setLinkedinError(null);
-          }}
-          placeholder="Link or handle"
-          placeholderTextColor={colors.inkTertiary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          style={{ height: 52, borderRadius: 12, borderWidth: 1, borderColor: linkedinError ? colors.negative : colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 16, fontFamily: fonts.sans, fontSize: 15, color: colors.ink }}
-        />
-        {linkedinError ? (
-          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, marginTop: 8 }}>{linkedinError}</Text>
-        ) : null}
-        {normalized && !linkedinError ? (
-          <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.positive, marginTop: 8 }} numberOfLines={1}>
-            ✓ {normalized.replace('https://www.', '')}
-          </Text>
-        ) : null}
-        <Pressable
-          onPress={openLinkedIn}
-          accessibilityRole="button"
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#0A66C2' + '55', backgroundColor: '#0A66C2' + '0D' }}>
-          <Ionicons name="logo-linkedin" size={18} color="#0A66C2" />
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: '#0A66C2' }}>
-            Open LinkedIn to grab my link
-          </Text>
-        </Pressable>
-        <Card style={{ gap: 12, marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="help-circle-outline" size={16} color={colors.marketing} />
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Where’s my link?</Text>
-          </View>
-          {/* Visual path through the LinkedIn app: icon steps beat a wall of
-              words when someone is bouncing between two apps. */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            {(
-              [
-                { icon: 'person-circle-outline', label: 'Your profile' },
-                { icon: 'ellipsis-horizontal-circle-outline', label: 'Three dots' },
-                { icon: 'share-social-outline', label: 'Share via' },
-                { icon: 'copy-outline', label: 'Copy link' },
-              ] as const
-            ).map((s, i, arr) => (
-              <View key={s.label} style={{ flexDirection: 'row', alignItems: 'center', flex: i < arr.length - 1 ? 1 : 0 }}>
-                <View style={{ alignItems: 'center', gap: 4, width: 62 }}>
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A66C2' + '12', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={s.icon} size={20} color="#0A66C2" />
-                  </View>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: colors.inkSecondary, textAlign: 'center' }}>
-                    {s.label}
-                  </Text>
-                </View>
-                {i < arr.length - 1 ? (
-                  <View style={{ flex: 1, alignItems: 'center', paddingBottom: 16 }}>
-                    <Ionicons name="arrow-forward" size={14} color={colors.inkTertiary} />
-                  </View>
-                ) : null}
-              </View>
-            ))}
-          </View>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, textAlign: 'center' }}>
-            Then come back and paste it here.
-          </Text>
-        </Card>
-        {/* Optional resume, while they're already in profile-building mode. */}
-        <Card style={{ gap: 10, marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons
-              name={resumeState === 'done' ? 'checkmark-circle' : 'document-attach-outline'}
-              size={16}
-              color={resumeState === 'done' ? colors.positive : colors.marketing}
-            />
-            <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>
-              {resumeState === 'done' ? 'Resume added' : 'Have your resume handy?'}
-            </Text>
-          </View>
-          {resumeState === 'done' ? (
-            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
-              We’ll use it to sharpen every draft. You can swap it anytime in Profile.
-            </Text>
-          ) : (
-            <>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 18 }}>
-                Totally optional, you can add it anytime in Profile. But if it’s on this
-                phone, one tap now makes your drafts sharper from the first send.
-              </Text>
-              <Button
-                label={resumeState === 'uploading' ? 'Uploading…' : resumeState === 'failed' ? 'Try again' : 'Add resume (optional)'}
-                variant="outline"
-                disabled={resumeState === 'uploading'}
-                onPress={addResume}
-              />
-            </>
-          )}
-        </Card>
-      </OnboardingScaffold>
-    );
-  }
-
-  if (step === 3) {
-    // Store the canonical label; match on base name. "Los Angeles" (chip) and
-    // "Los Angeles, CA" (search) used to coexist as duplicates.
-    const toggle = (loc: string) => {
-      Haptics.selectionAsync();
-      const canon = canonicalCity(loc);
-      setLocations((p) =>
-        p.some((l) => sameCity(l, canon)) ? p.filter((l) => !sameCity(l, canon)) : [...p, canon],
-      );
-    };
-    return (
-      <OnboardingScaffold
-        step={4}
-        total={TOTAL}
-        onBack={back}
-        title="Here's the plan"
-        subtitle={school ? `We'll prioritize people from ${school} and warm paths into ${industry}.` : `We'll prioritize warm paths into ${industry}.`}
-        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={saveLocations} />}>
-        <Card style={{ gap: 6, marginBottom: 22 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="people-outline" size={16} color={colors.marketing} />
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>Your edge</Text>
-          </View>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-            Shared background is the best opener in a cold email — so we use your school, path, and
-            resume to find people likely to reply, and write the intro for you.
-          </Text>
-        </Card>
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, marginBottom: 4 }}>Where do you want to land?</Text>
-        <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, marginBottom: 12 }}>Type any city, or tap a shortcut. This steers your feed.</Text>
-        {/* Free-text entry: the six chips cover a fraction of where students
-            recruit (Houston, Charlotte, Atlanta, London...). Type-and-add so
-            nobody's city is unrepresentable. */}
-        <View style={{ marginBottom: 12 }}>
-          <TextInput
-            value={locQuery}
-            onChangeText={setLocQuery}
-            returnKeyType="done"
-            placeholder="Search a city"
-            placeholderTextColor={colors.inkTertiary}
-            autoCapitalize="words"
-            autoCorrect={false}
-            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
-          />
-          {/* Only real cities from the curated list can be added — typing
-              "Bosto" no longer saves a fake place (no-fake-data rule). */}
-          {locQuery.trim().length > 0 ? (
-            <View style={{ marginTop: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, overflow: 'hidden' }}>
-              {matchCities(locQuery).filter((c) => !locations.some((l) => sameCity(l, c))).map((c, i, arr) => (
-                <Pressable
-                  key={c}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setLocations((prev) => [...prev, c]);
-                    setLocQuery('');
-                  }}
-                  style={{ paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: colors.hairlineLight }}>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>{c}</Text>
-                </Pressable>
-              ))}
-              {matchCities(locQuery).filter((c) => !locations.some((l) => sameCity(l, c))).length === 0 ? (
-                <Text style={{ paddingVertical: 12, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
-                  No match — try a major metro or Remote.
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {locations
-            .filter((l) => !SUGGESTED_LOCS.some((s) => sameCity(s, l)))
-            .map((loc) => (
-              <Pressable key={loc} onPress={() => toggle(loc)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1.5, borderColor: colors.marketing, backgroundColor: colors.marketing + '12', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.marketing }}>{loc}</Text>
-                <Ionicons name="close" size={13} color={colors.marketing} />
-              </Pressable>
-            ))}
-          {SUGGESTED_LOCS.map((loc) => {
-            const on = locations.some((l) => sameCity(l, loc));
-            return (
-              <Pressable key={loc} onPress={() => toggle(loc)} style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: on ? 1.5 : 1, borderColor: on ? colors.marketing : colors.hairline, backgroundColor: on ? colors.marketing + '12' : colors.paper }}>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: on ? colors.marketing : colors.ink }}>{loc}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </OnboardingScaffold>
-    );
-  }
 
   // ── Step 3: aha demo swipe ─────────────────────────────────────────────
-  if (step === 4) {
+  if (step === 0) {
     // NOTE(2026-08-11): a PersonReveal teaching beat with fixture content
     // ("Sample Person at Acme Test Co") lived here for one release. Rylan
     // cut it: fake sample data read as hollow, not as teaching. The real
     // payoff stays the person-first toast when an actual contact lands.
-    if (drafted) {
-      // Don't reveal here — keep the draft "behind the curtain" while it writes
-      // in the background. The reveal lands on the final step, by which point the
-      // rest of onboarding has bought the generation all the time it needs (full
-      // quality, no waiting). This step just teases it and pulls them forward.
-      const who = outreach[0]?.contact?.name || (job?.company ? `someone at ${job.company}` : 'your contact');
-      return (
-        <OnboardingScaffold
-          step={5}
-          total={TOTAL}
-          canBack={false}
-          title="That's the magic"
-          subtitle="Offerloop is writing your personalized intro right now. Keep going, it's ready by the time you finish."
-          footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />}>
-          <View style={{ alignItems: 'center', paddingTop: 6, gap: 16 }}>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.positive + '18', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="checkmark-circle" size={34} color={colors.positive} />
-            </View>
-            <CraftingDraftCard who={who} company={job?.company} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="lock-open-outline" size={14} color={colors.marketing} />
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.marketing }}>
-                Finish setup to see the full intro
-              </Text>
-            </View>
-          </View>
-        </OnboardingScaffold>
-      );
-    }
     return (
       <OnboardingScaffold
-        step={5}
-        total={TOTAL}
+        step={stepNumber(STEP_NAMES[step])}
+        total={ONBOARDING_TOTAL}
+      headerRight={<OfferloopMark />}
         onBack={back}
         title="Try one swipe"
-        subtitle="Swipe right to draft, left to pass. This one's real."
-        footer={<Button label="I'll try it on the Feed" variant="ghost" fullWidth onPress={next} />}>
-        {job ? (
+        subtitle="Swipe right to apply, left to pass."
+        footer={
+          // Appears once they have swiped at least one card, so the lesson
+          // happens before the exit exists. After that they can keep swiping
+          // the rest of the deck or move on, their choice.
+          swiped ? (
+            <Button
+              label="Continue"
+              variant="brand"
+              size="lg"
+              fullWidth
+              icon="arrow-forward"
+              onPress={next}
+            />
+          ) : null
+        }>
+        {demoJobs.length ? (
           <View style={{ height: 520, marginHorizontal: -4 }}>
-            <SwipeDeck jobs={jobs.slice(0, 1)} expanded={expanded} onToggleExpand={setExpanded} onSwiped={onDemoSwipe} />
+            {/* Wraps the deck so the card leans on the same clock as the hand. */}
+            <SwipeDemoHint active={!swiped}>
+              <SwipeDeck
+                jobs={demoJobs}
+                expanded={expanded}
+                onToggleExpand={setExpanded}
+                onSwiped={onDemoSwipe}
+                rightStamp="apply"
+              />
+            </SwipeDemoHint>
+
+            {/* Floats over the deck and leaves on its own, so the next card is
+                already swipeable underneath it. */}
+            {applied ? (
+              <Animated.View
+                entering={FadeInDown.duration(180)}
+                exiting={FadeOut.duration(220)}
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  alignSelf: 'center',
+                  top: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 999,
+                  backgroundColor: colors.ink,
+                }}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.paper }}>
+                  Applied
+                </Text>
+              </Animated.View>
+            ) : null}
           </View>
         ) : (
           <Card style={{ gap: 8 }}>
@@ -597,9 +233,16 @@ export default function Onboarding() {
   }
 
   // ── Step 4: how did you hear about us? (attribution) ───────────────────
-  // ── Step 5: connect Gmail — the product runs ON their inbox ────────────
-  if (step === 5) {
+  // ── Step 5: connect Gmail, the product runs ON their inbox ─────────────
+  if (step === 1) {
     const already = profile.gmailConnected;
+    // Straight to the last step, skipping notifications: every reason we give
+    // for turning them on (a reply landed, a draft is ready) depends on Gmail
+    // being connected, so without it the ask has nothing behind it.
+    // Notifications only make sense once Gmail is connected (every reason we
+    // give for them is a reply or a draft landing there), so declining Gmail
+    // ends onboarding here rather than asking a question with nothing behind it.
+    const skipNotifications = () => finish();
     const doConnect = async () => {
       setGmailError(null);
       const res = await connectGmail();
@@ -612,126 +255,95 @@ export default function Onboarding() {
     };
     return (
       <OnboardingScaffold
-        step={6}
-        total={TOTAL}
+        step={stepNumber(STEP_NAMES[step])}
+        total={ONBOARDING_TOTAL}
+      headerRight={<OfferloopMark />}
         onBack={back}
-        title={already ? 'Gmail is connected' : 'Send from your own Gmail'}
+        title={already ? 'Gmail is connected' : 'Send from your own Email'}
         subtitle={
           already
             ? 'Drafts land in your Gmail and replies come back here. You are all set.'
-            : 'Offerloop writes the email. You send it from your address, so it lands like a real message and replies come back to you.'
+            : 'We draft and send personalized emails for you, directly from your own email address. When someone replies, we track it so you never miss a follow-up.'
         }
         footer={
           already ? (
             <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />
           ) : (
             <>
-              <Button
-                label={gmailConnecting ? 'Opening Google...' : 'Connect Gmail'}
-                variant="brand"
-                size="lg"
-                fullWidth
-                icon="mail-outline"
-                disabled={gmailConnecting}
+              <Pressable
                 onPress={doConnect}
-              />
-              <Button label="Not now" variant="ghost" fullWidth onPress={next} />
+                disabled={gmailConnecting}
+                accessibilityRole="button"
+                accessibilityLabel="Connect Gmail"
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  minHeight: 58,
+                  borderRadius: 10,
+                  backgroundColor: pressed ? colors.navyDeep : colors.ink,
+                  shadowColor: colors.ink,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.22,
+                  shadowRadius: 14,
+                  elevation: 6,
+                  opacity: gmailConnecting ? 0.7 : 1,
+                })}>
+                {gmailConnecting ? (
+                  <ActivityIndicator size="small" color={colors.paper} />
+                ) : (
+                  <GmailLogo size={24} />
+                )}
+                <Text
+                  style={{ fontFamily: fonts.sansSemibold, fontSize: 17.5, color: colors.paper }}>
+                  {gmailConnecting ? 'Opening Google...' : 'Connect Gmail'}
+                </Text>
+              </Pressable>
+              <Button label="Not now" variant="ghost" fullWidth onPress={skipNotifications} />
             </>
           )
         }>
-        <View style={{ alignItems: 'center', paddingTop: 4, paddingBottom: 18 }}>
-          {gmailConnecting ? (
-            <ActivityIndicator size="small" color={colors.marketing} />
-          ) : (
+        {already ? (
+          <View style={{ alignItems: 'center', paddingTop: 4, paddingBottom: 18 }}>
             <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: colors.marketing + '14', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name={already ? 'checkmark-circle' : 'mail-outline'} size={38} color={already ? colors.positive : colors.marketing} />
+              <Ionicons name="checkmark-circle" size={38} color={colors.positive} />
             </View>
-          )}
-        </View>
-        <View style={{ gap: 12 }}>
-          {[
-            { icon: 'send-outline' as const, text: 'Send real emails from your address, not ours' },
-            { icon: 'file-tray-full-outline' as const, text: 'Every draft waits in your Gmail drafts for approval' },
-            { icon: 'chatbubble-ellipses-outline' as const, text: 'Replies are tracked so you never miss a follow-up' },
-          ].map((row) => (
-            <View key={row.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.marketing + '12', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name={row.icon} size={18} color={colors.marketing} />
-              </View>
-              <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>{row.text}</Text>
-            </View>
-          ))}
-        </View>
+          </View>
+        ) : null}
+        {already ? null : <DraftPreviewCard />}
+
         {gmailError ? (
           <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, textAlign: 'center', marginTop: 16 }}>{gmailError}</Text>
         ) : null}
-        <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center', marginTop: 16, lineHeight: 17 }}>
-          Google’s screen will ask you to allow drafting and sending. Nothing sends without you tapping send.
-        </Text>
-      </OnboardingScaffold>
-    );
-  }
-
-  if (step === 6) {
-    return (
-      <OnboardingScaffold
-        step={7}
-        total={TOTAL}
-        onBack={back}
-        title="How'd you find Offerloop?"
-        subtitle="Last thing: it helps us reach more students like you."
-        footer={<Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" disabled={!referral} onPress={chooseReferral} />}>
-        <View style={{ gap: 10 }}>
-          {REFERRAL_OPTIONS.map((o) => {
-            const on = referral === o.key;
-            return (
-              <Pressable
-                key={o.key}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setReferral(o.key);
-                }}
-                accessibilityRole="button"
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: on ? 2 : 1, borderColor: on ? colors.marketing : colors.hairline, backgroundColor: on ? colors.marketing + '0F' : colors.paper }}>
-                <Ionicons name={o.icon} size={20} color={o.color} />
-                <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink }}>{o.label}</Text>
-                {on ? <Ionicons name="checkmark-circle" size={20} color={colors.marketing} /> : null}
-              </Pressable>
-            );
-          })}
-          {referral === 'other' ? (
-            <TextInput
-              value={referralOther}
-              onChangeText={setReferralOther}
-              placeholder="Tell us where"
-              placeholderTextColor={colors.inkTertiary}
-              autoCapitalize="sentences"
-              returnKeyType="done"
-              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.paper, paddingHorizontal: 14, fontFamily: fonts.sans, fontSize: 14.5, color: colors.ink }}
-            />
-          ) : null}
-        </View>
       </OnboardingScaffold>
     );
   }
 
   // ── Step 5: notification priming ───────────────────────────────────────
-  if (step === 7) {
+  if (step === 2) {
     const enable = () => {
       setNotificationsEnabled(true);
-      next();
+      finish();
     };
     return (
       <OnboardingScaffold
-        step={8}
-        total={TOTAL}
+        step={stepNumber(STEP_NAMES[step])}
+        total={ONBOARDING_TOTAL}
+      headerRight={<OfferloopMark />}
         onBack={back}
         title="Know the moment they reply"
-        subtitle="Networking is won on fast follow-ups. We'll ping you the second someone writes back, and when a draft is ready."
+        subtitle="Last one. Networking is won on fast follow-ups, so we'll tell you the moment someone writes back. Then your feed is waiting."
         footer={
           <>
-            <Button label="Turn on notifications" variant="brand" size="lg" fullWidth onPress={enable} />
-            <Button label="Maybe later" variant="ghost" fullWidth onPress={next} />
+            <Button
+              label="Turn on notifications"
+              variant="brand"
+              size="lg"
+              fullWidth
+              onPress={enable}
+            />
+            <Button label="Not now, take me in" variant="ghost" fullWidth onPress={finish} />
           </>
         }>
         <View style={{ alignItems: 'center', marginBottom: 16 }}>
@@ -760,60 +372,4 @@ export default function Onboarding() {
     );
   }
 
-  // ── Step 6: done — the payoff. By now the demo draft has had the whole rest
-  // of onboarding to generate, so reveal the real intro (full quality, no wait).
-  const demo = drafted ? outreach[0] : undefined;
-  const demoReady = !!demo && demo.status !== 'drafting' && demo.status !== 'queued';
-  const demoBody = (demo?.body || demo?.snippet || '').trim();
-  const demoWho = demo?.contact?.name || 'your first contact';
-  return (
-    <OnboardingScaffold
-      step={9}
-      total={TOTAL}
-      canBack={false}
-      title={firstName ? `You're set, ${firstName}` : "You're set"}
-      subtitle={
-        demoReady
-          ? 'Here’s the intro you just drafted. It’s waiting in your Inbox to review and send.'
-          : 'Your first intro is being written and will be waiting in your Inbox in a moment. Here’s how Offerloop works:'
-      }
-      footer={<Button label="Start swiping" variant="brand" size="lg" fullWidth icon="albums-outline" onPress={finish} />}>
-      {demoReady ? (
-        <View style={{ gap: 14 }}>
-          <Card style={{ gap: 8, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="document-text-outline" size={15} color={colors.marketing} />
-              <Text numberOfLines={1} style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-                Your intro to {demoWho}
-              </Text>
-              <Ionicons name="checkmark-circle" size={16} color={colors.positive} />
-            </View>
-            {demo?.subject ? (
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}>{demo.subject}</Text>
-            ) : null}
-            <Text numberOfLines={9} style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>
-              {demoBody || 'Your intro is ready in your Inbox.'}
-            </Text>
-          </Card>
-          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary, textAlign: 'center', lineHeight: 18 }}>
-            Tweak a line if you want, then send. A few of these a week and the replies start coming.
-          </Text>
-        </View>
-      ) : (
-        <View style={{ alignItems: 'center', paddingTop: 16, gap: 18 }}>
-          <View style={{ width: 84, height: 84, borderRadius: 42, backgroundColor: colors.marketing + '14', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="rocket-outline" size={42} color={colors.marketing} />
-          </View>
-          <View style={{ gap: 10, width: '100%' }}>
-            {['Swipe right on a job → we draft the intro', 'Ask Scout to find people and write outreach', 'Replies land in your Inbox for fast follow-ups'].map((t) => (
-              <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
-                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13.5, color: colors.ink }}>{t}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-    </OnboardingScaffold>
-  );
 }

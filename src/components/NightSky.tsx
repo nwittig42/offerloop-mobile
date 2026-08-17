@@ -17,9 +17,14 @@ const RIDGES = require('../../assets/images/scout-ridges-night.png');
 export default function NightSky({
   ridgeHeight = '38%',
   ridgeOpacity = 0.7,
+  showRidge = true,
 }: {
   ridgeHeight?: DimensionValue;
   ridgeOpacity?: number;
+  /** Drop the ridgeline and keep only the sky gradient. For screens whose
+   *  bottom third is busy with controls, where the watercolor sits behind the
+   *  buttons instead of behind empty space. */
+  showRidge?: boolean;
 }) {
   const { pref } = useTheme();
   if (pref !== 'dark') return null;
@@ -29,13 +34,15 @@ export default function NightSky({
       pointerEvents="none"
       style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
       <LinearGradient colors={[darkSky.top, darkSky.mid, darkSky.bottom]} style={{ flex: 1 }} />
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: ridgeHeight }}>
-        <Image
-          source={RIDGES}
-          resizeMode="cover"
-          style={{ width: '100%', height: '100%', opacity: ridgeOpacity }}
-        />
-      </View>
+      {showRidge ? (
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: ridgeHeight }}>
+          <Image
+            source={RIDGES}
+            resizeMode="cover"
+            style={{ width: '100%', height: '100%', opacity: ridgeOpacity }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

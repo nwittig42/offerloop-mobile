@@ -159,12 +159,17 @@ export function ActionCircle({
   size = 56,
   tone = 'neutral',
   disabled = false,
+  accessibilityLabel,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
   size?: number;
   tone?: 'neutral' | 'negative' | 'ink';
   disabled?: boolean;
+  /** Required in practice: this button is icon-only, so without a label
+   *  VoiceOver announces the raw glyph name ("settings-outline") or nothing.
+   *  Optional in the type only so existing call sites keep compiling. */
+  accessibilityLabel?: string;
 }) {
   const colors = useColors();
   const [pressed, setPressed] = useState(false);
@@ -181,6 +186,7 @@ export function ActionCircle({
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={{
         width: size,
         height: size,

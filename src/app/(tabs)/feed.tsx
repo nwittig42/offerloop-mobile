@@ -3,12 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
-  Extrapolation,
-  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -20,8 +18,10 @@ import Header from '@/components/Header';
 import ReferralCard from '@/components/ReferralCard';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import PlanBorder from '@/components/PlanBorder';
-import PlayfulPass from '@/components/feed/PlayfulPass';
-import SendButton from '@/components/feed/SendButton';
+import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
+import DraftSendChoice from '@/components/feed/DraftSendChoice';
+import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
+import PeopleFeedView from '@/components/feed/PeopleFeedView';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
 
 import { getApplicationProfile, isProfileReady } from '@/api/endpoints/autoApply';
@@ -29,49 +29,48 @@ import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
+import { ActionCircle } from '@/components/ui/Button';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
-import { ActionCircle } from '@/components/ui/Button';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
-import { useColors, useTheme } from '@/theme/ThemeProvider';
+import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
 /**
- * Feed: the swipe-to-draft hero. Credits on the left of the banner, full
- * wordmark centered, Scout and the bell on the right (via Header). The
- * action row floats in a liquid-glass bar low on the screen, riding just
- * above the tab bar: undo, pass, draft, attach. Tapping anywhere on the
- * card expands it. Every number comes from store state, never inline.
+ * Feed: the hero surface, now two decks behind one switcher.
+ *
+ * JOBS (this file): a right swipe APPLIES, and that is all it does unless the
+ * "Email HM" pill is on, in which case it also drafts to the role's hiring
+ * manager. A job the ATS cannot take saves instead, so the swipe is never a
+ * promise the app can't keep.
+ *
+ * PEOPLE (PeopleFeedView): a right swipe reveals a person's email.
+ *
+ * Chrome is unchanged: credits on the left of the banner, wordmark centered,
+ * Scout and the bell on the right (via Header), and the action row floating in
+ * a liquid-glass bar above the tab bar. Tapping a card expands it. Every number
+ * comes from store state, never inline.
  */
-/** The same brand watercolor ridgeline as the Scout tab, but the DAY art — the
- *  original light periwinkle wash, not the night-tinted variant. Scout's version
- *  is baked dark for its deep-blue canvas; the feed's canvas is light, so the
- *  night art would read as a bruise across the bottom of the deck. Sits behind
- *  everything, purely decorative, and never eats a touch. */
-const FEED_RIDGES = require('../../../assets/images/ridges-day.png');
-
-function FeedRidgeline() {
-  // Light mode only: in dark mode this day art reads as a washed-gray ghost
-  // (Rylan flagged it); NightSky supplies the night ridgeline instead.
-  const { pref } = useTheme();
-  if (pref === 'dark') return null;
-  return (
-    <View
-      pointerEvents="none"
-      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '38%' }}>
-      <Image
-        source={FEED_RIDGES}
-        resizeMode="cover"
-        // Held back so it stays atmosphere, not decoration competing with the
-        // card the user is actually reading.
-        style={{ width: '100%', height: '100%', opacity: 0.55 }}
-      />
-    </View>
-  );
-}
+/**
+ * The watercolor ridgeline used to sit across the bottom 38% of this screen
+ * (day art in light mode, NightSky's night art in dark). Pulled 2026-08-14.
+ *
+ * Two reasons. The art is a 900x299 panorama, and `cover` into a box that tall
+ * cropped roughly 60% of its width away, so the screen showed a zoomed slice of
+ * one peak rather than the wide vista that made the image worth using. And the
+ * bottom third is now the busiest part of the feed (the glass action bar, and a
+ * deck switcher above it), so the texture landed behind the controls instead of
+ * behind empty space.
+ *
+ * assets/images/ridges-day.png is now referenced nowhere: the feed was its only
+ * consumer. Kept on disk deliberately, because the art is worth reusing on a
+ * screen with room for it (onboarding, welcome, an empty state), where it can
+ * run full-width and uncropped. Delete it if that never happens.
+ */
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -82,7 +81,6 @@ export default function FeedScreen() {
     canUndo,
     swipeSettings,
     updateSwipeSettings,
-    draftsLeft,
     costPerSwipe,
     passJob,
     saveJob,
@@ -99,52 +97,104 @@ export default function FeedScreen() {
   const colors = useColors();
   const queryClient = useQueryClient();
 
-  // Auto-apply ask-first flow, shared by the pill and the upgrade nudge.
-  const askEnableAutoApply = useCallback(() => {
-    Alert.alert(
-      'Turn on auto-apply?',
-      `When a job supports it, a right swipe will also submit an application for you (${AUTO_APPLY_CREDITS} credits per apply). You'll need your application profile set up, and we'll walk you through it if anything is missing.`,
-      [
-        { text: 'Not now', style: 'cancel' },
-        {
-          text: 'Turn on',
-          onPress: () => {
-            updateSwipeSettings({ autoApply: true });
-            showToast('Auto-apply on for eligible jobs');
-          },
-        },
-      ],
-    );
+  // Which deck is showing. Jobs opens first: it is the familiar surface, and
+  // applying is the lower-commitment action of the two.
+  const [mode, setMode] = useState<FeedMode>('jobs');
+
+  // The hiring-manager add-on has three states, and both of the upgrades
+  // between them are ask-first. Off -> draft spends credits beyond the apply
+  // and writes in the user's name; draft -> send puts mail in a stranger's
+  // inbox with no review step. Coming back down is instant, in one tap.
+  //
+  // The state is DERIVED, not stored: `emailHiringManager` says whether the
+  // add-on runs at all, and `action` (the global draft/send rule, shared with
+  // every other outreach surface) says what it does. Deriving keeps this pill
+  // and the Swipe settings screen from ever disagreeing.
+  const draftOrSend: 'draft' | 'send' = swipeSettings.action === 'send' ? 'send' : 'draft';
+
+  // The sentence this deck was built from, or null for the ranked default. The
+  // store owns the consequences (which route feeds the deck); this screen only
+  // has to say so and offer the way out.
+  const jobFilter = swipeSettings.jobFilter?.trim() || null;
+  const clearJobFilter = useCallback(() => {
+    updateSwipeSettings({ jobFilter: null });
+    showToast('Back to your default feed.');
   }, [updateSwipeSettings, showToast]);
 
+  // Both confirmations are in-app dialogs, not Alert.alert (2026-08-16).
+  // Alert is a no-op on react-native-web, so in the browser preview this whole
+  // control looked dead: the switch was tapped, nothing opened, nothing
+  // changed. Which of the two is open, or null.
+  const [hmConfirm, setHmConfirm] = useState<null | 'enable' | 'send'>(null);
+
+  const enableHiringManagerEmail = useCallback(() => {
+    updateSwipeSettings({
+      emailHiringManager: true,
+      priority: 'hiring_manager',
+      // Always land on the safe rung first. Reaching auto-send takes a second
+      // tap and a second dialog, deliberately.
+      action: 'draft',
+    });
+    showToast('We’ll draft to the hiring manager on every apply');
+  }, [updateSwipeSettings, showToast]);
+
+  const enableHiringManagerSend = useCallback(() => {
+    updateSwipeSettings({ action: 'send' });
+    showToast('Auto-sending. Swipes go out without review.');
+  }, [updateSwipeSettings, showToast]);
+
+  const toggleHiringManager = useCallback(() => {
+    if (swipeSettings.emailHiringManager) {
+      updateSwipeSettings({ emailHiringManager: false });
+      showToast('Off. Swipes just submit the application.');
+      return;
+    }
+    setHmConfirm('enable');
+  }, [swipeSettings.emailHiringManager, updateSwipeSettings, showToast]);
+
+  // Draft is a free move. Send is not, so it goes through the dialog and the
+  // segmented control only follows once that is answered.
+  const chooseDraftOrSend = useCallback(
+    (next: 'draft' | 'send') => {
+      if (next === draftOrSend) return;
+      if (next === 'draft') {
+        updateSwipeSettings({ action: 'draft' });
+        showToast('We’ll draft it. Nothing goes out without you.');
+        return;
+      }
+      setHmConfirm('send');
+    },
+    [draftOrSend, updateSwipeSettings, showToast],
+  );
+
   // The auto-apply nudge card lived here for one release; Rylan cut it
-  // 2026-08-11 (it ate feed space). Auto-apply discovery now rests on the
-  // labeled pill in the action bar alone.
+  // 2026-08-11 (it ate feed space). Discovery of the swipe's add-on now rests
+  // on the labeled pill in the action bar alone.
   const deckRef = useRef<SwipeDeckHandle>(null);
   const [expanded, setExpanded] = useState(false);
   const [referralPromptOpen, setReferralPromptOpen] = useState(false);
-  // App limit-model (2026-07-10): every tier can auto-apply, bounded by credits
-  // (AUTO_APPLY_CREDITS each), not walled by plan. The backend allows all tiers;
-  // this used to be Pro/Elite-only and silently no-op'd auto-apply for free.
-  const canAutoApply = true;
+  // App limit-model (2026-07-10): every tier can apply, bounded by credits
+  // (AUTO_APPLY_CREDITS each), not walled by plan. The backend allows all tiers.
 
-  // Application-profile readiness — gates auto-apply. Only fetched when the user
-  // has auto-apply on and the tier for it; cached so the swipe path is instant.
+  // Now that a right swipe IS the apply, the application profile gates the
+  // whole deck, not just an opt-in mode. So this is fetched unconditionally
+  // rather than only when auto-apply was switched on.
   const appProfileQuery = useQuery({
     queryKey: ['applicationProfile'],
     queryFn: getApplicationProfile,
-    enabled: swipeSettings.autoApply && canAutoApply,
   });
   const profileReady = isProfileReady(appProfileQuery.data);
   // Show the "set up your profile" prompt only once we know it's incomplete.
-  const needsApplyProfile =
-    swipeSettings.autoApply && canAutoApply && !!appProfileQuery.data && !profileReady;
+  const needsApplyProfile = !!appProfileQuery.data && !profileReady;
 
   const top = jobs[0];
-  // Credits are the only meter now — a swipe is affordable, or it isn't. There
-  // is no separate stamina token and no cooldown to wait out.
-  const canDraft = draftsLeft >= 1;
-  const outOfCredits = draftsLeft === 0;
+  // Credits are the only meter: a swipe is affordable, or it isn't. A right
+  // swipe now buys the APPLY, plus the hiring-manager draft when that toggle
+  // is on, so the affordability check has to cover both or the user commits to
+  // an action the wallet cannot finish.
+  const rightSwipeCost =
+    AUTO_APPLY_CREDITS + (swipeSettings.emailHiringManager ? costPerSwipe : 0);
+  const canRightSwipe = profile.credits >= rightSwipeCost;
 
   // The liquid-glass action bar shrinks and settles down when the job card
   // is enlarged, giving the reader room, then springs back on collapse.
@@ -163,18 +213,10 @@ export default function FeedScreen() {
     opacity: 1 - 0.15 * barShrink.value,
   }));
 
-  // The active swipe button grows with the drag, so the gesture and the
-  // button feel like one motion. The other button eases back slightly.
-  const dragX = useSharedValue(0);
-  const SWIPE_FULL = 110;
-  const passStyle = useAnimatedStyle(() => {
-    const t = interpolate(dragX.value, [-SWIPE_FULL, 0], [1, 0], Extrapolation.CLAMP);
-    return { transform: [{ scale: 1 + 0.22 * t }] };
-  });
-  const draftStyle = useAnimatedStyle(() => {
-    const t = interpolate(dragX.value, [0, SWIPE_FULL], [0, 1], Extrapolation.CLAMP);
-    return { transform: [{ scale: 1 + 0.22 * t }] };
-  });
+  // The pass and draft circles used to grow with the drag, so the gesture and
+  // the button felt like one motion. Both circles are gone, so no drag value is
+  // threaded into the deck any more. The stamps on the card are the drag
+  // feedback now.
 
   // Auto-apply is on but the application profile is unfinished: the card hit
   // the wall (SwipeDeck blockRight). The doors sheet routes each user through
@@ -216,6 +258,16 @@ export default function FeedScreen() {
 
   // Stable across renders so SwipeDeck (memoized) doesn't re-render on every
   // store change / 60s poll — only when the swipe-relevant inputs change.
+  /**
+   * A right swipe on a job APPLIES. That is the whole meaning of this deck now
+   * (it used to draft outreach, with applying as an optional extra). Outreach
+   * to people moved to the People deck, and the one thing that still reaches a
+   * human from here is the opt-in hiring-manager email riding along on the
+   * apply.
+   *
+   * A job the ATS cannot take an auto-apply for saves instead of applying, so
+   * the swipe still does something true rather than failing silently.
+   */
   const handleSwiped = useCallback((direction: 'left' | 'right' | 'up', job: Job) => {
     if (direction === 'up') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -224,32 +276,50 @@ export default function FeedScreen() {
       return;
     }
     if (direction === 'right') {
-      if (!canDraft) {
-        // Out of swipes: bounce, don't spend. The card snaps back. With IAP
+      if (!canRightSwipe) {
+        // Out of credits: bounce, don't spend. The card snaps back. With IAP
         // live this is the limit-hit moment, so offer the real fix.
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         if (iapAvailable()) presentPaywall({ context: 'draft' });
-        else showToast('Out of credits — drafts resume when your credits reset');
+        else showToast('Out of credits. Applying resumes when your credits reset.');
         return;
       }
-      // A punchy double-buzz on the commit so the draft feels real.
+      // A punchy double-buzz on the commit so the action feels real.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
-      draftJob(job.id);
+
+      if (job.autoApplyEligible) {
+        // Deduped background submission (surfaces in Network › Applied).
+        // autoApplyJob blocks a second apply to the same job.
+        autoApplyJob(job);
+      } else {
+        // No ATS path for this one. Saving beats pretending we applied.
+        saveJob(job.id);
+        showToast(`Saved ${job.title}. This one needs a manual application.`);
+      }
+
+      // The opt-in extra: find the hiring manager and draft to them.
+      if (swipeSettings.emailHiringManager) {
+        draftJob(job.id, { silent: true });
+      }
+
       // Peak-dopamine moment — paced referral nudge (every 3rd win, ~daily cap).
       void shouldShowReferralPromptOnWin(Date.now()).then((show) => {
         if (show) setReferralPromptOpen(true);
       });
-      // Auto-apply on + eligible → deduped background submission (surfaces in
-      // Network › Applied). autoApplyJob blocks a second apply to the same job.
-      if (swipeSettings.autoApply && job.autoApplyEligible && canAutoApply) {
-        autoApplyJob(job);
-      }
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       passJob(job.id);
     }
-  }, [canDraft, draftJob, passJob, saveJob, autoApplyJob, swipeSettings.autoApply, canAutoApply, showToast]);
+  }, [
+    canRightSwipe,
+    draftJob,
+    passJob,
+    saveJob,
+    autoApplyJob,
+    swipeSettings.emailHiringManager,
+    showToast,
+  ]);
 
   // The pill was an outline around empty space — a plan border with nothing
   // inside it, which read as unfinished rather than minimal. Fill it with a soft
@@ -280,8 +350,9 @@ export default function FeedScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
-      <NightSky />
-      <FeedRidgeline />
+      {/* Sky gradient only: dark mode keeps the app's shared backdrop, but the
+          ridgeline comes off here for the same reason the day art did. */}
+      <NightSky showRidge={false} />
       <Header
         title="Offerloop"
         logo
@@ -290,7 +361,11 @@ export default function FeedScreen() {
         onBellPress={() => router.push('/notifications')}
       />
 
-      {feedState.loading ? (
+      <FeedSwitcher mode={mode} onChange={setMode} />
+
+      {mode === 'people' ? (
+        <PeopleFeedView />
+      ) : feedState.loading ? (
         <FeedSkeleton />
       ) : feedState.error ? (
         <StateView
@@ -304,8 +379,8 @@ export default function FeedScreen() {
       ) : top ? (
         <View style={{ flex: 1, paddingHorizontal: 18 }}>
           {/* One number, and it's true: what the wallet can still pay for. The
-              old stamina bar counted a token that no server enforced and that a
-              force-quit reset anyway. */}
+              cost quoted is the cost of the swipe the user is about to make,
+              so it moves when the hiring-manager toggle does. */}
           <Pressable onPress={() => router.push('/credits')}>
             <Text
               style={{
@@ -315,9 +390,14 @@ export default function FeedScreen() {
                 textAlign: 'center',
                 paddingTop: 6,
               }}>
-              {draftsLeft} {draftsLeft === 1 ? 'draft' : 'drafts'} left
+              {profile.credits} credits
               <Text style={{ color: colors.inkTertiary }}>
-                {'  ·  '}{costPerSwipe} credits each
+                {'  ·  '}{rightSwipeCost} per swipe
+                {!swipeSettings.emailHiringManager
+                  ? ' (apply)'
+                  : draftOrSend === 'send'
+                    ? ' (apply + send)'
+                    : ' (apply + draft)'}
               </Text>
             </Text>
           </Pressable>
@@ -330,20 +410,26 @@ export default function FeedScreen() {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 8,
+                gap: 7,
                 marginTop: 8,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 12,
+                paddingVertical: 7,
+                paddingHorizontal: 12,
+                borderRadius: 10,
                 backgroundColor: colors.waiting + '1A',
                 borderWidth: 1,
                 borderColor: colors.waiting + '40',
               }}>
-              <Ionicons name="alert-circle-outline" size={18} color={colors.waiting} />
-              <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                Set up your application profile to auto-apply
+              <Ionicons name="alert-circle-outline" size={16} color={colors.waiting} />
+              {/* One line, not two. It used to wrap because it said "to
+                  auto-apply", which is also stale now: applying is what a right
+                  swipe does, not a mode you switch on. Wrapping cost the deck
+                  ~20pt of height on the screen it is warning you about. */}
+              <Text
+                numberOfLines={1}
+                style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink }}>
+                Finish your profile to apply
               </Text>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.waiting }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.waiting }}>
                 Set up
               </Text>
             </Pressable>
@@ -351,170 +437,201 @@ export default function FeedScreen() {
 
           {/* Out of credits used to grey out and DISABLE the whole deck. But
               passing and saving cost nothing, and browsing is how you line up
-              tomorrow's targets — only DRAFTING is unaffordable. Keep the deck
-              live; the right-swipe bounces on its own via canDraft. */}
-          <View style={{ flex: 1, marginTop: 8, paddingBottom: 56 }}>
+              tomorrow's targets, and only APPLYING is unaffordable. Keep the deck
+              live; the right-swipe bounces on its own via canRightSwipe. */}
+          {/* Clearance for the bar below, not a slice off the card (Nick
+              2026-08-16: "the spacing is pretty awkward"). 72 left the card
+              bottom landing within a few points of the bar's top edge, so two
+              white rounded surfaces touched and read as one confused shape.
+              This is the bar's full height, plus its 26 of float, plus a 16
+              gap. The bar grows a second row when the hiring-manager switch is
+              on (34 tall + 8 gap), so the clearance grows with it rather than
+              letting the card get run over. */}
+          <View
+            style={{
+              flex: 1,
+              marginTop: 8,
+              paddingBottom: swipeSettings.emailHiringManager ? 152 : 110,
+            }}>
             <SwipeDeck
               ref={deckRef}
               jobs={jobs}
               expanded={expanded}
               onToggleExpand={setExpanded}
               onSwiped={handleSwiped}
-              drag={dragX}
               blockRight={needsApplyProfile && !!top?.autoApplyEligible}
               onBlockedRight={onApplyProfileBlocked}
-              rightStamp={
-                swipeSettings.autoApply && canAutoApply && top?.autoApplyEligible
-                  ? 'apply'
-                  : 'draft'
-              }
+              rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
             />
-            {/* Undo, top-right over the card (Sorce-style). Outside the deck's
-                gesture so tapping it never swipes or expands. */}
-            {canUndo && !expanded ? (
-              <Pressable
-                onPress={undoLastPass}
-                accessibilityLabel="Undo last swipe"
-                style={{
-                  position: 'absolute',
-                  top: 20,
-                  right: 18,
-                  width: 34,
-                  height: 34,
-                  borderRadius: 17,
-                  backgroundColor: colors.paper,
-                  borderWidth: 1,
-                  borderColor: colors.hairline,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                <Ionicons name="arrow-undo" size={17} color={colors.inkSecondary} />
-              </Pressable>
-            ) : null}
+
           </View>
 
-          {outOfCredits ? null : (
-            <Animated.View
-              pointerEvents="box-none"
-              style={[
-                {
-                  position: 'absolute',
-                  bottom: 10,
-                  left: 0,
-                  right: 0,
-                  alignItems: 'center',
-                },
-                barStyle,
-              ]}>
-              <GlassBar style={{ gap: 6 }}>
-                {/* Shuffle replaced share here (Rylan 2026-08-10): sharing
-                    confused people, and "show me new roles" deserved a spot
-                    in reach instead of living deep in swipe settings. */}
-                <ActionCircle
-                  icon="shuffle-outline"
-                  size={38}
-                  onPress={() => {
-                    if (!rerolling) rerollFeed();
-                  }}
-                />
-                <ActionCircle
-                  icon="bookmark-outline"
-                  size={40}
-                  onPress={() => deckRef.current?.save()}
-                />
-                <Animated.View style={passStyle}>
-                  <PlayfulPass size={58} onPress={() => deckRef.current?.swipe('left')} />
-                </Animated.View>
-                <Animated.View style={draftStyle}>
-                  <SendButton
-                    size={58}
-                    disabled={!canDraft}
-                    onPress={() => deckRef.current?.swipe('right')}
-                  />
-                </Animated.View>
-                {/* Auto-apply MODE control. A bare bolt read as "boost", not
-                    "submit applications for me" (Rylan, 2026-08-10), so the
-                    control says its name. Turning it ON asks first: it spends
-                    credits and acts on the user's behalf. */}
+          {/* The bar used to disappear at zero credits, back when everything in
+              it cost money. Both survivors are free (one changes what the next
+              swipe means, one opens settings), and hiding the way to turn OFF
+              the thing pushing you over budget is exactly backwards. It stays. */}
+          <Animated.View
+            pointerEvents="box-none"
+            style={[
+              {
+                position: 'absolute',
+                // 10 put the bar's shadow almost against the tab bar's top
+                // hairline, so the two chrome layers read as one stack. 26
+                // gives it clear water and lets it read as floating.
+                bottom: 26,
+                left: 0,
+                right: 0,
+                alignItems: 'center',
+              },
+              barStyle,
+            ]}>
+              {/* Two controls, not six (Nick 2026-08-14). The four that left:
+                  shuffle already exists as "Show me new roles" on the
+                  all-caught-up state, bookmark duplicated swipe-up, and the
+                  pass and apply circles duplicated the swipe the whole screen
+                  is built around. What survives is the pair that a swipe
+                  CANNOT do: change what the next swipe means, and open the
+                  settings behind it.
+
+                  The swipe is now the only pointing-device path to pass and
+                  apply, so SwipeStack carries accessibilityActions for both.
+                  That is what keeps this HIG-legal (rule 5.7: every custom
+                  gesture needs a tap or menu equivalent), since VoiceOver and
+                  Switch Control cannot perform a drag. */}
+              {/* Undo, labelled and in the same spot as the People deck's.
+                  It used to be a 34pt unlabelled circle in the card's top
+                  corner, which is a poor answer to the moment it exists for:
+                  a student passes a job by thumb-twitch, realises instantly,
+                  and needs the way back to be the obvious thing on screen
+                  rather than a glyph they have to go find. Passes only —
+                  applying spends credits and cannot be taken back. */}
+              {canUndo && !expanded ? (
                 <Pressable
-                  onPress={() => {
-                    if (swipeSettings.autoApply) {
-                      updateSwipeSettings({ autoApply: false });
-                      showToast('Auto-apply off. Swipes just draft outreach.');
-                      return;
-                    }
-                    askEnableAutoApply();
-                  }}
-                  accessibilityLabel="Auto-apply on swipe"
-                  accessibilityState={{ selected: swipeSettings.autoApply }}>
-                  {/* Compact two-line pill: the single-line label pushed the
-                      outer buttons off screen edges (Rylan's screenshot,
-                      2026-08-10), worse with enlarged text. Fixed-size chrome,
-                      so font scaling is pinned here. */}
-                  {swipeSettings.autoApply ? (
-                    <LinearGradient
-                      colors={['#2563EB', '#4F46E5', '#7C3AED']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{
-                        height: 46,
-                        borderRadius: 23,
-                        paddingHorizontal: 10,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                      }}>
-                      <Ionicons name="flash" size={15} color="#FFFFFF" />
-                      <Text
-                        maxFontSizeMultiplier={1}
-                        style={{
-                          fontFamily: fonts.sansSemibold,
-                          fontSize: 10,
-                          lineHeight: 12,
-                          color: '#FFFFFF',
-                        }}>
-                        Auto{'\n'}apply
-                      </Text>
-                    </LinearGradient>
-                  ) : (
-                    <View
-                      style={{
-                        height: 46,
-                        borderRadius: 23,
-                        paddingHorizontal: 10,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                        backgroundColor: colors.paper2,
-                        borderWidth: 1,
-                        borderColor: colors.hairline,
-                      }}>
-                      <Ionicons name="flash-outline" size={15} color={colors.inkTertiary} />
-                      <Text
-                        maxFontSizeMultiplier={1}
-                        style={{
-                          fontFamily: fonts.sansMedium,
-                          fontSize: 10,
-                          lineHeight: 12,
-                          color: colors.inkTertiary,
-                        }}>
-                        Auto{'\n'}apply
-                      </Text>
-                    </View>
-                  )}
+                  onPress={undoLastPass}
+                  accessibilityRole="button"
+                  accessibilityLabel="Bring back the last job you passed"
+                  style={{
+                    alignSelf: 'flex-start',
+                    marginLeft: 18,
+                    marginBottom: 10,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    height: 34,
+                    borderRadius: 17,
+                    backgroundColor: colors.paper,
+                    borderWidth: 1,
+                    borderColor: colors.hairline,
+                  }}>
+                  <Ionicons name="arrow-undo" size={15} color={colors.inkSecondary} />
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>
+                    Undo
+                  </Text>
                 </Pressable>
-                <ActionCircle
-                  icon="options-outline"
-                  size={38}
-                  onPress={() => router.push('/swipe-settings')}
-                />
+              ) : null}
+
+              {/* Bar width is tied to the DECK, not to its own contents. It
+                  used to shrink-wrap its buttons, which left a short bar
+                  floating under a full-width card. Now that it sits BELOW the
+                  card instead of over it, it takes the card's exact 18pt
+                  margins: same column, own row. The 4pt that buys also goes to
+                  the label, which is the thing that was clamping. */}
+              <GlassBar
+                style={{
+                  alignSelf: 'stretch',
+                  marginHorizontal: 18,
+                  // A column, because the bar grows a second row when the
+                  // hiring-manager switch is on.
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  gap: 8,
+                }}>
+                {/* The one add-on for this deck: also email the hiring manager
+                    on an apply. Ask-first when turning ON, for the same reason
+                    auto-apply used to be: it spends extra credits and it writes
+                    in the user's name. Turning it OFF is instant.
+
+                    The (i) that used to sit here is gone (2026-08-16). It cost
+                    the label the room it needed to render in full, and the
+                    confirm dialog on the way ON says the same thing, at the
+                    only moment it changes a decision.
+
+                    The gear came BACK 2026-08-16, with a different screen behind
+                    it. It used to open a settings page about how a swipe
+                    behaves, which the bar itself now answers. What it opens now
+                    is the one question the bar cannot: which roles this deck is
+                    made of. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <HiringManagerToggle
+                      on={swipeSettings.emailHiringManager}
+                      onPress={toggleHiringManager}
+                    />
+                  </View>
+                  <ActionCircle
+                    icon="options-outline"
+                    size={46}
+                    onPress={() => router.push('/feed-filter?deck=jobs')}
+                    accessibilityLabel={
+                      jobFilter ? `Job feed filter: ${jobFilter}` : 'Filter the job feed'
+                    }
+                  />
+                </View>
+
+                {/* The active filter, named. A deck that quietly stopped being
+                    the general feed is the one thing here a user could not
+                    work out from looking at it, and the fix has to be one tap
+                    from the confusion, not buried back in the settings screen.
+                    It sits in the bar rather than above the deck because
+                    nothing goes between the switcher and the card. */}
+                {jobFilter ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="funnel" size={13} color={colors.inkTertiary} />
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        flex: 1,
+                        fontFamily: fonts.sans,
+                        fontSize: 12.5,
+                        color: colors.inkSecondary,
+                      }}>
+                      {jobFilter}
+                    </Text>
+                    <Pressable
+                      onPress={clearJobFilter}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear the job feed filter"
+                      hitSlop={10}>
+                      <Ionicons name="close-circle" size={17} color={colors.inkTertiary} />
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {/* The follow-up, and only when it means something: we are
+                    writing to this person, so do you want to read it first? */}
+                {swipeSettings.emailHiringManager ? (
+                  <DraftSendChoice value={draftOrSend} onChange={chooseDraftOrSend} />
+                ) : null}
               </GlassBar>
-            </Animated.View>
-          )}
+          </Animated.View>
         </View>
       ) : (
+        /* Two empty decks, two different truths. Running out of a filtered
+           feed is not "you have seen everything we have", it is "that is every
+           role matching that sentence", and the useful next move is widening
+           the sentence rather than pulling a deeper slice that does not exist. */
+        jobFilter ? (
+          <StateView
+            icon="funnel-outline"
+            title="That’s every match"
+            body={`You’ve been through every role matching “${jobFilter}”. Widen it, or go back to the feed we rank for you.`}
+            actionLabel="Change my filter"
+            onAction={() => router.push('/feed-filter?deck=jobs')}
+            secondaryLabel="Back to my default feed"
+            onSecondary={clearJobFilter}
+          />
+        ) : (
         <StateView
           icon="checkmark-done-circle-outline"
           title="You’re all caught up"
@@ -525,7 +642,38 @@ export default function FeedScreen() {
           secondaryLabel="Restart deck"
           onSecondary={resetDeck}
         />
+        )
       )}
+
+      {/* The two ask-first steps on the hiring-manager add-on. Turning it on
+          spends extra credits per swipe; switching it from drafting to sending
+          is the one genuinely irreversible thing the app can do, so that
+          dialog names the three facts a user would be angry to learn after the
+          fact: nobody reads it first, it is not limited to this deck, and the
+          overnight hours are exempt. */}
+      {/* No icon chip, no headline (Nick 2026-08-16): the pitch IS the dialog,
+          and a chip plus "Also email the hiring manager?" above it just said
+          the first sentence twice before anyone got to the reason. The credit
+          number is read from costPerSwipe, never typed in, so it cannot drift
+          from what the swipe actually charges. */}
+      <ConfirmDialog
+        visible={hmConfirm === 'enable'}
+        body={`When you swipe right, it doesn't just apply to the job for you. It also finds the exact hiring manager for that position and their contact info, then drafts an email to them introducing yourself and expressing interest in the role, an action known to 10x your chances of landing an interview. Costs an extra ${costPerSwipe} credits per swipe.`}
+        confirmLabel="Turn on"
+        onConfirm={enableHiringManagerEmail}
+        onClose={() => setHmConfirm(null)}
+      />
+      <ConfirmDialog
+        visible={hmConfirm === 'send'}
+        icon="paper-plane-outline"
+        tone="caution"
+        title="Send these emails automatically?"
+        body="Your hiring-manager email goes out from your Gmail the moment you swipe, with nobody reading it first. This is your global outreach rule, so it applies everywhere in the app, not just this deck. Swipes between 10pm and 8am are saved as drafts instead."
+        confirmLabel="Send automatically"
+        cancelLabel="Keep drafting"
+        onConfirm={enableHiringManagerSend}
+        onClose={() => setHmConfirm(null)}
+      />
 
       {/* The resume doors: shown when the swipe wall blocks an auto-apply
           because the application profile is unfinished. Same bottom-sheet

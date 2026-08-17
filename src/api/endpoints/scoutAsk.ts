@@ -1,4 +1,5 @@
 import { apiFetch } from '@/api/client';
+import { requireAIConsent } from '@/lib/aiConsent';
 
 /**
  * Client for POST /api/mobile/scout/ask — the SCOUT-ACTION-CONTRACT.md
@@ -57,6 +58,7 @@ export type AskClassification = {
  *  client regex ladder can't parse. Cached server-side (14d), never throws
  *  business errors — worst case returns intent 'question'. */
 export async function classifyAsk(ask: string, askId: string): Promise<AskClassification> {
+  requireAIConsent();
   const r = await apiFetch<{ classification: AskClassification }>('/api/mobile/scout/ask', {
     method: 'POST',
     body: { ask, askId, source: 'voice', action: 'classify', params: {} },
@@ -106,6 +108,8 @@ export async function transcribeAsk(args: {
   askId: string;
   hintCompanies: string[];
 }): Promise<{ transcript: string; transcript_source: 'audio' | 'apple'; classification: AskClassification }> {
+  // Voice is the most sensitive of these: a recording of the user goes out.
+  requireAIConsent();
   const form = new FormData();
   form.append('audio', { uri: args.audioUri, name: 'ask.wav', type: 'audio/wav' } as unknown as Blob);
   form.append('askId', args.askId);
@@ -129,6 +133,7 @@ export async function askScoutBrain(args: {
   conversationId?: string | null;
   source?: 'voice' | 'typed' | 'chip';
 }): Promise<ScoutAskEnvelope> {
+  requireAIConsent();
   return apiFetch<ScoutAskEnvelope>('/api/mobile/scout/ask', {
     method: 'POST',
     body: {
@@ -150,6 +155,7 @@ export async function askScoutFindContacts(args: {
   company?: string;
   location?: string | null;
 }): Promise<ScoutAskEnvelope> {
+  requireAIConsent();
   return apiFetch<ScoutAskEnvelope>('/api/mobile/scout/ask', {
     method: 'POST',
     body: {

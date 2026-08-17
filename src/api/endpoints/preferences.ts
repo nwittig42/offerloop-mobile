@@ -57,3 +57,39 @@ export async function saveReferralSource(source: string): Promise<void> {
     body: { referralSource: source },
   });
 }
+
+/**
+ * The two fields the People deck cannot run without: which school you went to,
+ * and which firms you want. Collected by the gap survey on the People deck's
+ * empty state (2026-08-16).
+ *
+ * Neither was writable from the app before, so an app-only student had no
+ * school and no dream companies forever, and the ranker returned an empty deck
+ * every single time — correctly, and permanently. This is the fix.
+ *
+ * Both are optional and sent independently: the survey only asks for the piece
+ * that is actually missing, so a student who already has a school on file gets
+ * a one-screen survey rather than two.
+ */
+export async function saveRankerSignals(opts: {
+  school?: string;
+  dreamCompanies?: string[];
+  /** Exact job titles, not fields. person_ranker token-matches these against
+   *  each candidate's title, and person_pool_fill aims the PDL search with
+   *  them, so "Auditor" and "Finance" are very different answers. */
+  targetRoles?: string[];
+  /** Which offices. Scored by person_ranker (city/state match) and passed to
+   *  the PDL search, so it narrows WHO gets bought as well as who ranks. */
+  preferredLocations?: string[];
+}): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/mobile/preferences', {
+    method: 'POST',
+    body: {
+      ...(opts.school ? { school: opts.school } : {}),
+      ...(opts.dreamCompanies?.length ? { dreamCompanies: opts.dreamCompanies } : {}),
+      ...(opts.targetRoles?.length ? { targetRoles: opts.targetRoles } : {}),
+      ...(opts.preferredLocations?.length ? { preferredLocations: opts.preferredLocations } : {}),
+    },
+  });
+}

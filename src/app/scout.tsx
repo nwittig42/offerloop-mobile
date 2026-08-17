@@ -21,6 +21,7 @@ import {
   type ScoutTurn,
 } from '@/api/endpoints/scout';
 import Input from '@/components/ui/Input';
+import { AIConsentRequiredError } from '@/lib/aiConsent';
 import { scoutThread } from '@/lib/scoutThread';
 import { useAIConsent } from '@/lib/aiConsent';
 import { useApp } from '@/store/app';
@@ -148,10 +149,16 @@ export default function ScoutScreen() {
       if (res.chatId) scoutThread.setChatId(res.chatId);
       scoutThread.append({ from: 'scout', text: res.message });
       setMessages((prev) => [...prev, { from: 'scout', text: res.message, actions: res.actions }]);
-    } catch {
+    } catch (e) {
+      // Not consented yet: the disclosure sheet is already up, so stay silent
+      // rather than blaming the server for something the user is being asked.
+      if (e instanceof AIConsentRequiredError) {
+        setThinking(false);
+        return;
+      }
       setMessages((prev) => [
         ...prev,
-        { from: 'scout', text: "I hit a snag reaching the server — give it another try in a moment." },
+        { from: 'scout', text: "I hit a snag reaching the server, give it another try in a moment." },
       ]);
     } finally {
       setThinking(false);

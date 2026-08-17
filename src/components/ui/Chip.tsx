@@ -62,6 +62,11 @@ export function Chip({
         paddingHorizontal: lg ? 14 : 10,
         paddingVertical: lg ? 9 : 2,
         alignSelf: 'flex-start',
+        // Without this a long label (the ranker's reason sentences) sizes the
+        // chip past its parent and the text runs off the card edge, clipped
+        // mid-word. flexShrink on the Text below can only do its job once the
+        // chip itself is allowed to stop growing.
+        maxWidth: '100%',
         backgroundColor: t ? t.fill : colors.paper2,
         borderColor: t ? t.border : colors.hairline,
       }}>

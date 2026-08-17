@@ -34,6 +34,7 @@ import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import CircleProgress from '@/components/ui/CircleProgress';
 import CommaField from '@/components/ui/CommaField';
 import {
@@ -302,6 +303,7 @@ export default function ProfileScreen() {
 
   const [tab, setTab] = useState<TabKey>('personal');
   const [resumeBusy, setResumeBusy] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const queryClient = useQueryClient();
 
   // The Resume tab used to only DISPLAY a parse and tell people to upload on
@@ -1166,7 +1168,12 @@ export default function ProfileScreen() {
 
           {tab === 'settings' ? (
             <>
-              <Pressable onPress={() => router.push('/swipe-settings')}>
+              {/* Swipe settings is gone (Nick 2026-08-16): draft-or-send moved
+                  onto the feed bars, applying is simply what a right swipe
+                  does, and the rest of that screen configured a find step the
+                  decks no longer expose. This row now points at the one thing
+                  from it that had nowhere else to live. */}
+              <Pressable onPress={() => router.push('/attachments')}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View
                     style={{
@@ -1177,14 +1184,14 @@ export default function ProfileScreen() {
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}>
-                    <Ionicons name="options-outline" size={18} color={colors.accent} />
+                    <Ionicons name="attach-outline" size={18} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Swipe settings
+                      Attached to every email
                     </Text>
                     <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      Draft or send, how many contacts, auto-apply
+                      What travels with your outreach
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
@@ -1267,15 +1274,16 @@ export default function ProfileScreen() {
                   />
                 </View>
                 <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
+                {/* In-app dialog, not Alert.alert (2026-08-16). Alert is a
+                    NO-OP on react-native-web, so in the browser preview this
+                    button opened nothing and read as broken: you could sign in
+                    but never out, which makes re-testing signup impossible
+                    without clearing site data by hand. Same fix the feed's
+                    ask-first controls already got. */}
                 <Button
                   label="Sign out"
                   variant="ghost"
-                  onPress={() =>
-                    Alert.alert('Sign out', 'Sign out of Offerloop?', [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
-                    ])
-                  }
+                  onPress={() => setConfirmSignOut(true)}
                 />
               </Card>
 
@@ -1428,6 +1436,19 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Outside the ScrollView so it centers over the whole screen rather than
+          over wherever the list happens to be scrolled to. */}
+      <ConfirmDialog
+        visible={confirmSignOut}
+        icon="log-out-outline"
+        title="Sign out?"
+        body="You'll need to sign back in to reach your feed, drafts, and credits. Nothing is deleted."
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        onConfirm={() => void signOut()}
+        onClose={() => setConfirmSignOut(false)}
+      />
       </View>
     </View>
   );

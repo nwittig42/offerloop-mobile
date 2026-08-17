@@ -1,5 +1,6 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
+import { relationFor } from '@/lib/relation';
 import { MOCK_OUTREACH_SEED } from '@/mocks/data';
 import type { OutreachItem, OutreachStatus } from '@/types';
 
@@ -34,15 +35,19 @@ function relTime(iso?: string): string {
 
 function mapThread(t: Thread): OutreachItem {
   const { status, attended } = statusFor(t);
+  const title = t.title || '';
   return {
     id: String(t.id),
-    jobTitle: t.title || t.jobTitle || '',
+    jobTitle: title || t.jobTitle || '',
     company: t.company || '',
     status,
     attended,
     contact: {
       name: t.name || t.contactName || 'Contact',
-      title: t.title || '',
+      title,
+      // Inferred from the title so the Inbox can badge hiring managers and
+      // recruiters. Same helper the People deck uses, so the two agree.
+      relation: relationFor(title),
       company: t.company || '',
       linkedinUrl: t.linkedinUrl || undefined,
     },

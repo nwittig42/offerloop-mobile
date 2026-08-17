@@ -17,10 +17,12 @@ import Animated, {
 import Avatar from '@/components/Avatar';
 import Header from '@/components/Header';
 import NightSky from '@/components/NightSky';
+import { Chip } from '@/components/ui/Chip';
 import SearchBar from '@/components/ui/SearchBar';
 import SnakeBorder from '@/components/ui/SnakeBorder';
 import { InboxSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
+import { badgeRelationFor } from '@/lib/relation';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts, type Palette } from '@/theme/tokens';
@@ -34,38 +36,83 @@ import type { OutreachItem } from '@/types';
  * draft and the reply thread live in the conversation detail.
  */
 
-// Whose turn is it (Your turn / Waiting), plus a Replied view that isolates
-// the exciting "they wrote back" conversations (where push notifications
-// land), and All.
-const FILTERS = ['All', 'Your turn', 'Waiting', 'Replied'] as const;
+// Named by what state a conversation is IN (the way a user would say it),
+// not by whose turn it is: "Waiting" never made clear whether it was waiting
+// on you or on them. "Your turn" leads because it is the reason to open the
+// tab at all, and All is last because it is the browse case, not the default
+// question.
+const FILTERS = ['Your turn', 'Drafts', 'Sent', 'Replied', 'All'] as const;
 type Filter = (typeof FILTERS)[number];
 
 // Filter-specific empty copy, so a filter with no matches doesn't read as
 // "you've never swiped" when the user clearly has conversations elsewhere.
 const FILTER_EMPTY: Record<Filter, string> = {
-  All: '',
   'Your turn': "You’re all caught up. Nothing needs you right now.",
+  Drafts: 'No drafts waiting. Swipe right on a job in the Feed to write one.',
+  Sent: 'Nothing sent yet.',
   Replied: 'No replies yet. They’ll show here when someone writes back.',
-  Waiting: 'Nothing waiting on a reply right now.',
+  All: '',
 };
 
-/** Your turn: a ready draft to send, or a reply you have not opened yet. */
-export function needsAttention(item: OutreachItem) {
-  if (item.status === 'replied') return !item.attended;
-  return item.status === 'ready';
+/** Swiped, still being written. Not yet a draft you can act on. */
+function isPending(item: OutreachItem) {
+  return item.status === 'drafting' || item.status === 'queued';
 }
 
-/** Their turn: sent and awaiting a reply, or a reply you have answered. */
+/**
+ * Your turn: a draft to send, a draft that failed and wants a retry, or a
+ * reply you have not opened yet. Failed belongs here because the row promises
+ * "Tap to retry", which is squarely something the user has to do.
+ */
+export function needsAttention(item: OutreachItem) {
+  if (item.status === 'replied') return !item.attended;
+  return item.status === 'ready' || item.status === 'failed';
+}
+
+/** Their turn: sent and awaiting a reply. */
 function isWaiting(item: OutreachItem) {
-  return item.status === 'sent' || (item.status === 'replied' && !!item.attended);
+  return item.status === 'sent';
+}
+
+/** Done with: they replied and you have read it. */
+function isHandled(item: OutreachItem) {
+  return item.status === 'replied' && !!item.attended;
 }
 
 function matchesFilter(item: OutreachItem, filter: Filter) {
   if (filter === 'All') return true;
   if (filter === 'Your turn') return needsAttention(item);
-  if (filter === 'Replied') return item.status === 'replied';
-  return isWaiting(item);
+  if (filter === 'Drafts') return item.status === 'ready' || item.status === 'failed' || isPending(item);
+  if (filter === 'Sent') return isWaiting(item);
+  return item.status === 'replied';
 }
+
+/**
+ * The All view, grouped. Every conversation lands in exactly one of these, so
+ * the section counts add up to the account and nothing hides between groups.
+ * Order is by how much it wants from you, most first.
+ */
+const SECTIONS: { id: string; title: string; test: (i: OutreachItem) => boolean }[] = [
+  { id: 'needs', title: 'Needs you', test: needsAttention },
+  { id: 'drafting', title: 'Being written', test: isPending },
+  { id: 'waiting', title: 'Waiting on them', test: isWaiting },
+  { id: 'handled', title: 'Handled', test: isHandled },
+];
+
+/** Rows shown per group before "Show all". Keeps one big group from pushing
+ *  every other group off the screen at a few hundred conversations. */
+const PREVIEW_CAP = 5;
+
+/**
+ * Headers, rows and "Show all" live in ONE flat array rather than nested
+ * lists, so the whole screen stays a single virtualized FlatList. At a few
+ * hundred conversations that is the difference between a list that scrolls
+ * and one that stutters.
+ */
+type Entry =
+  | { kind: 'header'; key: string; id: string; title: string; count: number; collapsed: boolean }
+  | { kind: 'row'; key: string; item: OutreachItem }
+  | { kind: 'more'; key: string; id: string; hidden: number };
 
 /** First real line of a draft (skips the greeting) for a content sneak-peek,
  *  so every "ready" row reads differently instead of a wall of identical
@@ -100,6 +147,25 @@ function previewFor(item: OutreachItem, c: Palette): { text: string; color: stri
     }
     default:
       return { text: item.snippet ?? '', color: c.inkSecondary };
+  }
+}
+
+/** The state tag on the right of a row: Draft / Sent / Replied / Failed.
+ *  Carrying state as a tag rather than as a text prefix frees the whole
+ *  preview line for the person's job title, and lets you see the mix of
+ *  states in one glance instead of one filter at a time. */
+function StatusTag({ item }: { item: OutreachItem }) {
+  switch (item.status) {
+    case 'ready':
+      return <Chip label="Draft" tone="accent" />;
+    case 'failed':
+      return <Chip label="Failed" tone="negative" />;
+    case 'sent':
+      return <Chip label="Sent" tone="neutral" />;
+    case 'replied':
+      return <Chip label="Replied" tone="positive" />;
+    default:
+      return null;
   }
 }
 
@@ -211,6 +277,15 @@ function InboxRow({
   const preview = previewFor(item, colors);
   const linkedinUrl = item.contact?.linkedinUrl;
 
+  // The person's real job title, which the server already sends on every row.
+  // When we have it, it earns the preview line: it tells you who this is, and
+  // it makes every row read differently, which the repeated "Sent · subject"
+  // never did. With no title we keep the old preview rather than show a gap.
+  const role = item.contact?.title?.trim() ?? '';
+  const badge = badgeRelationFor(role);
+  const subtitle = role ? (item.company ? `${role} · ${item.company}` : role) : preview.text;
+  const subtitleColor = role ? colors.inkSecondary : preview.color;
+
   // Swipe-left actions (bringing back the Network quick actions): open their
   // LinkedIn and/or craft a meeting prep for them, straight from the inbox.
   const onPrep = () =>
@@ -285,19 +360,27 @@ function InboxRow({
       <Avatar name={item.contact?.name ?? item.company} size={48} />
 
       <View style={{ flex: 1, gap: 3 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text numberOfLines={1} style={{ flex: 1 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
-              {item.contact?.name ?? item.company}
-            </Text>
-            {item.contact ? (
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-                {'  '}
-                {item.company}
-              </Text>
-            ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            numberOfLines={1}
+            style={{ flexShrink: 1, fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
+            {item.contact?.name ?? item.company}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          {/* Only the two relations worth calling out get a badge. An unknown
+              or plainly junior title gets nothing, so the badge keeps meaning. */}
+          {badge ? (
+            <Chip label={badge === 'Hiring manager' ? 'Hiring mgr' : badge} tone={badge === 'Recruiter' ? 'waiting' : 'brand'} />
+          ) : null}
+          {/* No title means the company never made it onto line two, so it
+              keeps its old spot here rather than disappearing entirely. */}
+          {!role && item.contact ? (
+            <Text
+              numberOfLines={1}
+              style={{ flexShrink: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+              {item.company}
+            </Text>
+          ) : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' }}>
             {item.pinned ? (
               <Ionicons name="pin" size={12} color={colors.accent} style={{ marginRight: 1 }} />
             ) : null}
@@ -308,38 +391,99 @@ function InboxRow({
           </View>
         </View>
 
-        <Text
-          numberOfLines={2}
-          style={{
-            fontFamily: unread ? fonts.sansMedium : fonts.sans,
-            fontSize: 13,
-            color: preview.color,
-            lineHeight: 18,
-          }}>
-          {preview.text}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text
+            numberOfLines={role ? 1 : 2}
+            style={{
+              flexShrink: 1,
+              fontFamily: unread ? fonts.sansMedium : fonts.sans,
+              fontSize: 13,
+              color: subtitleColor,
+              lineHeight: 18,
+            }}>
+            {subtitle}
+          </Text>
+          <View style={{ marginLeft: 'auto' }}>
+            <StatusTag item={item} />
+          </View>
+        </View>
       </View>
       </Pressable>
     </ReanimatedSwipeable>
   );
 }
 
-/** Small uppercase divider label for the Pinned / Recent sections. */
-function SectionLabel({ text }: { text: string }) {
+/**
+ * Group header: tap anywhere on it to collapse or open the group. The count
+ * stays visible while collapsed, so a shut group still tells you how much is
+ * in it. Padded to a comfortable tap target rather than sized to the text.
+ */
+function SectionHeader({
+  title,
+  count,
+  collapsed,
+  onToggle,
+}: {
+  title: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const colors = useColors();
   return (
-    <Text
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: !collapsed }}
+      accessibilityLabel={`${title}, ${count} ${count === 1 ? 'conversation' : 'conversations'}`}
       style={{
-        fontFamily: fonts.sansSemibold,
-        fontSize: 11,
-        letterSpacing: 0.8,
-        color: colors.inkTertiary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
         paddingHorizontal: 20,
         paddingTop: 14,
-        paddingBottom: 6,
+        paddingBottom: 8,
+        backgroundColor: colors.paper2,
       }}>
-      {text.toUpperCase()}
-    </Text>
+      <Ionicons
+        name={collapsed ? 'chevron-forward' : 'chevron-down'}
+        size={13}
+        color={colors.inkTertiary}
+      />
+      <Text
+        style={{
+          fontFamily: fonts.sansSemibold,
+          fontSize: 11,
+          letterSpacing: 0.8,
+          color: colors.inkTertiary,
+        }}>
+        {title.toUpperCase()}
+      </Text>
+      <Text
+        style={{
+          marginLeft: 'auto',
+          fontFamily: fonts.sansMedium,
+          fontSize: 11.5,
+          color: colors.inkTertiary,
+        }}>
+        {count}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** "Show all 47" under a capped group. */
+function ShowAllRow({ hidden, onPress }: { hidden: number; onPress: () => void }) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12 }}>
+      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
+        Show all {hidden + PREVIEW_CAP}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -360,27 +504,85 @@ export default function InboxScreen() {
       setRefreshing(false);
     }
   };
+  // Opens on the grouped All view, not on "Your turn": landing on an empty
+  // "you're all caught up" is a poor first impression, and All already floats
+  // Needs you to the top, so it answers the same question without the risk.
   const [filter, setFilter] = useState<Filter>('All');
   const [query, setQuery] = useState('');
-
-  const attentionCount = outreach.filter(needsAttention).length;
+  // Which groups the user has shut, and which have been opened past the cap.
+  // Session state on purpose: reopening the tab gives you the full picture
+  // again rather than whatever you happened to collapse an hour ago.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const q = query.trim().toLowerCase();
+
+  // Counts come off the whole inbox, never off the filtered view, so a chip
+  // reads the same number whichever chip you are standing on.
+  const counts = useMemo(
+    () => ({
+      'Your turn': outreach.filter(needsAttention).length,
+      Drafts: outreach.filter((i) => matchesFilter(i, 'Drafts')).length,
+      Sent: outreach.filter((i) => matchesFilter(i, 'Sent')).length,
+      Replied: outreach.filter((i) => matchesFilter(i, 'Replied')).length,
+      All: outreach.length,
+    }),
+    [outreach],
+  );
+
   const items = useMemo(() => {
     const matchesSearch = (item: OutreachItem) =>
-      q === '' ||
-      [item.contact?.name, item.company, item.jobTitle, item.subject, item.snippet]
+      [item.contact?.name, item.company, item.contact?.title, item.jobTitle, item.subject, item.snippet]
         .some((s) => s?.toLowerCase().includes(q));
-    return outreach.filter((item) => matchesFilter(item, filter) && matchesSearch(item));
+    // A search looks across the WHOLE inbox, not just the chip you are on.
+    // Searching a name while standing on "Your turn" used to return nothing
+    // when that person sat in Sent, which is the opposite of looking someone up.
+    if (q) return outreach.filter(matchesSearch);
+    return outreach.filter((item) => matchesFilter(item, filter));
   }, [outreach, filter, q]);
 
   const pinned = items.filter((i) => i.pinned);
   const rest = items.filter((i) => !i.pinned);
 
+  // Group only when browsing All with no search. Every other view is already
+  // one state, so headers there would label a list with what it obviously is.
+  const grouped = filter === 'All' && q === '';
+
+  const entries = useMemo(() => {
+    const out: Entry[] = [];
+    const push = (id: string, title: string, list: OutreachItem[]) => {
+      if (!list.length) return;
+      const shut = !!collapsed[id];
+      out.push({ kind: 'header', key: `h:${id}`, id, title, count: list.length, collapsed: shut });
+      if (shut) return;
+      const showAll = !!expanded[id];
+      const visible = showAll ? list : list.slice(0, PREVIEW_CAP);
+      for (const item of visible) out.push({ kind: 'row', key: item.id, item });
+      if (!showAll && list.length > PREVIEW_CAP) {
+        out.push({ kind: 'more', key: `m:${id}`, id, hidden: list.length - PREVIEW_CAP });
+      }
+    };
+
+    if (!grouped) {
+      // Flat view. Pinned still float, they just do not get a header of their own.
+      for (const item of [...pinned, ...rest]) out.push({ kind: 'row', key: item.id, item });
+      return out;
+    }
+
+    push('pinned', 'Pinned', pinned);
+    for (const s of SECTIONS) push(s.id, s.title, rest.filter(s.test));
+    return out;
+  }, [grouped, pinned, rest, collapsed, expanded]);
+
   const onTogglePin = (item: OutreachItem) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleOutreachPin(item.id);
     showToast(item.pinned ? 'Unpinned' : 'Pinned to top');
+  };
+
+  const onToggleSection = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsed((c) => ({ ...c, [id]: !c[id] }));
   };
 
   // A failed row's tap RETRIES the draft (the row promises "Tap to retry");
@@ -393,26 +595,6 @@ export default function InboxScreen() {
     }
     router.push(`/outreach/${item.id}`);
   };
-
-  const renderRows = (list: OutreachItem[]) =>
-    list.map((item, i) => (
-      <View key={item.id}>
-        {item.status === 'drafting' || item.status === 'queued' ? (
-          <DraftingRow item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
-        ) : (
-          <InboxRow
-            item={item}
-            onPress={() => onRowPress(item)}
-            onTogglePin={() => onTogglePin(item)}
-          />
-        )}
-        {i < list.length - 1 && item.status !== 'drafting' && item.status !== 'queued' ? (
-          <View
-            style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
-          />
-        ) : null}
-      </View>
-    ));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
@@ -439,7 +621,16 @@ export default function InboxScreen() {
       ) : (
         <>
       <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
-        <SearchBar value={query} onChangeText={setQuery} placeholder="Search name, company, subject" />
+        {/* The count is the promise that search reaches past the current chip. */}
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          placeholder={
+            outreach.length > 12
+              ? `Search all ${outreach.length} conversations`
+              : 'Search name, company, title'
+          }
+        />
       </View>
 
       <View style={{ paddingBottom: 10 }}>
@@ -449,11 +640,18 @@ export default function InboxScreen() {
           contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}>
           {FILTERS.map((f) => {
             const selected = f === filter;
-            const badge = f === 'Your turn' ? attentionCount : 0;
+            const count = counts[f];
+            // "Your turn" keeps the red count, because that one is a nudge.
+            // The rest carry a quiet count so you can read the shape of the
+            // account without tapping through every chip.
+            const urgent = f === 'Your turn' && count > 0;
             return (
               <Pressable
                 key={f}
                 onPress={() => setFilter(f)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${f}, ${count}`}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -473,7 +671,7 @@ export default function InboxScreen() {
                   }}>
                   {f}
                 </Text>
-                {badge > 0 ? (
+                {urgent ? (
                   <View
                     style={{
                       minWidth: 16,
@@ -485,9 +683,19 @@ export default function InboxScreen() {
                       paddingHorizontal: 4,
                     }}>
                     <Text style={{ color: colors.paper, fontSize: 9.5, fontFamily: fonts.sansSemibold }}>
-                      {badge}
+                      {count}
                     </Text>
                   </View>
+                ) : count > 0 ? (
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansSemibold,
+                      fontSize: 11.5,
+                      color: selected ? colors.paper : colors.inkTertiary,
+                      opacity: selected ? 0.75 : 1,
+                    }}>
+                    {count}
+                  </Text>
                 ) : null}
               </Pressable>
             );
@@ -496,8 +704,8 @@ export default function InboxScreen() {
       </View>
 
       <FlatList
-        data={rest}
-        keyExtractor={(item) => item.id}
+        data={entries}
+        keyExtractor={(e) => e.key}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
         initialNumToRender={12}
@@ -506,31 +714,53 @@ export default function InboxScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.inkSecondary} />
         }
-        ListHeaderComponent={
-          pinned.length > 0 ? (
+        renderItem={({ item: entry, index }) => {
+          if (entry.kind === 'header') {
+            return (
+              <SectionHeader
+                title={entry.title}
+                count={entry.count}
+                collapsed={entry.collapsed}
+                onToggle={() => onToggleSection(entry.id)}
+              />
+            );
+          }
+          if (entry.kind === 'more') {
+            return (
+              <ShowAllRow
+                hidden={entry.hidden}
+                onPress={() => setExpanded((e) => ({ ...e, [entry.id]: true }))}
+              />
+            );
+          }
+          const { item } = entry;
+          // Hairline between consecutive rows only, so a group header never
+          // gets a stray rule hanging off the row above it.
+          const prev = entries[index - 1];
+          const rule = prev?.kind === 'row' && !isPending(prev.item) && !isPending(item);
+          return (
             <View>
-              <SectionLabel text="Pinned" />
-              {renderRows(pinned)}
-              {rest.length > 0 ? <SectionLabel text="Recent" /> : null}
+              {rule ? (
+                <View
+                  style={{
+                    height: StyleSheet.hairlineWidth,
+                    backgroundColor: colors.hairline,
+                    marginLeft: 84,
+                  }}
+                />
+              ) : null}
+              {isPending(item) ? (
+                <DraftingRow item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
+              ) : (
+                <InboxRow
+                  item={item}
+                  onPress={() => onRowPress(item)}
+                  onTogglePin={() => onTogglePin(item)}
+                />
+              )}
             </View>
-          ) : null
-        }
-        renderItem={({ item }) =>
-          item.status === 'drafting' || item.status === 'queued' ? (
-            <DraftingRow item={item} onPress={() => router.push(`/outreach/${item.id}`)} />
-          ) : (
-            <InboxRow
-              item={item}
-              onPress={() => onRowPress(item)}
-              onTogglePin={() => onTogglePin(item)}
-            />
-          )
-        }
-        ItemSeparatorComponent={() => (
-          <View
-            style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 84 }}
-          />
-        )}
+          );
+        }}
         ListEmptyComponent={
           items.length === 0 ? (
             <Text

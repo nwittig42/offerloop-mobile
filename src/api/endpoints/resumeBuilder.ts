@@ -1,6 +1,8 @@
+import { getIdToken } from '@/api/authToken';
 import { apiFetch } from '@/api/client';
 import { ApiError } from '@/api/errors';
 import type { ResumePreviewEntry, ResumePreviewSection } from '@/components/resume/ResumePreview';
+import { requireAIConsent } from '@/lib/aiConsent';
 
 /**
  * The website's resume-builder engine, contract agreed with Nick 2026-08-10
@@ -21,8 +23,15 @@ import type { ResumePreviewEntry, ResumePreviewSection } from '@/components/resu
 export const RESUME_BUILDER_LIVE = true;
 
 /** The resume-builder lives on the WEB backend (deploys from main), not the
- *  mobile services. Same Firebase project, so the bearer token just works. */
-const WEB_BASE = 'https://final-offerloop.onrender.com';
+ *  mobile services. Same Firebase project, so the bearer token just works.
+ *
+ *  Overridable so the website backend can be run on this machine and pointed at
+ *  from the app: set EXPO_PUBLIC_WEB_BASE_URL in .env.local (gitignored) to
+ *  something like http://192.168.1.x:5055. Without it, the deployed service.
+ *  This is the ONE address in the app that does not follow the normal API base,
+ *  which is why local testing of the builder needs its own switch. */
+const WEB_BASE =
+  process.env.EXPO_PUBLIC_WEB_BASE_URL || 'https://final-offerloop.onrender.com';
 
 type Entryish = {
   org?: string;
@@ -54,6 +63,7 @@ export type ResumeBuildResult =
   | { status: 'error'; message: string };
 
 export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
+  requireAIConsent();
   try {
     // polish: run the mapped draft through the website's Harvard-rubric LLM
     // pass so the mobile build matches web quality. Slower (an LLM round
@@ -83,6 +93,7 @@ export async function previewResumeFromLinkedin(): Promise<ResumeBuildResult> {
  *  including its role-research pass, hence the long timeout. Counts against
  *  the lifetime generation cap (it is an LLM build). */
 export async function generateResumeFromPrompt(prompt: string): Promise<ResumeBuildResult> {
+  requireAIConsent();
   try {
     const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
       `${WEB_BASE}/api/resume-builder/generate`,
@@ -104,6 +115,7 @@ export async function refineResume(
   prompt: string,
   previous: CanonicalResume,
 ): Promise<ResumeBuildResult> {
+  requireAIConsent();
   try {
     const r = await apiFetch<{ success: boolean; resume: CanonicalResume; html: string }>(
       `${WEB_BASE}/api/resume-builder/generate`,
@@ -167,4 +179,49 @@ export function sectionsFromCanonical(resume: CanonicalResume): ResumePreviewSec
   push('Skills', resume.skills?.length ? [{ bullets: [resume.skills.join(' · ')] }] : []);
   push('Interests', resume.interests?.length ? [{ bullets: [resume.interests.join(' · ')] }] : []);
   return sections;
+}
+
+/**
+ * Render the draft to a real PDF and hand it back base64-encoded, so the
+ * review screen can show the actual document rather than a re-rendered
+ * approximation of it.
+ *
+ * Not apiFetch: that client assumes JSON both ways, and this response is
+ * application/pdf bytes. Auth is attached when we have it and omitted when we
+ * do not, because /download is one of the two builder routes open to signed-out
+ * callers (the other is /generate). Pure render on the server: no storage
+ * write, no cap charge, so this is safe to call on every draft change.
+ *
+ * Returns null on any failure. The caller falls back to the section preview,
+ * which is always available; losing the PDF should never block finishing.
+ */
+export async function downloadResumePdfBase64(
+  resume: CanonicalResume,
+): Promise<string | null> {
+  try {
+    const token = await getIdToken();
+    const res = await fetch(`${WEB_BASE}/api/resume-builder/download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ resume }),
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    // RN has no Buffer; FileReader gives us a data: URL we can slice.
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const s = String(reader.result || '');
+        const comma = s.indexOf(',');
+        resolve(comma > -1 ? s.slice(comma + 1) : null);
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }

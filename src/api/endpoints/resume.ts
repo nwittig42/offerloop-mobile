@@ -23,6 +23,26 @@ export type ResumeUploadResult = {
   savedToFirebase?: boolean;
   resumeUrl?: string;
   resumeFileName?: string;
+  /** The parsed resume fields. Present even when the call is unauthenticated,
+   *  which is what lets pre-account intake show someone what we read off their
+   *  resume before they have signed up. Shape is the backend's parsed_info. */
+  data?: ResumeParsed | null;
+};
+
+/** The subset of the backend's parsed_info the app actually reads. Everything
+ *  is optional: a thin resume parses to a mostly empty object, and the intake
+ *  screens are built to handle that rather than assume a full profile. */
+export type ResumeParsed = {
+  name?: string;
+  email?: string;
+  school?: string;
+  university?: string;
+  major?: string;
+  graduationYear?: string | number;
+  currentTitle?: string;
+  jobTitle?: string;
+  skills?: string[];
+  [key: string]: unknown;
 };
 
 export type PickedResume = {

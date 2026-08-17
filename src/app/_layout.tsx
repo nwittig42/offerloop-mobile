@@ -23,11 +23,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purchases';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import ConnectionBanner from '@/components/ConnectionBanner';
-import NotificationPrompt from '@/components/NotificationPrompt';
 import Toast from '@/components/Toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useScreenshotShare } from '@/hooks/useScreenshotShare';
-import { loadAIConsent, useAIConsent } from '@/lib/aiConsent';
+import { loadAIConsent } from '@/lib/aiConsent';
 import { AppProvider, useApp } from '@/store/app';
 import { ThemeProvider, useColors, useTheme } from '@/theme/ThemeProvider';
 import { resolveSchool } from '@/theme/tokens';
@@ -94,9 +93,8 @@ export default function RootLayout() {
 /** Redirect between the auth stack, the AI-consent gate, the first-run
  *  onboarding, and the app based on sign-in + consent + onboarding status. */
 function useAuthGate() {
-  const { status, user } = useAuth();
+  const { status } = useAuth();
   const { onboardingDone, needsOnboarding } = useApp();
-  const { consent, consentLoaded, consentLoadedFor } = useAIConsent();
   const segments = useSegments();
   const router = useRouter();
 
@@ -107,10 +105,15 @@ function useAuthGate() {
     const inConsent = segments[0] === 'ai-consent';
 
     if (status === 'signedOut') {
-      // finish-signin is the magic-link landing screen: the URL listener is
-      // completing the sign-in RIGHT NOW, so leave it alone (it has its own
-      // timeout fallback) instead of yanking the user to the welcome screen.
-      if (segments[0] === 'finish-signin') return;
+      // Screens outside (auth) that a signed-out person is allowed to be on.
+      // Anything not listed gets sent to Welcome, which silently discards
+      // whatever they were in the middle of, so add to this deliberately.
+      //
+      //  - finish-signin: the magic-link landing screen. The URL listener is
+      //    completing the sign-in RIGHT NOW, so leave it alone (it has its own
+      //    timeout fallback).
+      const SIGNED_OUT_OK = ['finish-signin'];
+      if (SIGNED_OUT_OK.includes(segments[0] as string)) return;
       if (!inAuthGroup) router.replace('/(auth)/welcome');
       return;
     }
@@ -121,19 +124,18 @@ function useAuthGate() {
       return;
     }
 
-    // AI disclosure + consent comes before ANYTHING that could send personal
-    // data to an AI provider, including onboarding, whose resume upload is
-    // parsed by one (guidelines 5.1.1(i)/5.1.2(i), rejected 2026-08-05). The
-    // screen itself routes onward after a choice; never redirect while it is
-    // up (it is also openable later from Settings).
-    // Wait until the stored choice for THIS account is actually loaded;
-    // consentLoaded alone can be a stale answer for the signed-out state,
-    // which re-showed the consent screen on every cold start.
-    if (!consentLoaded || consentLoadedFor !== (user?.uid ?? null)) return;
-    if (consent === null) {
-      if (!inConsent) router.replace('/ai-consent');
-      return;
-    }
+    // NO blanket consent gate here any more (2026-08-13). The disclosure now
+    // fires in context, from lib/aiConsent's requireAIConsent(), immediately
+    // before any call that sends user content to an AI provider. That is the
+    // shape guideline 5.1.2(i) actually asks for (consent before the network
+    // call, not before the app), and it stops a legal wall standing between
+    // signup and the product.
+    //
+    // The safety of this rests entirely on every AI-bound endpoint calling
+    // requireAIConsent(). If you add one, gate it. Currently gated: resume
+    // upload/parse, resume build/refine/preview, Scout messages, Scout ask and
+    // voice transcription, meeting prep preview and create, drafting, swipe to
+    // draft, and auto-apply.
     if (inConsent) return;
 
     // Force-show onboarding ONLY for a confirmed brand-new user. needsOnboarding
@@ -141,11 +143,13 @@ function useAuthGate() {
     // users are never force-trapped. Exit to /(tabs) explicitly — bare '/' is
     // ambiguous with the onboarding group index and caused the earlier loop.
     if (needsOnboarding && !inOnboarding) {
-      router.replace('/(onboarding)');
+      // Enter at /intake (resume, then feed preview); its last step hands off
+      // to /(onboarding) for the remaining steps.
+      router.replace('/(onboarding)/intake');
     } else if (onboardingDone && inOnboarding) {
       router.replace('/(tabs)');
     }
-  }, [status, onboardingDone, needsOnboarding, consent, consentLoaded, segments, router]);
+  }, [status, onboardingDone, needsOnboarding, segments, router]);
 
   return status;
 }
@@ -208,13 +212,19 @@ function ThemedShell() {
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="design" options={{ presentation: 'modal' }} />
+        {/* Dev-only door to the gap survey, so it can be designed without
+            breaking an account to reach it. Nothing links here. */}
+        <Stack.Screen name="survey-preview" options={{ presentation: 'modal' }} />
         <Stack.Screen name="notifications" options={{ presentation: 'modal' }} />
         <Stack.Screen name="outreach/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="scout" options={{ presentation: 'modal' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="resume-preview" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="resume-from-text" options={{ presentation: 'modal' }} />
+        {/* A page, not a modal (2026-08-13): the resume builder is a multi-step
+            form with its own back arrow, reached mid-signup from intake, and a
+            sheet that swipes away mid-typing loses someone's answers. */}
+        <Stack.Screen name="resume-from-text" options={{ presentation: 'card' }} />
         <Stack.Screen name="resume-edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="attachments" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
@@ -223,12 +233,12 @@ function ThemedShell() {
         <Stack.Screen name="passed-jobs" options={{ presentation: 'card' }} />
         <Stack.Screen name="milestones" options={{ presentation: 'card' }} />
         <Stack.Screen name="share" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="swipe-settings" options={{ presentation: 'modal' }} />
         <Stack.Screen name="outreach-template" options={{ presentation: 'modal' }} />
+        {/* One screen, both decks, chosen by ?deck=jobs|people. */}
+        <Stack.Screen name="feed-filter" options={{ presentation: 'modal' }} />
       </Stack>
       <ConnectionBanner />
       <Toast />
-      <NotificationPrompt />
     </>
   );
 }

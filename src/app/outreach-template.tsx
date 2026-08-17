@@ -35,6 +35,24 @@ const MAX_INSTRUCTIONS = 4000;
 type PurposeKey = 'networking' | 'referral' | 'follow_up';
 const CUSTOM = 'custom';
 
+/**
+ * How the email should SOUND, as opposed to what it asks for. Keys and copy
+ * mirror backend/email_templates.py EMAIL_STYLE_PRESETS exactly, because the
+ * server maps each one to a block of writing instructions; an invented key is
+ * a 400.
+ *
+ * Added 2026-08-16: the web template page has had this since launch and the
+ * app did not, so the two surfaces disagreed about the same saved template.
+ */
+const STYLES: { key: string | null; label: string; sub: string }[] = [
+  { key: null, label: 'No preference', sub: 'Let each draft find its own voice.' },
+  { key: 'casual', label: 'Casual', sub: 'Relaxed and friendly, like texting a friend of a friend.' },
+  { key: 'professional', label: 'Professional', sub: 'Polished and respectful. Safe for senior people.' },
+  { key: 'short_direct', label: 'Short & direct', sub: 'Under 50 words. Straight to the point.' },
+  { key: 'warm_enthusiastic', label: 'Warm & enthusiastic', sub: 'Genuinely excited, for people you admire.' },
+  { key: 'bold_confident', label: 'Bold & confident', sub: 'Memorable and direct, built to stand out.' },
+];
+
 const PURPOSES: { key: PurposeKey; label: string; sub: string }[] = [
   {
     key: 'networking',
@@ -90,6 +108,7 @@ export default function OutreachTemplateScreen() {
 
   // 'networking' | 'referral' | 'follow_up' | 'custom'
   const [purpose, setPurpose] = useState<string>('networking');
+  const [stylePreset, setStylePreset] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [subjectLine, setSubjectLine] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -114,6 +133,7 @@ export default function OutreachTemplateScreen() {
     setSignoff(SIGNOFFS.includes(t.signoffPhrase) ? t.signoffPhrase : CUSTOM);
     setSignoffCustom(SIGNOFFS.includes(t.signoffPhrase) ? '' : t.signoffPhrase);
     setSignatureBlock(t.signatureBlock);
+    setStylePreset(t.stylePreset);
 
     if (t.purpose === CUSTOM) {
       setPurpose(CUSTOM);
@@ -238,6 +258,7 @@ export default function OutreachTemplateScreen() {
 
       await saveEmailTemplate({
         purpose: isCustom ? CUSTOM : purpose,
+        stylePreset,
         customInstructions: isCustom ? instructions.trim().slice(0, MAX_INSTRUCTIONS) : '',
         signoffPhrase: effectiveSignoff,
         signatureBlock: signatureBlock.trim().slice(0, 500),
@@ -334,6 +355,55 @@ export default function OutreachTemplateScreen() {
                 </Pressable>
               );
             })}
+          </View>
+
+          {/* How it should sound. Chips rather than the radio cards above:
+              there are six of these and they are a flavor, not a commitment,
+              so they should be cheap to try. */}
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+              How should it sound?
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {STYLES.map((st) => {
+                const selected = stylePreset === st.key;
+                return (
+                  <Pressable
+                    key={st.key ?? 'none'}
+                    onPress={() => setStylePreset(st.key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityHint={st.sub}
+                    style={{
+                      paddingHorizontal: 13,
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                      backgroundColor: selected ? colors.navy : colors.paper,
+                      borderWidth: selected ? 0 : 1,
+                      borderColor: colors.hairline,
+                    }}>
+                    <Text
+                      style={{
+                        fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
+                        fontSize: 13,
+                        color: selected ? colors.paper : colors.ink,
+                      }}>
+                      {st.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                color: colors.inkSecondary,
+                lineHeight: 17,
+                paddingHorizontal: 2,
+              }}>
+              {STYLES.find((st) => st.key === stylePreset)?.sub}
+            </Text>
           </View>
 
           {/* Saved custom templates (Elite) */}

@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { qk } from '@/api/queryKeys';
 import { configureNotificationHandler } from '@/notifications/push';
@@ -22,6 +23,11 @@ export function usePushNotifications() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    // Push is native only. The browser preview (npx expo start --web, used for
+    // fast layout iteration) has no ExpoNotifications module, and calling into
+    // it throws at app root, which blanks the whole preview.
+    if (Platform.OS === 'web') return;
+
     configureNotificationHandler();
 
     const refreshFromPush = () => {

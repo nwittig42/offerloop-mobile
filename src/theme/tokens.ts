@@ -29,7 +29,11 @@ export const lightColors = {
   applyLink: '#8B5CF6', // "Apply on the site" status — light purple, distinct from amber "needs input"
   coffee: '#8B5A2B',
   bolt: '#FACC15',
-  feedBg: '#E8F1FF', // light baby-blue screen wash (Feed, Loops)
+  // Feed, Loops. Was a baby-blue wash (#E8F1FF) that read as a whole-screen
+  // tint once the watercolor ridgeline came off it. Near-white rather than pure
+  // white on purpose: cards are #FFFFFF, so the screen has to sit a step below
+  // them or the card stops reading as a card and survives on its shadow alone.
+  feedBg: '#F5F6F8',
 } as const;
 
 export type Palette = { [K in keyof typeof lightColors]: string };

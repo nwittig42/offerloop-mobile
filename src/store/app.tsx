@@ -13,7 +13,13 @@ import {
 } from 'react';
 
 import { USE_MOCKS } from '@/api/config';
-import { fetchFeedPage, rankJobsByLocation, sendJobFeedback } from '@/api/endpoints/feed';
+import {
+  fetchFeedPage,
+  fetchFilteredJobsPage,
+  rankJobsByLocation,
+  sendJobFeedback,
+  type DeckPage,
+} from '@/api/endpoints/feed';
 import { fetchInbox } from '@/api/endpoints/inbox';
 import { createLoop, fetchLoops, setLoopPaused, type LoopPeople } from '@/api/endpoints/loops';
 import { fetchMe } from '@/api/endpoints/me';
@@ -107,7 +113,17 @@ const DEFAULT_SWIPE_SETTINGS: SwipeSettings = {
   // deliberately; the choice persists per-user (swipeSettingsStorageKey).
   autoApply: false,
   priority: 'employee',
+  // OFF by default, same reasoning as autoApply: emailing a decision-maker on
+  // the user's behalf spends credits and acts in their name. A right swipe
+  // applies; adding the email is a deliberate second choice.
+  emailHiringManager: false,
   scoutConfirmSpend: true,
+  // No filter until the user writes one. Both decks open on the ranked default,
+  // which is the only feed we can build without asking them anything.
+  jobFilter: null,
+  jobFilterRecents: [],
+  peopleFilter: null,
+  peopleFilterRecents: [],
 };
 
 /**
@@ -286,7 +302,7 @@ type AppStore = {
   setNotificationsEnabled: (value: boolean) => void;
   dismissNotifPrompt: () => void;
   passJob: (id: string) => void;
-  draftJob: (id: string) => void;
+  draftJob: (id: string, opts?: { silent?: boolean }) => void;
   draftAnotherContact: (opts: { company: string; jobTitle?: string }) => void;
   /** Re-run the draft for a failed Inbox row (tap-to-retry). */
   retryDraft: (id: string) => void;
@@ -351,6 +367,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { status: authStatus, user } = useAuth();
   const uid = user?.uid;
   const queryClient = useQueryClient();
+
+  // Swipe settings live UP HERE, above the feed query, because they now carry
+  // the job feed's filter prompt (swipeSettings.jobFilter) and the feed query
+  // keys off it. Reading a value declared further down the component would be a
+  // TDZ crash on the first render, not a subtle bug.
+  const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
+  const [swipeSettingsLoaded, setSwipeSettingsLoaded] = useState(false);
+  // Load the saved settings on sign-in; persist on every change after that.
+  useEffect(() => {
+    if (!uid) {
+      setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
+      setSwipeSettingsLoaded(true);
+      return;
+    }
+    setSwipeSettingsLoaded(false);
+    let cancelled = false;
+    AsyncStorage.getItem(swipeSettingsStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        let next = DEFAULT_SWIPE_SETTINGS;
+        try {
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed && typeof parsed === 'object') {
+            next = { ...DEFAULT_SWIPE_SETTINGS, ...(parsed as Partial<SwipeSettings>) };
+          }
+        } catch {
+          /* corrupt blob: fall back to defaults */
+        }
+        setSwipeSettings(next);
+        setSwipeSettingsLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
+          setSwipeSettingsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  useEffect(() => {
+    if (!uid || !swipeSettingsLoaded) return;
+    { const j = safeStringify(swipeSettings); if (j) AsyncStorage.setItem(swipeSettingsStorageKey(uid), j).catch(() => {}); }
+  }, [uid, swipeSettings, swipeSettingsLoaded]);
+
+  /** The active jobs filter, or null for the ranked default deck. */
+  const jobFilter = swipeSettings.jobFilter?.trim() || null;
   const meQuery = useQuery({
     queryKey: qk.me,
     queryFn: fetchMe,
@@ -513,18 +577,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     { const j = safeStringify(savedJobs); if (j) AsyncStorage.setItem(savedJobsStorageKey(uid), j).catch(() => {}); }
   }, [uid, savedJobs]);
 
-  const feedQuery = useQuery({
-    queryKey: qk.feed,
-    queryFn: () => fetchFeedPage(),
-    enabled: authStatus === 'signedIn',
+  /**
+   * The deck's source, and the ONE place that decides it.
+   *
+   * With no filter this is the ranked feed (/api/jobs/feed), which is personal
+   * and scored. With a filter it is a plain search of the job index
+   * (/api/jobs/search), which is neither. It is exactly the roles the sentence
+   * described, newest first. Keying the query on the filter means changing the
+   * prompt refetches instead of showing the old deck under a new label, and
+   * going back to the default restores the ranked deck from cache.
+   */
+  const feedQuery = useQuery<DeckPage>({
+    queryKey: jobFilter ? [...qk.feed, 'filter', jobFilter] : qk.feed,
+    queryFn: () =>
+      jobFilter
+        ? fetchFilteredJobsPage(jobFilter)
+        : fetchFeedPage(),
+    // Wait for the saved settings (one AsyncStorage read) so a user who left a
+    // filter on doesn't spend a round trip fetching the default deck first.
+    enabled: authStatus === 'signedIn' && swipeSettingsLoaded,
   });
   // Paging state. The feed now serves a page at a time (see FEED_PAGE_SIZE)
   // instead of shipping the entire ~420-card deck on open. `loadedJobs`
   // accumulates every page we've pulled this session — Scout's job-matching
   // reads it, so it must keep growing as the user swipes, not just hold page 0.
   const [loadedJobs, setLoadedJobs] = useState<Job[]>([]);
-  const [feedCursor, setFeedCursor] = useState<number | null>(null);
+  // Number for the ranked feed's offset, string for the search route's opaque
+  // (posted_at, job_id) token. Whichever source seeded the deck also produced
+  // this, so the two can never page into each other.
+  const [feedCursor, setFeedCursor] = useState<number | string | null>(null);
   const loadingMoreRef = useRef(false);
+
+  // Changing the filter is a different deck, not more of the same one. Without
+  // this the old cards stay on screen (deckSeeded is already true) and the new
+  // query's result is silently ignored.
+  const seededFilterRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (seededFilterRef.current === jobFilter) return;
+    seededFilterRef.current = jobFilter;
+    setLoadedJobs([]);
+    setFeedCursor(null);
+    setDeckSeeded(false);
+  }, [jobFilter]);
 
   // Never fall back to fixture jobs for REAL flows: Scout job-matching reads
   // allJobs, and a fixture pick could fire a real auto-apply against a fake
@@ -553,7 +647,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (loadingMoreRef.current || feedCursor == null || USE_MOCKS) return;
     loadingMoreRef.current = true;
     try {
-      const page = await fetchFeedPage({ cursor: feedCursor });
+      // Same source as the seed, or the cursor would be handed to a route that
+      // cannot read it.
+      const page = jobFilter
+        ? await fetchFilteredJobsPage(jobFilter, String(feedCursor))
+        : await fetchFeedPage({ cursor: Number(feedCursor) });
       setFeedCursor(page.nextCursor);
       if (page.jobs.length) {
         setLoadedJobs((prev) => {
@@ -571,7 +669,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [feedCursor, passedIds, meQuery.data?.preferredLocations]);
+  }, [feedCursor, passedIds, meQuery.data?.preferredLocations, jobFilter]);
 
   // Prefetch the next page BEFORE the deck runs out, so paging is invisible: the
   // user should never watch a spinner mid-swipe. 15 cards of runway at a page
@@ -883,46 +981,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Derived from the real outreach list (no separate fetch): same contacts as
   // the Inbox, shaped for the Network Contacts list.
   const trackerRows = useMemo(() => outreachToTrackerRows(outreach), [outreach]);
-  const [swipeSettings, setSwipeSettings] = useState<SwipeSettings>(DEFAULT_SWIPE_SETTINGS);
-  const [swipeSettingsLoaded, setSwipeSettingsLoaded] = useState(false);
-  // Load the saved settings on sign-in; persist on every change after that.
-  useEffect(() => {
-    if (!uid) {
-      setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
-      setSwipeSettingsLoaded(true);
-      return;
-    }
-    setSwipeSettingsLoaded(false);
-    let cancelled = false;
-    AsyncStorage.getItem(swipeSettingsStorageKey(uid))
-      .then((raw) => {
-        if (cancelled) return;
-        let next = DEFAULT_SWIPE_SETTINGS;
-        try {
-          const parsed = raw ? JSON.parse(raw) : null;
-          if (parsed && typeof parsed === 'object') {
-            next = { ...DEFAULT_SWIPE_SETTINGS, ...(parsed as Partial<SwipeSettings>) };
-          }
-        } catch {
-          /* corrupt blob: fall back to defaults */
-        }
-        setSwipeSettings(next);
-        setSwipeSettingsLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSwipeSettings(DEFAULT_SWIPE_SETTINGS);
-          setSwipeSettingsLoaded(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
-  useEffect(() => {
-    if (!uid || !swipeSettingsLoaded) return;
-    { const j = safeStringify(swipeSettings); if (j) AsyncStorage.setItem(swipeSettingsStorageKey(uid), j).catch(() => {}); }
-  }, [uid, swipeSettings, swipeSettingsLoaded]);
 
   // Credits are the ONLY meter (2026-07-14). The old model ran a swipe-stamina
   // batch with a multi-hour cooldown ALONGSIDE credits, and the two contradicted
@@ -1036,15 +1094,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (rerolling || USE_MOCKS) return;
     setRerolling(true);
     try {
-      const page = await fetchFeedPage({ refresh: true });
+      // A filtered deck has no deeper slice to rotate into: it is already the
+      // whole set of roles matching that sentence, so "show me new roles" means
+      // run the search again from the top (new postings land there) rather than
+      // silently dropping the filter and serving the general feed.
+      const page = jobFilter
+        ? await fetchFilteredJobsPage(jobFilter)
+        : await fetchFeedPage({ refresh: true });
       if (page.jobs.length === 0) {
-        showToast('No new roles right now — check back soon');
+        showToast(
+          jobFilter
+            ? 'No new roles matching your filter yet'
+            : 'No new roles right now, check back soon',
+        );
         return;
       }
       // A reroll rotates the server-side offset to a different slice, so the old
       // cursor points into the previous slice — reset paging to page 0 of the new
       // one, or loadMoreJobs would append cards from the slice we just left.
-      queryClient.setQueryData(qk.feed, page);
+      queryClient.setQueryData(jobFilter ? [...qk.feed, 'filter', jobFilter] : qk.feed, page);
       setLoadedJobs(page.jobs);
       setFeedCursor(page.nextCursor);
       setPassedEntries([]);
@@ -1054,7 +1122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setRerolling(false);
     }
-  }, [rerolling, queryClient, meQuery.data?.preferredLocations, showToast]);
+  }, [rerolling, queryClient, meQuery.data?.preferredLocations, showToast, jobFilter]);
 
   const updateOutreach = useCallback(
     (id: string, patch: Partial<OutreachItem>) => {
@@ -1292,6 +1360,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         action?: SwipeSettings['action'];
         autoApply?: boolean;
         priority?: SwipeSettings['priority'];
+        /** Suppress the confirmation toast. Onboarding's demo swipe shows its
+         *  own, worded for the lesson rather than for the Inbox. */
+        silent?: boolean;
       } = {},
     ) => {
       // AI consent gate (5.1.2(i)): drafting sends profile, resume, and job
@@ -1334,9 +1405,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       } else {
         const verb = action === 'send' ? 'Sending to' : 'Drafted to';
-        // Auto-apply is no longer claimed here — it's a separate, user-confirmed
+        // Auto-apply is no longer claimed here: it's a separate, user-confirmed
         // submission handled by the review sheet on the feed screen.
-        showToast(`${verb} ${count} ${peopleWord} at ${company}`, true);
+        if (!opts.silent) showToast(`${verb} ${count} ${peopleWord} at ${company}`, true);
       }
 
       // Employee swipes submit to the server job pool immediately → always
@@ -1434,7 +1505,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const draftJob = useCallback(
-    (id: string) => {
+    (id: string, opts: { silent?: boolean } = {}) => {
       const job = jobs.find((j) => j.id === id);
       if (!job) return;
       // Consent check BEFORE the optimistic deck removal: an unconsented
@@ -1451,6 +1522,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         action: swipeSettings.action,
         autoApply: swipeSettings.autoApply,
         priority: swipeSettings.priority,
+        silent: opts.silent,
       });
     },
     [jobs, beginDraft, swipeSettings, recordSwipedCard],

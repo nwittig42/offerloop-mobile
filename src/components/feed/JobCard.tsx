@@ -284,9 +284,12 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           }}>
           {job.description || (descLoading ? 'Loading description…' : 'Full description on the company’s listing, tap to apply and read the details there.')}
         </Text>
-        {/* Lifted clear of the floating action bar that overlaps the card's
-            lower edge, so the cue is never hidden behind the buttons. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 36 }}>
+        {/* The 36pt bottom margin here bought clearance from an action bar that
+            used to overlap this card's lower edge. The bar sits fully below the
+            card now (2026-08-16), so that reservation was pure dead space: it
+            pushed the description into the card's bottom edge and clipped this
+            cue right off the screen. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 2 }}>
           <Ionicons name="expand-outline" size={13} color={colors.accent} />
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
             Tap anywhere to enlarge

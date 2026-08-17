@@ -1,9 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import GlassTabBackground from '@/components/GlassTabBackground';
-import NotificationsGate from '@/components/NotificationsGate';
 import { needsAttention } from '@/app/(tabs)/inbox';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
@@ -15,9 +14,23 @@ const SCOUT_BAR_BG = '#0A111F';
 const SCOUT_BAR_BORDER = 'rgba(160,190,255,0.18)';
 
 /**
+ * Tab bar content height: the icon and label box. Apple's stock value is 49pt,
+ * which fits SF Symbols and a 10pt label exactly and left this bar's labels
+ * touching its bottom edge. 58 gives them room without making the bar heavy.
+ *
+ * The bar's total height is this plus the bottom safe-area inset, and the bar's
+ * BACKGROUND fills that inset. That is not a gap under the bar, it is the bar
+ * running to the physical bottom edge, which is what iOS does. Nothing is ever
+ * added below it: no floor, no minimum, no padding the platform did not ask
+ * for. On a browser and on an SE the inset is 0 and the bar simply ends at the
+ * bottom of the screen.
+ */
+const TAB_BAR_CONTENT_HEIGHT = 58;
+
+/**
  * Bottom navigation: Feed, Inbox, Scout, Network, Profile — Scout dead
  * center as the app's home button, daily-use tabs flanking it.
- * The bar is a liquid-glass surface (GlassTabBackground) with a hairline top
+ * The bar is a white liquid-glass surface (GlassTabBackground) with a 1pt top
  * border and ink active state; the Scout tab overrides it with its night bar.
  * The notification hub is the header bell, not a tab. Loops became Scout's
  * background engine — the old screen survives at /loops for deep links.
@@ -27,6 +40,15 @@ export default function TabsLayout() {
   const colors = useColors();
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';
+  const insets = useSafeAreaInsets();
+  // Shared by the default bar and the Scout override, so the bar never changes
+  // height as you move between tabs. No paddingTop: the navigator centers the
+  // icon and label in the content box on its own, and adding top padding just
+  // squeezed the label until it clipped.
+  const barMetrics = {
+    height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
+    paddingBottom: insets.bottom,
+  } as const;
   const attentionCount = outreach.filter(needsAttention).length;
   // Cap the displayed count so a big number (200+) doesn't clip the badge.
   const badgeValue = attentionCount > 99 ? '99+' : attentionCount;
@@ -36,7 +58,6 @@ export default function TabsLayout() {
       {/* Notification priming. Lives here (not just onboarding) so it fires on
           every app open after sign-in until the user actually turns pushes on —
           "Not now" is per-launch only. Renders nothing once permission is granted. */}
-      <NotificationsGate />
       <Tabs
       screenOptions={{
         headerShown: false,
@@ -46,8 +67,13 @@ export default function TabsLayout() {
         // matches Scout's deep surface. Light mode keeps the liquid-glass bar.
         tabBarBackground: isDark ? () => null : () => <GlassTabBackground />,
         tabBarStyle: {
+          ...barMetrics,
           backgroundColor: isDark ? SCOUT_BAR_BG : 'transparent',
-          borderTopWidth: StyleSheet.hairlineWidth,
+          // A full point, not a hairline. The bar is white now and the feed
+          // behind it is near-white, so a sub-pixel #E5E5E0 line disappeared
+          // entirely and the nav had no edge at all. This is the only thing
+          // separating the two surfaces.
+          borderTopWidth: 1,
           borderTopColor: isDark ? SCOUT_BAR_BORDER : colors.hairline,
           elevation: 0,
         },
@@ -88,8 +114,9 @@ export default function TabsLayout() {
           tabBarActiveTintColor: '#EAF0FF',
           tabBarInactiveTintColor: colors.inkTertiary,
           tabBarStyle: {
+            ...barMetrics,
             backgroundColor: '#0A111F',
-            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopWidth: 1,
             borderTopColor: 'rgba(160,190,255,0.18)',
             elevation: 0,
           },

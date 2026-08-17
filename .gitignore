@@ -41,3 +41,14 @@ example
 # generated native folders
 /ios
 /android
+
+# Local device preview harness (open in Chrome, iframes the web dev server)
+phone-preview.html
+phone-preview-survey.html
+
+# Hand-made backups of the local env file. `.env*.local` above does not match
+# these (they end in the backup suffix, not in .local), so without this a
+# .env.local.bak-staging sitting in the tree gets swept into the next
+# `git add -A` along with whatever it holds.
+.env.local.*
+.env*.bak*

@@ -1,5 +1,6 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
+import { requireAIConsent } from '@/lib/aiConsent';
 
 /**
  * Scout assistant — the real backend (POST /api/scout-assistant/chat). No credit
@@ -100,6 +101,7 @@ export async function sendScoutMessage(args: {
   userInfo?: ScoutUserInfo;
   chatId?: string | null;
 }): Promise<ScoutReply> {
+  requireAIConsent();
   if (USE_MOCKS) {
     return {
       message:

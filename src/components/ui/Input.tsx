@@ -3,6 +3,7 @@ import { TextInput, View, type TextInputProps } from 'react-native';
 
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { NO_WEB_FOCUS_RING } from '@/theme/webFocus';
 
 /**
  * Web Input recipe: height 36, radius 6, hairline border, white fill,
@@ -30,6 +31,7 @@ export function Input({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[
+          NO_WEB_FOCUS_RING,
           {
             height: multiline ? undefined : 36,
             minHeight: multiline ? 96 : undefined,

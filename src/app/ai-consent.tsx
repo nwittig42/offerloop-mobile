@@ -1,6 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image, Linking, ScrollView, Text, View } from 'react-native';
+import { Image, Linking, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useEffect } from 'react';
@@ -20,23 +19,27 @@ import { fonts } from '@/theme/tokens';
 
 const PRIVACY_URL = 'https://offerloop.ai/privacy';
 
-const ROWS: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
-  {
-    icon: 'document-text-outline',
-    title: 'What is shared',
-    body: 'Your resume text, profile details (school, target roles, about), the jobs and contacts you act on, and messages you type to Scout.',
-  },
-  {
-    icon: 'hardware-chip-outline',
-    title: 'Who processes it',
-    body: 'Our AI providers: OpenAI, Anthropic, and Perplexity. They process it through our servers, only to power the features below, and do not get your name, email, or account details beyond what appears in the content itself.',
-  },
-  {
-    icon: 'sparkles-outline',
-    title: 'What it powers',
-    body: 'Drafting your outreach emails, parsing your resume, Scout answers, meeting prep briefs, and auto-apply.',
-  },
-];
+/**
+ * Copy rules, learned the expensive way:
+ *  - Lead with what the user GETS. Reviewers reject generic framings like
+ *    "Powered by AI" or "We use AI to enhance your experience"; what passes is
+ *    purpose-first and specific ("your messages are sent to OpenAI to generate
+ *    replies"). Tying it to the value is both better copy and safer.
+ *  - Name the providers. That is the part Apple specifically wanted spelled
+ *    out; a category like "our AI partners" is a rejection.
+ *  - Say what is sent, and what is NOT.
+ * Everything below carries one of those. Trim wording freely, do not trim
+ * those four facts.
+ */
+const HEADLINE = 'Why your intros sound like you';
+
+const BODY =
+  'To write an email that actually lands, we read your resume and find what ' +
+  'you and your contact have in common. That means your resume, your profile, ' +
+  'and what you type go to our AI providers, OpenAI, Anthropic, and Perplexity, ' +
+  'through our servers. Never your name, email, or account details.';
+
+const ALSO = 'The same powers Scout, meeting prep, and auto-apply.';
 
 export default function AIConsentScreen() {
   const colors = useColors();
@@ -66,123 +69,96 @@ export default function AIConsentScreen() {
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.surface,
-        paddingTop: insets.top + 28,
-        paddingHorizontal: 28,
-        paddingBottom: insets.bottom + 20,
-      }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={{ alignItems: 'center', gap: 12, marginBottom: 24 }}>
+    // Sheet, not a full-page interstitial (Nick 2026-08-13). Nearly nobody
+    // ships a whole screen for this; the usual shape is a compact bottom sheet
+    // with the disclosure and two buttons, so it reads as a normal permission
+    // moment rather than a legal roadblock.
+    //
+    // Deliberately NOT a formSheet presentation: the 0.88 detent clipped
+    // content and left a white void when the paywall tried it. This is a plain
+    // route that PAINTS itself as a sheet, so there is no navigation change,
+    // no detent maths, and no chance of the gate looping.
+    //
+    // What must not be trimmed further (guidelines 5.1.1(i)/5.1.2(i), the
+    // rejection of 2026-08-05): what is sent, the AI providers BY NAME, and a
+    // genuine decline that leaves the rest of the app usable.
+    <View style={{ flex: 1, backgroundColor: 'rgba(10,14,25,0.45)', justifyContent: 'flex-end' }}>
+      <View
+        style={{
+          backgroundColor: colors.paper,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          paddingHorizontal: 24,
+          paddingTop: 16,
+          paddingBottom: insets.bottom + 20,
+          gap: 14,
+        }}>
+        <View
+          style={{
+            width: 36,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: colors.hairline,
+            alignSelf: 'center',
+          }}
+        />
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Image
             source={require('../../assets/images/scout-yeti-head.png')}
-            style={{ width: 64, height: 64 }}
+            style={{ width: 32, height: 32 }}
             resizeMode="contain"
             accessibilityLabel="Scout"
           />
-          <Text
-            style={{
-              fontFamily: fonts.display,
-              fontSize: 28,
-              color: colors.heading,
-              textAlign: 'center',
-              lineHeight: 33,
-            }}>
-            Offerloop runs on AI
+          <Text style={{ flex: 1, fontFamily: fonts.display, fontSize: 24, color: colors.heading }}>
+            {HEADLINE}
           </Text>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 14,
-              color: colors.inkSecondary,
-              textAlign: 'center',
-              lineHeight: 21,
-              maxWidth: 320,
-            }}>
-            Drafts, Scout, and meeting prep are powered by AI. Before anything is shared, here
-            is exactly what leaves your device and where it goes.
-          </Text>
-        </View>
-
-        <View style={{ gap: 18, marginBottom: 24 }}>
-          {ROWS.map((r) => (
-            <View key={r.title} style={{ flexDirection: 'row', gap: 14 }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: colors.accent + '14',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                <Ionicons name={r.icon} size={19} color={colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
-                  {r.title}
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: fonts.sans,
-                    fontSize: 13,
-                    color: colors.inkSecondary,
-                    lineHeight: 19,
-                    marginTop: 2,
-                  }}>
-                  {r.body}
-                </Text>
-              </View>
-            </View>
-          ))}
         </View>
 
         <Text
           style={{
             fontFamily: fonts.sans,
-            fontSize: 12.5,
-            color: colors.inkTertiary,
-            textAlign: 'center',
-            lineHeight: 18,
-            marginBottom: 18,
+            fontSize: 14,
+            lineHeight: 21,
+            color: colors.inkSecondary,
           }}>
-          Your data is never sold. Full details in our{' '}
+          {BODY}
+        </Text>
+
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 13,
+            lineHeight: 19,
+            color: colors.inkTertiary,
+          }}>
+          {ALSO}
+        </Text>
+
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            color: colors.inkTertiary,
+            lineHeight: 17,
+          }}>
+          Change this any time in Settings.{' '}
           <Text style={{ color: colors.accent }} onPress={() => void Linking.openURL(PRIVACY_URL)}>
             Privacy Policy
           </Text>
-          . Change this choice any time in Profile, then Settings.
         </Text>
 
-        <View style={{ flex: 1 }} />
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 8 }}>
           <Button
-            label="Allow and continue"
+            label="Allow"
             variant="primary"
             size="lg"
             fullWidth
             onPress={() => void finish('granted')}
           />
-          <Button
-            label="Not now"
-            variant="ghost"
-            fullWidth
-            onPress={() => void finish('declined')}
-          />
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 11.5,
-              color: colors.inkTertiary,
-              textAlign: 'center',
-              lineHeight: 16,
-            }}>
-            Choosing Not now keeps the AI features off. You can still browse jobs and your
-            inbox, and turn AI on whenever you are ready.
-          </Text>
+          <Button label="Not now" variant="ghost" fullWidth onPress={() => void finish('declined')} />
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }

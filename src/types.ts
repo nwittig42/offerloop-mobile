@@ -38,6 +38,54 @@ export type Contact = {
 };
 
 /**
+ * A person in the People deck, from GET /api/ranker/candidates.
+ *
+ * Deliberately NOT a Contact: a Contact is someone you already reached, a
+ * Candidate is someone the ranker is offering you. The email is absent until
+ * the user pays to reveal it, which is the whole shape of the feed.
+ *
+ * No hometown field. It is extracted upstream but not wired onto the person
+ * yet (ranker handoff, section 6), so there is nothing true to render.
+ */
+export type Candidate = {
+  /** candidate_id — echoed back on every feedback call. */
+  id: string;
+  name: string;
+  title: string;
+  company: string;
+  location?: string;
+  /** The alumni hook: their school, when it matches the user's. */
+  school?: string;
+  /** Why the ranker surfaced this person. Rendered as chips, never invented. */
+  reasons?: string[];
+  linkedinUrl?: string;
+  photoUrl?: string;
+  relation?: ContactRelation;
+  /** Position in the deck the server sent. Echoed back on feedback. */
+  rank: number;
+  /**
+   * How close a match this person is to you, 1.0 to 10.0, one decimal.
+   *
+   * Server-sent only. A person the ranker scored has a number; a person it did
+   * not stays undefined and the card renders no badge, because a similarity
+   * score the app made up would be the most persuasive fake number in the
+   * whole product. Fixture people carry obviously-fake scores, same rule as
+   * their obviously-fake names.
+   */
+  matchScore?: number;
+  /**
+   * What their title is actually OF — "Investment Banking" next to a bare
+   * "Vice President". From PDL's job_title_sub_role, humanized server-side.
+   * Absent when PDL had no classification, which is common enough that the
+   * card must read fine without it.
+   */
+  department?: string;
+  /** Only present after a paid reveal. */
+  email?: string;
+  emailVerified?: boolean;
+};
+
+/**
  * What a right swipe does, set once (not per card). Apply is an accent, off
  * by default and a few steps down the settings screen, never the headline.
  */
@@ -51,10 +99,50 @@ export type SwipeSettings = {
   //  'hiring_manager'= hiring managers first (verified), teammates only to fill
   // 'mix'/'hiring_manager' always draft (the HM endpoint never auto-sends).
   priority: 'employee' | 'mix' | 'hiring_manager';
+  /** Jobs deck: on a right swipe, also find the hiring manager and draft to
+   *  them. Off means a right swipe only submits the application. This is the
+   *  feed-level toggle; `priority` stays the finer control in swipe settings. */
+  emailHiringManager: boolean;
   /** Voice asks confirm before spending credits (mishears can't burn money).
    *  Zero-touch users can turn it off; obvious-garbage asks confirm anyway. */
   scoutConfirmSpend: boolean;
+  /**
+   * The prompt-built feed filters, one sentence per deck (Nick 2026-08-16).
+   *
+   * A filter is just what the user typed: "internships in product management in
+   * San Francisco". The decks turn it into a query rather than storing parsed
+   * fields, so the thing we persist is the thing the user recognises when it
+   * comes back as a chip. Null means the default deck.
+   *
+   * Both live here rather than in screen state because they have to survive a
+   * relaunch: a student who set up "entry level finance in NYC" last night
+   * should not open the app to an unexplained general feed. `recents` keeps the
+   * last few so switching back is one tap, and is capped (FILTER_RECENTS_MAX)
+   * because a chip row nobody can read is not a shortcut.
+   */
+  jobFilter: string | null;
+  jobFilterRecents: string[];
+  peopleFilter: string | null;
+  peopleFilterRecents: string[];
 };
+
+/** How many past prompts each deck keeps as one-tap chips. */
+export const FILTER_RECENTS_MAX = 5;
+
+/**
+ * Fold a just-used prompt into the recents list: newest first, no duplicates
+ * (case-insensitively, since "Finance in NYC" and "finance in nyc" are the same
+ * search to a human), capped at FILTER_RECENTS_MAX.
+ */
+export function withRecentFilter(recents: string[], prompt: string): string[] {
+  const trimmed = prompt.trim();
+  if (!trimmed) return recents;
+  const key = trimmed.toLowerCase();
+  return [trimmed, ...recents.filter((r) => r.trim().toLowerCase() !== key)].slice(
+    0,
+    FILTER_RECENTS_MAX,
+  );
+}
 
 export type ScoutChat = {
   id: string;

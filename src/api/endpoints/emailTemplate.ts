@@ -13,6 +13,15 @@ import { USE_MOCKS } from '@/api/config';
 export type EmailTemplateDefault = {
   /** 'networking' | 'referral' | 'follow_up' | 'custom' | null (backend default) */
   purpose: string | null;
+  /**
+   * How the email should SOUND, separate from what it asks for. Backend keys:
+   * casual | professional | short_direct | warm_enthusiastic | bold_confident,
+   * or null for no preference.
+   *
+   * The app used to POST this as a hardcoded null (2026-08-16), so every save
+   * from the phone silently erased a style the user had picked on the website.
+   */
+  stylePreset: string | null;
   customInstructions: string;
   signoffPhrase: string;
   signatureBlock: string;
@@ -26,6 +35,7 @@ export type SavedTemplate = { id: string; name: string; subject: string; body: s
 
 export const EMPTY_TEMPLATE: EmailTemplateDefault = {
   purpose: null,
+  stylePreset: null,
   customInstructions: '',
   signoffPhrase: 'Best,',
   signatureBlock: '',
@@ -39,6 +49,7 @@ export async function fetchEmailTemplate(): Promise<EmailTemplateDefault> {
   const r = await apiFetch<Partial<EmailTemplateDefault>>('/api/email-template');
   return {
     purpose: r.purpose ?? null,
+    stylePreset: r.stylePreset ?? null,
     customInstructions: r.customInstructions || '',
     signoffPhrase: (r.signoffPhrase || '').trim() || 'Best,',
     signatureBlock: r.signatureBlock || '',
@@ -55,7 +66,7 @@ export async function saveEmailTemplate(t: EmailTemplateDefault): Promise<void> 
     method: 'POST',
     body: {
       purpose: t.purpose,
-      stylePreset: null,
+      stylePreset: t.stylePreset,
       customInstructions: t.customInstructions,
       signoffPhrase: t.signoffPhrase,
       signatureBlock: t.signatureBlock,

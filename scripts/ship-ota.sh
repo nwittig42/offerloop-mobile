@@ -28,13 +28,12 @@ if [[ "$CHANNEL" != "staging" && "$CHANNEL" != "production" ]] || [[ -z "$MESSAG
   exit 1
 fi
 
-# Channel wiring. The staging TestFlight build predates the current eas.json,
-# so staging publishes temporarily restore the eas.json it was built with
-# (commit 79ecd82); production matches the current file. When a NEW TestFlight
-# staging build ships, update STAGING_RUNTIME and drop the swap.
-PROD_RUNTIME="cfefa2bd8410a6ae275442a30e30a7b9724cc78c"     # builds 15 and 16
-STAGING_RUNTIME="8aaf00e0b6e6bcaec0fe1e1e4274417cd0e3db27"  # staging TF build
-STAGING_EASJSON_COMMIT="79ecd82"
+# Channel wiring. Both runtimes now match the current eas.json, so the old
+# staging eas.json swap (commit 79ecd82) is gone: the staging TestFlight build
+# of 2026-08-13 was cut from this file. Update the constant below whenever a
+# new TestFlight build ships for that channel.
+PROD_RUNTIME="da7eb2799e93af4b608e14b37fe1b7441a865d14"     # build 17, 1.1.0
+STAGING_RUNTIME="6127e59cf2eaf00441ff94cb801874e46f808893"  # staging TF, 2026-08-13
 
 if [[ "$CHANNEL" == "production" ]]; then
   BRANCH="production"
@@ -78,14 +77,8 @@ echo "== lint (report-only) =="
 npm run lint >/dev/null 2>&1 && echo "lint clean" || echo "lint has findings (pre-existing ones are known; run npm run lint to view)"
 
 # 3. Fingerprint gate.
-restore_easjson() { git checkout HEAD -- eas.json 2>/dev/null || true; }
-trap restore_easjson EXIT
-if [[ "$CHANNEL" == "staging" ]]; then
-  git show "${STAGING_EASJSON_COMMIT}:eas.json" > eas.json
-fi
 echo "== verifying runtime fingerprint matches the installed $CHANNEL build =="
 if ! env "${ENV_VARS[@]}" CI=1 npx eas-cli fingerprint:compare "$EXPECT_RUNTIME" 2>&1 | grep -q "matches"; then
-  restore_easjson
   echo ""
   echo "ABORT: fingerprint mismatch. A native-affecting file changed (eas.json,"
   echo "app.json, a native dependency, or the Expo SDK). This change CANNOT ship"
@@ -132,8 +125,6 @@ fi
 # 5. Publish.
 echo "== publishing to ${BRANCH} =="
 env "${ENV_VARS[@]}" CI=1 npx eas-cli update --branch "$BRANCH" --message "${STAMP}: ${MESSAGE}"
-restore_easjson
-trap - EXIT
 
 echo ""
 echo "SHIPPED ${STAMP} to ${CHANNEL}."
