@@ -12,6 +12,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.offerloop.app",
+      "appStoreUrl": "https://apps.apple.com/app/id6789441106",
       "supportsTablet": false,
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
