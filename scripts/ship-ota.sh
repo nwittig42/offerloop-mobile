@@ -33,7 +33,7 @@ fi
 # of 2026-08-13 was cut from this file. Update the constant below whenever a
 # new TestFlight build ships for that channel.
 PROD_RUNTIME="da7eb2799e93af4b608e14b37fe1b7441a865d14"     # build 17, 1.1.0
-STAGING_RUNTIME="6127e59cf2eaf00441ff94cb801874e46f808893"  # staging TF, 2026-08-13
+STAGING_RUNTIME="f3e53cf77bc5d836bbe85f3aeaefd695c71287a2"  # staging TF build 10, 2026-08-18
 
 if [[ "$CHANNEL" == "production" ]]; then
   BRANCH="production"
