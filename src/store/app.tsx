@@ -44,6 +44,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, track } from '@/lib/analytics';
 import { safeStringify } from '@/lib/safeJson';
 import { normCompanyName, sameCompany } from '@/lib/company';
+import { markTourPending } from '@/lib/tourFlag';
 import {
   hasNotificationPermission,
   registerForPushNotificationsAsync,
@@ -390,7 +391,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = raw ? JSON.parse(raw) : null;
           if (parsed && typeof parsed === 'object') {
-            next = { ...DEFAULT_SWIPE_SETTINGS, ...(parsed as Partial<SwipeSettings>) };
+            next = {
+              ...DEFAULT_SWIPE_SETTINGS,
+              ...(parsed as Partial<SwipeSettings>),
+              // The ACTIVE filters never come back from disk (Nick 2026-08-17:
+              // "every time you reload the app it goes to the normal feed").
+              // A filter is a thing you asked for just now, not a mode you get
+              // trapped in: opening the app tomorrow to a deck still narrowed
+              // by last night's sentence, with no memory of setting it, reads
+              // as a broken feed. The RECENTS survive, so getting back to it is
+              // one tap. Forced null here as well as stripped on write, so a
+              // filter persisted by an older build is dropped on first load
+              // rather than lingering until the next settings change.
+              jobFilter: null,
+              peopleFilter: null,
+            };
           }
         } catch {
           /* corrupt blob: fall back to defaults */
@@ -410,7 +425,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [uid]);
   useEffect(() => {
     if (!uid || !swipeSettingsLoaded) return;
-    { const j = safeStringify(swipeSettings); if (j) AsyncStorage.setItem(swipeSettingsStorageKey(uid), j).catch(() => {}); }
+    // Everything EXCEPT the two active filters, which are session-scoped. The
+    // recents lists are in here, so the sentence itself is never lost.
+    const { jobFilter: _jf, peopleFilter: _pf, ...persistable } = swipeSettings;
+    const j = safeStringify(persistable);
+    if (j) AsyncStorage.setItem(swipeSettingsStorageKey(uid), j).catch(() => {});
   }, [uid, swipeSettings, swipeSettingsLoaded]);
 
   /** The active jobs filter, or null for the ranked default deck. */
@@ -708,6 +727,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = useCallback(() => {
     setOnboardingDone(true);
     if (uid) AsyncStorage.setItem(onboardingStorageKey(uid), '1').catch(() => {});
+    // Arm the first-run tour. Only here, so an established user updating the
+    // app never gets a tour appearing out of nowhere; the Scout tab reads this
+    // on mount and offers the walkthrough.
+    void markTourPending();
   }, [uid]);
 
   const resetOnboarding = useCallback(() => {

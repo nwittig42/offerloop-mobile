@@ -20,14 +20,11 @@ import { fonts } from '@/theme/tokens';
  * Application Profile: the answers auto-apply reuses on every job so it rarely
  * stops to ask. The backend gate only requires work authorization, but the more
  * of this that's filled, the fewer "Needs your input" stalls — relocation,
- * remote, start date, salary, and the EEO questions show up on nearly every
+ * remote, start date, and the EEO questions show up on nearly every
  * Greenhouse / Lever / Ashby form. Reached from Profile or a needs-profile gate.
  */
 
 const DECLINE = 'Decline to answer';
-/** The salary default: honest and safe. Forms get "no expectation stated";
- *  a typed number replaces it. Never prefill an invented figure. */
-const SALARY_OPEN = 'Open / prefer not to say';
 const GENDERS = ['Male', 'Female', 'Non-binary', DECLINE];
 const RACES = [
   'Asian',
@@ -141,7 +138,6 @@ export default function ApplicationProfileScreen() {
   const [relocate, setRelocate] = useState<boolean | null>(null);
   const [remote, setRemote] = useState<boolean | null>(null);
   const [startDate, setStartDate] = useState('');
-  const [salary, setSalary] = useState('');
   const [gender, setGender] = useState<string | null>(null);
   const [race, setRace] = useState<string | null>(null);
   const [veteran, setVeteran] = useState<string | null>(null);
@@ -152,7 +148,7 @@ export default function ApplicationProfileScreen() {
   // Hydrate from the saved profile, falling back to what we already know from
   // the user's Offerloop profile (LinkedIn + phone + grad year). Saved values
   // win. Prefills only carry REAL data: the start date comes from the entered
-  // grad year, and salary defaults to open rather than any invented number
+  // grad year, rather than any invented number
   // (no-fake-numbers rule).
   useEffect(() => {
     if (!data) return;
@@ -164,11 +160,6 @@ export default function ApplicationProfileScreen() {
       data.preferences?.earliestStartDate ??
         (profile.gradYear?.trim() ? `After graduation (${profile.gradYear.trim()})` : ''),
     );
-    setSalary(
-      data.preferences?.expectedSalaryUsd != null
-        ? String(data.preferences.expectedSalaryUsd)
-        : SALARY_OPEN,
-    );
     setGender(data.demographics?.gender ?? null);
     setRace(data.demographics?.race ?? null);
     setVeteran(data.veteranStatus ?? null);
@@ -179,14 +170,12 @@ export default function ApplicationProfileScreen() {
 
   const save = useMutation({
     mutationFn: () => {
-      const salaryNum = parseInt(salary.replace(/[^0-9]/g, ''), 10);
       const patch: ApplicationProfile = {
         workAuthorization: { authorizedToWorkUS: authorized, requiresSponsorship: sponsorship },
         preferences: {
           openToRelocation: relocate,
           openToRemote: remote,
           earliestStartDate: startDate.trim() || null,
-          expectedSalaryUsd: Number.isFinite(salaryNum) && salaryNum > 0 ? salaryNum : null,
         },
         demographics: { gender, race },
         veteranStatus: veteran,
@@ -265,27 +254,6 @@ export default function ApplicationProfileScreen() {
               placeholderTextColor={colors.inkTertiary}
               style={inputStyle}
             />
-          </Field>
-          <Field label="Expected salary (USD)">
-            <TextInput
-              value={salary}
-              onChangeText={setSalary}
-              onFocus={() => {
-                // Tapping into the default clears it so typing a number is
-                // one gesture; blanking the field falls back to open.
-                if (salary === SALARY_OPEN) setSalary('');
-              }}
-              onBlur={() => {
-                if (!salary.trim()) setSalary(SALARY_OPEN);
-              }}
-              placeholder={SALARY_OPEN}
-              placeholderTextColor={colors.inkTertiary}
-              style={inputStyle}
-            />
-            <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, lineHeight: 16 }}>
-              Leaving this open is normal and usually the smart move. Enter a number only
-              if you have a firm one.
-            </Text>
           </Field>
         </Card>
 

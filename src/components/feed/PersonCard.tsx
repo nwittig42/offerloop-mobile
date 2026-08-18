@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Linking, Pressable, Text, View } from 'react-native';
 
 import CompanyLogo from '@/components/CompanyLogo';
 import Chip from '@/components/ui/Chip';
@@ -16,24 +16,6 @@ import type { Candidate } from '@/types';
  * sent that field, and there is no hometown row: the field is extracted
  * upstream but not wired onto the person yet.
  */
-
-function DetailGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  const colors = useColors();
-  return (
-    <View style={{ gap: 8, alignItems: 'flex-start' }}>
-      <Text
-        style={{
-          fontFamily: fonts.sansMedium,
-          fontSize: 12,
-          letterSpacing: 0.3,
-          color: colors.inkTertiary,
-        }}>
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{children}</View>
-    </View>
-  );
-}
 
 /** Initials tile, used when the ranker has no photo for this person. Never a
  *  stock avatar: a fake face on a real person is worse than no face. */
@@ -137,7 +119,7 @@ function MatchScore({ score }: { score: number }) {
   );
 }
 
-function Body({ person }: { person: Candidate }) {
+function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolean }) {
   const colors = useColors();
   return (
     <>
@@ -254,8 +236,20 @@ function Body({ person }: { person: Candidate }) {
             labelled sections for two chips spent about 60pt of card height
             restating what the icons already say — a graduation cap is
             "School" and a person glyph is "who they are". */}
-        {person.school || person.relation ? (
+        {person.school || person.relation || appliedHere ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {/* The reason this person is in front of you, when it is the
+                strongest one there is: you already applied to this company, so
+                the email has a real hook and a reason to be read. First in the
+                row on purpose. */}
+            {appliedHere ? (
+              <Chip
+                label="You applied here"
+                tone="positive"
+                icon="checkmark-circle-outline"
+                size="lg"
+              />
+            ) : null}
             {person.school ? (
               <Chip label={person.school} tone="accent" icon="school-outline" size="lg" numberOfLines={1} />
             ) : null}
@@ -317,52 +311,34 @@ function Body({ person }: { person: Candidate }) {
   );
 }
 
+/**
+ * One person, whole. There is no expanded state (Nick 2026-08-17: "does that
+ * actually do anything, if not get rid of it completely").
+ *
+ * It did not. The card carried a "Tap for details" footer, and tapping it
+ * re-rendered the SAME body inside a ScrollView, with one addition: a chip
+ * reading "LinkedIn on file" — a fact the collapsed card already states with
+ * the LinkedIn badge beside the match score, and a chip you could not even tap
+ * through to the profile. So the affordance promised more and delivered a
+ * restatement, which is worse than not offering it.
+ *
+ * Everything a person card knows fits on one face: who they are, where, the
+ * match, and why we surfaced them. If a genuine detail view ever exists (their
+ * recent posts, the company's news, the draft we would send), it earns a tap
+ * back at that point.
+ */
 export default function PersonCard({
   person,
-  expanded = false,
-  onCollapse,
+  appliedHere = false,
 }: {
   person: Candidate;
-  expanded?: boolean;
-  onCollapse?: () => void;
+  /** You have an application in at this company. Passed down rather than
+   *  looked up here so the card stays a pure render of what it is given. */
+  appliedHere?: boolean;
 }) {
-  const colors = useColors();
-
-  if (!expanded) {
-    return (
-      <View style={{ flex: 1 }}>
-        <Body person={person} />
-        <View style={{ flex: 1 }} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-          <Ionicons name="expand-outline" size={13} color={colors.inkTertiary} />
-          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkTertiary }}>
-            Tap for details
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={{ flex: 1 }}>
-      {onCollapse ? (
-        <Pressable
-          onPress={onCollapse}
-          accessibilityLabel="Collapse card"
-          style={{ alignSelf: 'flex-end', padding: 4, marginBottom: 2 }}>
-          <Ionicons name="contract-outline" size={20} color={colors.inkTertiary} />
-        </Pressable>
-      ) : null}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
-        <Body person={person} />
-        {person.linkedinUrl ? (
-          <View style={{ marginTop: 20 }}>
-            <DetailGroup label="Profile">
-              <Chip label="LinkedIn on file" tone="brand" icon="link-outline" size="lg" />
-            </DetailGroup>
-          </View>
-        ) : null}
-      </ScrollView>
+      <Body person={person} appliedHere={appliedHere} />
     </View>
   );
 }

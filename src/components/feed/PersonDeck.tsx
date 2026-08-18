@@ -2,6 +2,7 @@ import { forwardRef, memo, useCallback } from 'react';
 import type { SharedValue } from 'react-native-reanimated';
 
 import PersonCard from '@/components/feed/PersonCard';
+import { normCompanyName } from '@/lib/company';
 import SwipeStack, {
   type StampSpec,
   type SwipeStackHandle,
@@ -23,8 +24,6 @@ export type PersonDeckHandle = SwipeStackHandle;
 
 type Props = {
   people: Candidate[];
-  expanded: boolean;
-  onToggleExpand: (expanded: boolean) => void;
   onSwiped: (direction: 'left' | 'right' | 'up', person: Candidate) => void;
   drag?: SharedValue<number>;
   /** True when the user cannot afford the swipe: the card bounces instead of
@@ -33,6 +32,10 @@ type Props = {
   onBlockedRight?: () => void;
   /** What the right swipe is about to do, from the bar's draft/send choice. */
   action: 'draft' | 'send';
+  /** Normalized names of companies the user has applied to, for the card
+   *  badge. A Set so a hundred-card deck is a hundred lookups, not a hundred
+   *  scans of the applications list. */
+  appliedCompanies?: Set<string>;
 };
 
 /**
@@ -42,6 +45,9 @@ type Props = {
  * says which of the two things is about to happen, and it changes with the bar
  * so the gesture never contradicts the control above it.
  */
+/** Module-level so the identity is stable across renders. */
+const NO_EXPAND = () => {};
+
 const DRAFT_STAMP: StampSpec = { label: 'DRAFTING', tone: 'accent' };
 const SEND_STAMP: StampSpec = { label: 'SENDING', tone: 'positive' };
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };
@@ -51,24 +57,28 @@ export const PersonDeck = memo(
     (
       {
         people,
-        expanded,
-        onToggleExpand,
         onSwiped,
         drag,
         blockRight = false,
         onBlockedRight,
         action,
+        appliedCompanies,
       },
       ref,
     ) => {
+      // One face, always. A person card has no expanded state to render (see
+      // PersonCard), so the stack's isExpanded/onCollapse arguments are ignored
+      // here rather than branching on something that produces the same card.
       const renderCard = useCallback(
-        (person: Candidate, isExpanded: boolean, onCollapse: () => void) =>
-          isExpanded ? (
-            <PersonCard person={person} expanded onCollapse={onCollapse} />
-          ) : (
-            <PersonCard person={person} />
-          ),
-        [],
+        (person: Candidate) => (
+          <PersonCard
+            person={person}
+            appliedHere={
+              !!appliedCompanies?.size && appliedCompanies.has(normCompanyName(person.company || ''))
+            }
+          />
+        ),
+        [appliedCompanies],
       );
 
       return (
@@ -77,8 +87,13 @@ export const PersonDeck = memo(
           items={people}
           keyOf={(person) => person.id}
           renderCard={renderCard}
-          expanded={expanded}
-          onToggleExpand={onToggleExpand}
+          // Hard false with a no-op setter: the stack is shared with the jobs
+          // deck, where expanding reveals the job description and is worth the
+          // tap. On people there is nothing behind the tap, so the state is
+          // pinned shut here rather than plumbed up to a screen that cannot use
+          // it.
+          expanded={false}
+          onToggleExpand={NO_EXPAND}
           onSwiped={onSwiped}
           drag={drag}
           blockRight={blockRight}

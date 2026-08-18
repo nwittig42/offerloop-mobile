@@ -140,6 +140,12 @@ export function Button({
       {icon ? <Ionicons name={icon} size={16} color={v.text} /> : null}
       {label && size !== 'icon' ? (
         <Text
+          // The button is a fixed height, so a label wider than the button
+          // used to clip mid-word (a long label, a small phone, or Dynamic
+          // Type at the 1.3 ceiling). Shrink to fit instead, down to 80%.
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
           style={{
             color: v.text,
             fontSize: s.fontSize,

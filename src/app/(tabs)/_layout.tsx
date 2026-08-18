@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { listAppliedJobs, needsUserCount } from '@/api/endpoints/autoApply';
 import GlassTabBackground from '@/components/GlassTabBackground';
 import { needsAttention } from '@/app/(tabs)/inbox';
 import { useApp } from '@/store/app';
@@ -53,6 +55,15 @@ export default function TabsLayout() {
   // Cap the displayed count so a big number (200+) doesn't clip the badge.
   const badgeValue = attentionCount > 99 ? '99+' : attentionCount;
 
+  // Applications stopped on a question only the student can answer. It rides
+  // the Network tab because that is where the work is done, and it counts the
+  // exact group pinned at the top of /applications, so tapping through and
+  // finishing clears the badge. Shares the query key with both screens, so the
+  // bar never disagrees with the list.
+  const appliedQuery = useQuery({ queryKey: ['applied-jobs'], queryFn: () => listAppliedJobs() });
+  const networkAttention = needsUserCount(appliedQuery.data);
+  const networkBadge = networkAttention > 99 ? '99+' : networkAttention;
+
   return (
     <>
       {/* Notification priming. Lives here (not just onboarding) so it fires on
@@ -61,6 +72,11 @@ export default function TabsLayout() {
       <Tabs
       screenOptions={{
         headerShown: false,
+        // The scene container defaults to the navigation theme's white. Every
+        // tab paints its own body, but the safe-area strip the navigator pads
+        // around it was left showing that white: invisible in light mode, a
+        // white band above the header in dark.
+        sceneStyle: { backgroundColor: colors.surface },
         tabBarActiveTintColor: colors.navy,
         tabBarInactiveTintColor: colors.inkTertiary,
         // Dark mode: solid Scout-night bar across all tabs (no glass), so the nav
@@ -105,22 +121,13 @@ export default function TabsLayout() {
       {/* Scout replaced Loops in the bar (PLAN-scout-voice.md P1) and sits
           dead center — the orb is the app's home button. Loops are shelved
           for v1 (one-shot Scout covers the job); the old screen survives at
-          /loops for deep links only. The Scout screen is a committed night
-          room, so its bar goes dark too. */}
+          /loops for deep links only. Scout used to force a night bar on top
+          of a light app; it follows the Light/Dark setting with everything
+          else now (2026-08-17), so no per-screen bar override here. */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Scout',
-          tabBarActiveTintColor: '#EAF0FF',
-          tabBarInactiveTintColor: colors.inkTertiary,
-          tabBarStyle: {
-            ...barMetrics,
-            backgroundColor: '#0A111F',
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(160,190,255,0.18)',
-            elevation: 0,
-          },
-          tabBarBackground: () => null,
           tabBarIcon: ({ color, size, focused }) => (
             <MaterialCommunityIcons
               name={focused ? 'bag-personal' : 'bag-personal-outline'}
@@ -134,6 +141,8 @@ export default function TabsLayout() {
         name="network"
         options={{
           title: 'Network',
+          tabBarBadge: networkAttention > 0 ? networkBadge : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.negative, fontFamily: fonts.sansSemibold, fontSize: 10 },
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
           ),

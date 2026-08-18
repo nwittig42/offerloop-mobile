@@ -29,3 +29,19 @@ export const FOUNDER_PHONE: string = '+18056801528';
 export const FOUNDER_PHONE_SET = FOUNDER_PHONE !== '+10000000000';
 /** Pretty version for display. */
 export const FOUNDER_PHONE_DISPLAY = '+1 (805) 680-1528';
+
+/**
+ * Opens the App Store listing with the write-a-review sheet already up. This is
+ * the always-available "Rate Offerloop" row in Settings, with none of the
+ * limits on the native popup (see lib/appRating): no yearly cap, no cooldown,
+ * and it still works for someone who switched in-app ratings off.
+ *
+ * Hardcoded to the PRODUCTION App Store id (6789441106, eas.json submit
+ * profile). The staging variant is a separate listing that nobody should be
+ * asked to review, so this deliberately does not follow the build variant.
+ *
+ * itms-apps opens the App Store app directly. Falls back to https, which iOS
+ * redirects into the same place, if the scheme is unavailable.
+ */
+export const APP_STORE_REVIEW_URL = 'itms-apps://apps.apple.com/app/id6789441106?action=write-review';
+export const APP_STORE_REVIEW_URL_WEB = 'https://apps.apple.com/app/id6789441106?action=write-review';

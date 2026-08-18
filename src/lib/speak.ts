@@ -57,10 +57,19 @@ function resolveBestVoice(m: SpeechModule) {
     });
 }
 
-/** Speak Scout's reply aloud. No-op on builds without the module. */
-export function speak(text: string) {
+/**
+ * Speak Scout's reply aloud. No-op on builds without the module.
+ *
+ * The optional handlers exist for voice mode, where the circle pulses while
+ * Scout is actually talking. Every ending path (finished, stopped, failed)
+ * calls onDone, so a caller can never be left animating a voice that stopped.
+ */
+export function speak(text: string, handlers?: { onStart?: () => void; onDone?: () => void }) {
   const m = mod();
-  if (!m || !text) return;
+  if (!m || !text) {
+    handlers?.onDone?.();
+    return;
+  }
   try {
     resolveBestVoice(m); // async; first utterance may use the default voice
     m.stop();
@@ -71,9 +80,13 @@ export function speak(text: string) {
       // deliberate instead of text-to-speech-in-a-hurry.
       pitch: 1.0,
       rate: 0.95,
+      onStart: handlers?.onStart,
+      onDone: handlers?.onDone,
+      onStopped: handlers?.onDone,
+      onError: handlers?.onDone,
     });
   } catch {
-    /* stay quiet */
+    handlers?.onDone?.();
   }
 }
 

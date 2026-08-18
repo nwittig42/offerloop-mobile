@@ -6,6 +6,7 @@ import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } f
 
 import { pickResume, uploadResume, type PickedResume, type ResumeParsed } from '@/api/endpoints/resume';
 import PrimaryCta from '@/components/ui/PrimaryCta';
+import LinkedInUrlHelp from '@/components/onboarding/LinkedInUrlHelp';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
 // Aliased: `track` is also the name of the goal-selection state below, and the
 // local would shadow the import inside the component.
@@ -151,6 +152,9 @@ export default function Intake() {
 
   const [linkedin, setLinkedin] = useState('');
   const [linkedinError, setLinkedinError] = useState<string | null>(null);
+  // "Where do I even find that?" is the question that stalls this step
+  // (Rylan 2026-08-17). The answer lives one tap away instead of nowhere.
+  const [linkedinHelp, setLinkedinHelp] = useState(false);
   const [manual, setManual] = useState('');
   const [showManual] = useState(false);
 
@@ -207,6 +211,8 @@ export default function Intake() {
   const withChooser = (node: ReactNode) => (
     <>
       {node}
+      {/* Overlays live outside the scaffold so they cover its footer too. */}
+      {linkedinHelp ? <LinkedInUrlHelp onClose={() => setLinkedinHelp(false)} /> : null}
     </>
   );
 
@@ -440,6 +446,27 @@ export default function Intake() {
             {normalized.replace('https://www.', '')}
           </Text>
         ) : null}
+
+        <Pressable
+          onPress={() => {
+            trackEvent('intake_linkedin_help_opened');
+            setLinkedinHelp(true);
+          }}
+          accessibilityRole="button"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            alignSelf: 'flex-start',
+            minHeight: 34,
+            marginTop: 8,
+          }}>
+          <Ionicons name="help-circle-outline" size={16} color={colors.marketing} />
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.marketing }}>
+            How do I find my LinkedIn URL?
+          </Text>
+        </Pressable>
+
         <Pressable
           onPress={openLinkedIn}
           accessibilityRole="button"

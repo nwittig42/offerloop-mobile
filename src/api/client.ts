@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/api/config';
+import { noteFriction } from '@/lib/appRating';
 import { safeStringify } from '@/lib/safeJson';
 import { getIdToken, handleUnauthorized } from '@/api/authToken';
 import { ApiError } from '@/api/errors';
@@ -118,6 +119,9 @@ export async function apiFetch<T = any>(path: string, opts: FetchOptions = {}): 
     }
     return data as T;
   } catch (err) {
+    // Any failed call mutes the App Store rating prompt for a few minutes. The
+    // single place every error passes through, so no call site has to remember.
+    noteFriction(Date.now());
     // AbortError from our own timer → a typed timeout the caller can show
     // honestly ("took too long", NOT "server error"). The request may still
     // finish server-side; callers must treat 408 as ambiguous, not failed-clean.

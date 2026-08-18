@@ -20,12 +20,23 @@ export type ContactPreview = {
   contactId?: string;
 };
 
+/** A job the brain surfaced in chat. jobId is what auto-apply submits against. */
+export type JobPreview = {
+  jobId: string;
+  title: string;
+  company: string;
+  location: string;
+  autoApplyEligible: boolean;
+};
+
 export type ScoutAskAction = {
   type: string;
   params: Record<string, unknown>;
   needsConfirm: boolean | Record<string, unknown>;
   jobRef: { kind: string; id: string } | null;
-  results: { kind: string; items: ContactPreview[] } | null;
+  results: { kind: 'contacts'; items: ContactPreview[] }
+    | { kind: 'jobs'; items: JobPreview[] }
+    | null;
 };
 
 export type ScoutAskEnvelope = {

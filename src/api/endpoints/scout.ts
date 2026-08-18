@@ -48,7 +48,17 @@ export function mapScoutRoute(route?: string): string | null {
      '/company-tracker', '/recruiter-spreadsheet', '/hiring-manager-tracker'].includes(r)
   )
     return '/(tabs)/feed';
-  if (['/tracker', '/outbox', '/my-network', '/my-network/people', '/contact-directory'].includes(r))
+  // /applications and /my-network/managers were unmapped, so every "Open
+  // Applications" chip Scout offered after an auto-apply, and every "Open
+  // Hiring Managers" chip after a manager search, was silently dropped: the
+  // student was told to go look somewhere and given nothing to tap.
+  // Applications is a tab inside Network, so the chip carries which tab to
+  // open. Without this, "Open Applications" dropped the student on Contacts.
+  if (r === '/applications') return '/(tabs)/network?tab=Applications';
+  if (
+    ['/tracker', '/outbox', '/my-network', '/my-network/people', '/contact-directory',
+     '/my-network/managers'].includes(r)
+  )
     return '/(tabs)/network';
   if (['/agent', '/agent/setup', '/loops'].includes(r)) return '/loops';
   if (['/coffee-chat-prep', '/coffee-chat-library', '/meeting-prep'].includes(r)) return '/meeting-prep/new';

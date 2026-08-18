@@ -1,13 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { listAppliedJobs } from '@/api/endpoints/autoApply';
 import { PEOPLE_SEARCH_BATCH } from '@/api/endpoints/peopleSearch';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
+import { track } from '@/lib/analytics';
+import { appliedCompanyKeys, buildAppliedPeoplePrompt } from '@/lib/appliedPeople';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -27,6 +31,11 @@ import { withRecentFilter } from '@/types';
  * The People deck also carries the email template link, because "who do I write
  * to" and "what does the email say" are the two halves of one decision, and the
  * template screen had no other home once this became the gear's destination.
+ *
+ * It carries "People where you applied" for the same reason (Nick 2026-08-17).
+ * That control shipped in Settings, which is where nobody looks for a way to
+ * build a feed. It is a one-tap alternative to typing the sentence yourself, so
+ * it belongs next to the box you would otherwise type it into.
  */
 
 type DeckKey = 'jobs' | 'people';
@@ -91,6 +100,8 @@ export default function FeedFilterScreen() {
   const recents =
     deck === 'jobs' ? swipeSettings.jobFilterRecents : swipeSettings.peopleFilterRecents;
 
+  const queryClient = useQueryClient();
+  const [buildingFromApplied, setBuildingFromApplied] = useState(false);
   const [draft, setDraft] = useState(active ?? '');
   const trimmed = draft.trim();
   const canSave = trimmed.length >= MIN_PROMPT && trimmed !== (active ?? '');
@@ -115,6 +126,40 @@ export default function FeedFilterScreen() {
     );
     showToast(copy.savedToast);
     router.back();
+  };
+
+  /**
+   * "People where you applied": write the deck's sentence out of the
+   * applications instead of making the student type it. Deliberately routed
+   * through apply() rather than setting the filter directly, so the sentence
+   * lands in recents and stays visible and editable in the box, exactly like
+   * one they typed. Our guess is a starting point, not a cage.
+   *
+   * Divisions are a follow-up (Nick 2026-08-17): buildAppliedPeoplePrompt takes
+   * a division override, but an application records a job title and not a
+   * department, so there is nothing honest to pass yet. Today it uses the real
+   * titles from your own applications.
+   */
+  const buildFromApplications = async () => {
+    if (buildingFromApplied) return;
+    setBuildingFromApplied(true);
+    try {
+      const applied = await queryClient.fetchQuery({
+        queryKey: ['applied-jobs'],
+        queryFn: () => listAppliedJobs(),
+      });
+      const prompt = buildAppliedPeoplePrompt(applied);
+      if (!prompt) {
+        showToast('Apply to a job first and this builds a deck from it.');
+        return;
+      }
+      track('people_from_applications', { companies: appliedCompanyKeys(applied).size });
+      apply(prompt);
+    } catch {
+      showToast('Could not read your applications. Try again in a moment.');
+    } finally {
+      setBuildingFromApplied(false);
+    }
   };
 
   return (
@@ -191,6 +236,25 @@ export default function FeedFilterScreen() {
           </Pressable>
         ) : null}
 
+        {/* One tap instead of a sentence, and only on the People deck: the
+            Jobs deck has no equivalent (you cannot search roles by where you
+            already applied). A button, not a card, and worded as the thing it
+            does rather than as a place you are going (Nick 2026-08-17). Sits
+            under the box so typing stays the primary move and this reads as
+            the shortcut. */}
+        {deck === 'people' ? (
+          <Button
+            label={
+              buildingFromApplied
+                ? 'Finding people…'
+                : 'Find people at companies you’ve applied to'
+            }
+            onPress={buildFromApplications}
+            disabled={buildingFromApplied}
+            fullWidth
+          />
+        ) : null}
+
         {/* Recents. The reason a filter is worth saving at all: last night's
             search comes back in one tap instead of being retyped. Tapping one
             applies it immediately, rather than filling the box and waiting for
@@ -241,7 +305,10 @@ export default function FeedFilterScreen() {
             {copy.examples.map((e) => (
               <Pressable key={e} onPress={() => setDraft(e)}>
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="sparkles-outline" size={17} color={colors.inkTertiary} />
+                  {/* A magnifier, not a sparkle. Sparkles read as AI slop
+                      (Rylan), and these rows are searches you can run, which
+                      the magnifier actually says. */}
+                  <Ionicons name="search-outline" size={17} color={colors.inkTertiary} />
                   <Text
                     style={{
                       flex: 1,

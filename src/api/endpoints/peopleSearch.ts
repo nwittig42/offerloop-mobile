@@ -150,17 +150,26 @@ export async function searchPeople(
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 0;
     /**
-     * The route is not on this backend yet (404/405), or we could not reach it
-     * at all. Fall back to fixtures rather than an error screen.
+     * The route is not deployed on this backend yet.
      *
-     * Same posture ranker.ts already takes for the same reason: the swipe flow
-     * has to stay walkable while the backend catches up, or the deck is
-     * un-reviewable until a deploy lands. The people are transparently fake, so
-     * nobody mistakes this for a real search, and the moment
-     * /api/mobile/people-search exists this branch stops being reached.
+     * This used to fall back to fixtures, the way ranker.ts does. Pulled
+     * (Nick 2026-08-17): a deck of "Sample Person 7" people, arriving instantly
+     * where a real search takes half a minute, made a working feature look
+     * broken and a broken one look working. A search either found real people
+     * or it did not. Fixtures now live only in mock mode, where the whole app
+     * is openly running on fixtures.
      */
-    if (status === 404 || status === 405 || status === 0 || status === 408) {
-      return mockSearchDeck(cursor);
+    if (status === 404 || status === 405) {
+      throw new PeopleSearchFailure(
+        'not_live',
+        'People search is not live on this build yet. It needs the backend deploy.',
+      );
+    }
+    if (status === 0 || status === 408) {
+      throw new PeopleSearchFailure(
+        'failed',
+        'That search timed out. It can take a while, try again.',
+      );
     }
     if (status === 429) {
       throw new PeopleSearchFailure(
@@ -205,10 +214,10 @@ export async function revealAndWrite(
   personId: string,
   action: 'draft' | 'send',
 ): Promise<RevealPersonResult> {
-  // Fixtures: mock mode, or a deck that came from the 404 fallback above. Report
-  // a drafted fixture so the swipe, the toast and the deck advance are all
-  // walkable. `charged: false` is the honest answer, since no credits moved.
-  if (USE_MOCKS || deckId === 'mock-search-deck') {
+  // Mock mode only. Report a drafted fixture so the swipe, the toast and the
+  // deck advance stay walkable offline. `charged: false` is the honest answer,
+  // since no credits moved.
+  if (USE_MOCKS) {
     return {
       email: 'sample.person@fixture.test',
       verified: true,

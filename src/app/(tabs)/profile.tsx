@@ -1,35 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
-import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import * as Updates from 'expo-updates';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { deleteAccount, saveTargetTrack } from '@/api/endpoints/preferences';
-import NightSky from '@/components/NightSky';
-import ReferralCard from '@/components/ReferralCard';
-import * as WebBrowser from 'expo-web-browser';
+import { saveTargetTrack } from '@/api/endpoints/preferences';
 
-import { deleteResume, pickResume, uploadResume } from '@/api/endpoints/resume';
-import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
+import { getApplicationProfile } from '@/api/endpoints/autoApply';
+import { iapAvailable } from '@/api/purchases';
+import { presentPaywall } from '@/components/paywall/paywallBus';
+import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
-import { OTA_NOTES, otaStamp, SHOW_BUILD_STAMP } from '@/lib/buildInfo';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -41,9 +35,8 @@ import {
   INDUSTRY_SUGGESTIONS,
   TARGET_ROLE_SUGGESTIONS,
 } from '@/mocks/data';
-import { useAIConsent } from '@/lib/aiConsent';
 import { useApp } from '@/store/app';
-import { useColors, useTheme, type ThemePref } from '@/theme/ThemeProvider';
+import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 const splitList = (s: string) =>
@@ -53,11 +46,84 @@ const splitList = (s: string) =>
     .filter(Boolean);
 
 /** A soft, borderless personalization row with a hairline under it. */
-/** Display-only capitalization for parsed resume text: LinkedIn-sourced
- *  bullets often arrive lowercase, which reads sloppy in the gathered view. */
-function capFirst(s: string): string {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+/**
+ * A group heading in Settings.
+ *
+ * Settings had grown to thirteen unlabelled rows in one flat stack, with Sign
+ * out buried inside the same card as the Gmail connection. Grouping is the
+ * whole fix: a student looking for one thing now scans five short headings
+ * instead of reading thirteen rows.
+ */
+/**
+ * Everything that gets submitted, stated plainly.
+ *
+ * Label above, value below, at full width. The first version put label and
+ * value on one line, which truncated the two things a student most needs to
+ * check are right — their email and their LinkedIn — into "deena.bandi004@gmail…"
+ * and "https://www.linkedin.co…". A page whose whole job is showing exactly
+ * what goes out cannot hide the values.
+ *
+ * Anything missing says "Not set" in amber rather than sitting blank: a blank
+ * row reads as "nothing to do" when it is the exact reason an application
+ * stalls and comes back asking for answers.
+ */
+
+function ResumeDrop({
+  hasResume,
+  busy,
+  onPress,
+}: {
+  hasResume: boolean;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable onPress={onPress} disabled={busy} accessibilityRole="button">
+      <Card
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: busy ? 0.6 : 1 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: hasResume ? colors.positive + '18' : colors.accent + '14',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons
+              name={hasResume ? 'document-text' : 'cloud-upload-outline'}
+              size={18}
+              color={hasResume ? colors.positive : colors.accent}
+            />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+            {hasResume ? 'Resume attached' : 'Add your resume'}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+            {busy
+              ? 'Uploading and reading it…'
+              : hasResume
+                ? 'Tap to replace it with a new PDF'
+                : 'We read it once and fill in the rest for you'}
+          </Text>
+        </View>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
+          {hasResume ? 'Replace' : 'Upload'}
+        </Text>
+      </Card>
+    </Pressable>
+  );
 }
+
 
 function SoftRow({ label, children, last }: { label: string; children: ReactNode; last?: boolean }) {
   const colors = useColors();
@@ -154,109 +220,10 @@ function ProfileCompletion({
   );
 }
 
-const APPEARANCE: { key: ThemePref; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'light', label: 'Light', icon: 'sunny-outline' },
-  { key: 'dark', label: 'Dark', icon: 'moon-outline' },
-];
-
 /**
  * Appearance picker: a two-way segmented control (Light / Dark). The choice is
  * sticky; it drives the whole app through ThemeProvider.
  */
-function AppearanceSelector() {
-  const colors = useColors();
-  const { pref, setPref, accentTheme, setAccentTheme, school } = useTheme();
-
-  return (
-    <Card style={{ gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Ionicons name="contrast-outline" size={18} color={colors.inkSecondary} />
-        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-          Appearance
-        </Text>
-      </View>
-      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-        Choose how Offerloop looks on this device.
-      </Text>
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: 6,
-          backgroundColor: colors.paper2,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: colors.hairline,
-          padding: 4,
-        }}>
-        {APPEARANCE.map((opt) => {
-          const selected = opt.key === pref;
-          return (
-            <Pressable
-              key={opt.key}
-              onPress={() => setPref(opt.key)}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                paddingVertical: 9,
-                borderRadius: 7,
-                backgroundColor: selected ? colors.navy : 'transparent',
-              }}>
-              <Ionicons
-                name={opt.icon}
-                size={15}
-                color={selected ? colors.paper : colors.inkSecondary}
-              />
-              <Text
-                style={{
-                  fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
-                  fontSize: 13,
-                  color: selected ? colors.paper : colors.inkSecondary,
-                }}>
-                {opt.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Only offered when the profile matched a real school: with no match
-          the old fallback tinted everyone in USC colors, which is fake data
-          wearing a reward costume. */}
-      {school ? (
-        <>
-          <View style={{ height: 1, backgroundColor: colors.hairlineLight, marginVertical: 2 }} />
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-              <Ionicons name="color-palette-outline" size={18} color={colors.inkSecondary} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    {school.name} colors
-                  </Text>
-                  <Chip label="Milestone reward" tone="accent" />
-                </View>
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                  Tint the app in your school's colors. Earned in Milestones.
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={accentTheme === 'school'}
-              onValueChange={(on) => setAccentTheme(on ? 'school' : 'default')}
-              trackColor={{ true: colors.accent, false: colors.hairline }}
-            />
-          </View>
-        </>
-      ) : null}
-    </Card>
-  );
-}
 
 /**
  * Profile, Sorce-style: credits banner, identity, then a horizontal tab
@@ -267,19 +234,7 @@ function AppearanceSelector() {
  * with Scout chilling in the space. No purchase flow (App Store 3.1.1).
  */
 
-const TABS = [
-  { key: 'personal', label: 'Personal', icon: 'person-outline' },
-  // "Apply kit", not "Applications": Network already has an Applications view
-  // (the in-progress auto-applies), and two tabs with one name is a maze.
-  // This tab is the stuff you apply WITH; that one is the applying itself.
-  { key: 'applications', label: 'Apply kit', icon: 'briefcase-outline' },
-  { key: 'settings', label: 'Settings', icon: 'settings-outline' },
-  { key: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
-] as const;
 
-type TabKey = (typeof TABS)[number]['key'];
-
-const REVIEWER_REPLAY_EMAILS = ['applereview@offerloop.ai'];
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -288,21 +243,45 @@ export default function ProfileScreen() {
   const {
     profile,
     connection,
-    resumeExperiences,
     unreadCount,
     draftsLeft,
     costPerSwipe,
-    notificationsEnabled,
-    setNotificationsEnabled,
     updateProfile,
     enrichLinkedin,
-    resetOnboarding,
     showToast,
   } = useApp();
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
 
-  const [tab, setTab] = useState<TabKey>('personal');
+  // ?tab=settings opens straight on a tab, the same way Network already
+  // works. The first-run tour uses it to land on Settings.
   const [resumeBusy, setResumeBusy] = useState(false);
+  // The answers auto-apply actually submits. Read-only here; the edit screen
+  // owns writing them.
+  const appProfileQuery = useQuery({
+    queryKey: ['application-profile'],
+    queryFn: getApplicationProfile,
+  });
+  const appProfile = appProfileQuery.data;
+
+  // How many of the submitted fields are still blank. Drives the amber count
+  // on the "What we send" row, and it is the same nine fields that screen
+  // lists, so the two can never disagree about how much is left.
+  const blankAnswers = useMemo(() => {
+    const wa = appProfile?.workAuthorization;
+    const prefs = appProfile?.preferences;
+    const values = [
+      profile.hasResume ? 'y' : null,
+      profile.name || null,
+      profile.gmailAddress || null,
+      profile.linkedinUrl || null,
+      wa?.authorizedToWorkUS ?? null,
+      wa?.requiresSponsorship ?? null,
+      prefs?.openToRelocation ?? null,
+      prefs?.openToRemote ?? null,
+      prefs?.earliestStartDate || null,
+    ];
+    return values.filter((v) => v === null || v === undefined).length;
+  }, [appProfile, profile.hasResume, profile.name, profile.gmailAddress, profile.linkedinUrl]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const queryClient = useQueryClient();
 
@@ -332,36 +311,6 @@ export default function ProfileScreen() {
   // Same removal the Attachments screen offers (backend deletes the stored
   // file AND the parsed data), surfaced here because this tab is where people
   // actually manage their resume (Rylan, 2026-08-10). Ask first: destructive.
-  const onRemoveResume = () => {
-    Alert.alert(
-      'Remove your resume?',
-      'This deletes the file and everything we parsed from it. Auto-apply stops working until you add another one.',
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                setResumeBusy(true);
-                await deleteResume();
-                await queryClient.invalidateQueries({ queryKey: qk.me });
-                showToast('Resume removed');
-              } catch {
-                showToast("Couldn't remove it. Try again.");
-              } finally {
-                setResumeBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-  const [parseOpen, setParseOpen] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
-  const { consent: aiConsent } = useAIConsent();
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [enriching, setEnriching] = useState(false);
 
@@ -380,11 +329,11 @@ export default function ProfileScreen() {
     about: useRef<TextInput>(null),
   };
 
-  // Jump-to-field for the completion card: switch to Personal, then (after the
-  // tab's fields mount) scroll the field under the header and open the keyboard
-  // in it. If measuring fails we still focus; worst case the keyboard covers it.
+  // Jump-to-field for the completion card. If measuring fails we still focus;
+  // worst case the keyboard covers it.
   const focusField = (which: keyof typeof fieldRefs) => {
-    setTab('personal');
+    // The fields live on this screen now, so there is no tab to switch to
+    // first: scroll the field under the header and open the keyboard in it.
     setTimeout(() => {
       const input = fieldRefs[which].current;
       const scroller = scrollRef.current;
@@ -400,17 +349,15 @@ export default function ProfileScreen() {
     }, 150);
   };
 
-  // Completion-card steps ACT instead of just switching tabs: one-tap system
-  // flows fire immediately, text fields get the cursor placed in them.
+  // Completion-card steps ACT rather than just pointing: one-tap system flows
+  // fire immediately, text fields get the cursor placed in them. Gmail lives
+  // on the Settings screen now, so that one pushes and connects on arrival.
   const onCompletionAction = (action: StepAction) => {
     if (action === 'resume') {
-      // Show Applications (where the resume lives) and open the picker right
-      // away, the step is the action.
-      setTab('applications');
       void onPickResume();
     } else if (action === 'gmail') {
-      setTab('settings');
       if (!profile.gmailConnected && !gmailConnecting) void connectGmail();
+      router.push('/settings');
     } else {
       focusField(action);
     }
@@ -483,8 +430,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <NightSky />
+    <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <Header
         title="Profile"
         mark
@@ -493,98 +439,18 @@ export default function ProfileScreen() {
       />
 
       <View style={{ flex: 1 }}>
-        {/* Watercolor mountains wash behind the whole page. A surface scrim (lighter
-            up top, near-opaque lower down) keeps cards and copy legible while the
-            painting still shows through — subtle in the forms, richer in the hero. */}
-        <Image
-          source={require('../../../assets/images/watercolor-mountains.webp')}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-        <LinearGradient
-          pointerEvents="none"
-          colors={[colors.surface + '80', colors.surface + 'D9', colors.surface + 'EB'] as const}
-          locations={[0, 0.4, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-
+        {/* Plain paper. The watercolor mountains and their scrim came off here:
+            the page is a record you read and edit, and a painting behind a
+            column of white cards was doing nothing but competing with them.
+            Cards carry their own hairline, so they still read on white. */}
         <ScrollView
           ref={scrollRef}
-          style={{ flex: 1, backgroundColor: 'transparent' }}
+          style={{ flex: 1, backgroundColor: colors.paper }}
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
-          {/* Credits hero banner (Rylan 2026-07-28): the doorway to the store
-              gets the biggest weight on the page; serif balance up front. */}
-          <Pressable onPress={() => router.push('/credits')}>
-            <LinearGradient
-              colors={['#1B2A44', '#2563EB', '#5B9BF4'] as const}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 14,
-                borderRadius: 16,
-                paddingHorizontal: 18,
-                paddingVertical: 20,
-              }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                <Ionicons name="flash" size={21} color={colors.bolt} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 7 }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.display,
-                      fontSize: 28,
-                      lineHeight: 30,
-                      color: colors.paper,
-                    }}>
-                    {profile.credits.toLocaleString()}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sansSemibold,
-                      fontSize: 12,
-                      letterSpacing: 0.6,
-                      color: '#DCE6FB',
-                      paddingBottom: 4,
-                    }}>
-                    CREDITS
-                  </Text>
-                  {profile.plan !== 'Free' ? (
-                    <View
-                      style={{
-                        borderRadius: 6,
-                        paddingHorizontal: 7,
-                        paddingVertical: 2,
-                        marginBottom: 3,
-                        backgroundColor: 'rgba(255,255,255,0.22)',
-                      }}>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10, color: colors.paper }}>
-                        {profile.plan.toUpperCase()}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#DCE6FB', marginTop: 3 }}>
-                  {swipesLabel} · View credits and packs
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#DCE6FB" />
-            </LinearGradient>
-          </Pressable>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 4 }}>
+          <Card style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             {profile.photoUrl ? (
               <Image
                 source={{ uri: profile.photoUrl }}
@@ -610,29 +476,50 @@ export default function ProfileScreen() {
               </View>
             )}
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.ink }}>
-                  {profile.name}
-                </Text>
-                {profile.plan !== 'Free' ? (
-                  <View
-                    style={{
-                      borderRadius: 6,
-                      paddingHorizontal: 6,
-                      paddingVertical: 1,
-                      backgroundColor: colors.marketing,
-                    }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10, color: colors.paper }}>
-                      {profile.plan.toUpperCase()}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
+              <Text
+                numberOfLines={2}
+                style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.ink }}>
+                {profile.name}
+              </Text>
+              <Text
+                numberOfLines={2}
+                style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
                 {profile.school}
               </Text>
             </View>
             {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
+
+            {/* Credits, as a ring. The arc is what is LEFT: a full ring means a
+                full wallet and it drains as you spend, which is the direction
+                people read a gauge. The number inside repeats it for anyone
+                who wants the figure. Replaced a full-width gradient banner
+                that shouted the same fact and matched nothing else here. */}
+            <Pressable
+              onPress={() => router.push('/credits')}
+              accessibilityRole="button"
+              accessibilityLabel={`${profile.credits} credits left of ${profile.maxCredits}. ${swipesLabel}`}
+              style={{ alignItems: 'center', gap: 2 }}>
+              <CircleProgress
+                size={58}
+                strokeWidth={6}
+                progress={
+                  profile.maxCredits
+                    ? Math.min(1, profile.credits / profile.maxCredits)
+                    : profile.credits > 0
+                      ? 1
+                      : 0
+                }
+                color={colors.accent}
+                label={
+                  profile.credits >= 1000
+                    ? `${Math.round(profile.credits / 100) / 10}k`
+                    : String(profile.credits)
+                }
+              />
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: colors.inkTertiary }}>
+                credits left
+              </Text>
+            </Pressable>
             {/* Share-your-progress, compacted to a gradient-outlined icon beside
                 the name instead of a full-width card — same destination (/share),
                 far less vertical space. The 1.5px gradient pad is the outline;
@@ -659,6 +546,60 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
+          <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
+
+          {/* The buying action, on the page people open when they wonder about
+              credits. Only rendered when purchases actually work: a dead
+              Upgrade button is worse than none, and a build with no working
+              purchase must show nothing buyable at all. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                {profile.plan} plan
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                {profile.credits > profile.maxCredits || !profile.maxCredits
+                  ? `${profile.credits.toLocaleString()} left`
+                  : `${profile.credits.toLocaleString()} of ${profile.maxCredits.toLocaleString()} left`}
+                {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
+              </Text>
+            </View>
+            {iapAvailable() ? (
+              <Pressable
+                onPress={() =>
+                  presentPaywall({ context: profile.plan === 'Free' ? 'credits-screen' : 'draft' })
+                }
+                accessibilityRole="button"
+                style={{
+                  height: 34,
+                  paddingHorizontal: 14,
+                  borderRadius: 8,
+                  backgroundColor: colors.ink,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.paper }}>
+                  {profile.plan === 'Free' ? 'Upgrade' : 'Get more credits'}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable onPress={() => router.push('/credits')} accessibilityRole="button">
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
+                  See credits
+                </Text>
+              </Pressable>
+            )}
+          </View>
+          </Card>
+
+          {/* Resume, reachable from the top of the page at any time. It used
+              to live only inside the Application tab, so "drop in my resume"
+              meant knowing which of three tabs it was behind. Every draft and
+              every auto-apply depends on this one file. The full tools (edit
+              the parse, build one from LinkedIn, write one from a
+              description) stay in the Application tab. */}
+          <ResumeDrop hasResume={profile.hasResume} busy={resumeBusy} onPress={onPickResume} />
+
           {/* Checklist reads the LIVE typed values, not just the saved
               profile: Rylan typed his grad year and the list still nagged him
               because he had not hit Save yet. Saving still persists; the
@@ -677,51 +618,100 @@ export default function ProfileScreen() {
             onAction={onCompletionAction}
           />
 
-          <ReferralCard compact />
-
         </View>
 
-        <View style={{ borderBottomWidth: 1, borderBottomColor: colors.hairline, marginTop: 8 }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 20, gap: 22 }}>
-            {TABS.map((t) => {
-              const selected = t.key === tab;
-              return (
-                <Pressable
-                  key={t.key}
-                  // Feedback opens the full-screen chat instead of rendering
-                  // cramped inside the profile layout — it's a proper screen.
-                  onPress={() => (t.key === 'feedback' ? router.push('/feedback') : setTab(t.key))}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingVertical: 10,
-                    borderBottomWidth: 2,
-                    borderBottomColor: selected ? colors.navy : 'transparent',
-                  }}>
-                  <Ionicons name={t.icon} size={15} color={selected ? colors.navy : colors.inkTertiary} />
-                  <Text
-                    style={{
-                      fontFamily: selected ? fonts.sansSemibold : fonts.sansMedium,
-                      fontSize: 13.5,
-                      color: selected ? colors.navy : colors.inkTertiary,
-                    }}>
-                    {t.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+
+        <View style={{ paddingHorizontal: 20, paddingTop: 6, gap: 8 }}>
+          {/* GO TO: the two doors out of this page. The old build made these
+              tabs, which put "delete my account" at the same level as "my
+              name" and buried the application payload behind a coined label.
+              They are destinations, so they look like destinations. */}
+          <Text
+            style={{
+              fontFamily: fonts.sansSemibold,
+              fontSize: 11,
+              letterSpacing: 0.9,
+              color: colors.accent,
+              paddingHorizontal: 4,
+            }}>
+            GO TO
+          </Text>
+          <Card padded={false} style={{ paddingHorizontal: 16 }}>
+            <Pressable
+              onPress={() => router.push('/what-we-send')}
+              accessibilityRole="button"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13, minHeight: 48 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: colors.accent,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="paper-plane-outline" size={16} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+                  What we send on applications
+                </Text>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+                  The exact payload, 9 fields
+                </Text>
+              </View>
+              {blankAnswers > 0 ? (
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.waiting }}>
+                  {blankAnswers} blank
+                </Text>
+              ) : null}
+              <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+            </Pressable>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairlineLight }} />
+            <Pressable
+              onPress={() => router.push('/settings')}
+              accessibilityRole="button"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13, minHeight: 48 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: colors.accent + '14',
+                  borderWidth: 1,
+                  borderColor: colors.accent + '2E',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="settings-outline" size={16} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
+                  Settings
+                </Text>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
+                  Outreach, appearance, privacy, account
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+            </Pressable>
+          </Card>
         </View>
+
 
         <View style={{ padding: 20, gap: 16 }}>
-          {tab === 'personal' ? (
-            <>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
-                This is what Offerloop uses to write like you. Keep it loose and human.
+          <>
+              <Text
+                style={{
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 11,
+                  letterSpacing: 0.9,
+                  color: colors.accent,
+                }}>
+                YOUR DETAILS
+              </Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19, marginTop: -10 }}>
+                Used to find the right people and to draft outreach in your voice.
               </Text>
 
               {/* One soft card, rows separated by hairlines, no boxy inputs. */}
@@ -857,583 +847,6 @@ export default function ProfileScreen() {
                 Deeper personalization, templates, and tone live on offerloop.ai
               </Text>
             </>
-          ) : null}
-
-          {/* Applications: everything that touches a real application in one
-              place (Rylan 2026-08-10). Application profile, the resume file,
-              and what we gathered from resume + LinkedIn. Personal stays "who
-              you are"; this tab is "what you apply with". */}
-          {tab === 'applications' ? (
-            <>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19 }}>
-                What travels with your applications and outreach.
-              </Text>
-
-              {/* Application profile lives here ONLY (removed from Settings,
-                  Rylan 2026-08-10, no duplicated rows). */}
-              <Pressable onPress={() => router.push('/application-profile')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Application profile
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      What auto-apply fills in for you on every job
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              {/* Location preferences moved here from Settings (Rylan
-                  2026-08-10): it steers which jobs auto-apply considers, so
-                  it belongs with the application tools. */}
-              <Pressable onPress={() => router.push('/location-preferences')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="location-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Location preferences
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      {profile.preferredLocations?.length
-                        ? profile.preferredLocations.slice(0, 3).join(' · ') +
-                          (profile.preferredLocations.length > 3 ? ' …' : '')
-                        : 'Where you’d actually take a job'}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              {/* ONE resume container (Rylan 2026-08-10, round 2): the file
-                  row IS the card. The chevron on the row expands the parse
-                  inline (no separate "what we gathered" row), row tap opens
-                  the PDF, and Replace / Remove share a proper split bottom
-                  row instead of floating loose. */}
-              <Card padded={false}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
-                  <Pressable
-                    disabled={!profile.hasResume || !profile.resume.url}
-                    onPress={() => {
-                      // Cache-buster: the stored PDF keeps ONE fixed URL, so
-                      // after a replace/rebuild both iOS and the CDN happily
-                      // serve the stale bytes. A unique query forces a fresh
-                      // fetch (Rylan hit this: rebuilt resume, old PDF shown).
-                      if (profile.resume.url) {
-                        const u = profile.resume.url;
-                        void WebBrowser.openBrowserAsync(
-                          `${u}${u.includes('?') ? '&' : '?'}cb=${Date.now()}`,
-                        );
-                      }
-                    }}
-                    accessibilityLabel="View resume PDF"
-                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        backgroundColor: colors.accent + '14',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                      <Ionicons name="document-text-outline" size={19} color={colors.accent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        numberOfLines={1}
-                        style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
-                        {profile.resume.name}
-                      </Text>
-                      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                        {profile.hasResume && profile.resume.url
-                          ? 'Attached to every email · tap to view'
-                          : profile.resume.updatedLabel}
-                      </Text>
-                    </View>
-                    {resumeBusy ? (
-                      <ActivityIndicator size="small" color={colors.accent} />
-                    ) : profile.hasResume ? (
-                      <Chip label="Attached" tone="positive" dot />
-                    ) : (
-                      <Chip label="Not added" tone="neutral" />
-                    )}
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setParseOpen((v) => !v)}
-                    hitSlop={12}
-                    accessibilityRole="button"
-                    accessibilityLabel="Show what we gathered from your resume">
-                    <Ionicons
-                      name={parseOpen ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={colors.inkTertiary}
-                    />
-                  </Pressable>
-                </View>
-
-                {parseOpen ? (
-                  <View
-                    style={{
-                      paddingHorizontal: 16,
-                      paddingBottom: 14,
-                      gap: 14,
-                      borderTopWidth: 1,
-                      borderTopColor: colors.hairlineLight,
-                      paddingTop: 12,
-                    }}>
-                    {resumeExperiences.length === 0 ? (
-                      <Text
-                        style={{
-                          fontFamily: fonts.sans,
-                          fontSize: 12.5,
-                          color: colors.inkTertiary,
-                          lineHeight: 18,
-                        }}>
-                        No resume on file yet. Upload one below, or build one from your
-                        LinkedIn, and the parse shows up here.
-                      </Text>
-                    ) : (
-                      resumeExperiences.map((exp) => (
-                        <View key={exp.id} style={{ gap: 6 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink, flex: 1 }}>
-                              {capFirst(exp.role)}
-                            </Text>
-                            <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                              {exp.dates}
-                            </Text>
-                          </View>
-                          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.accent }}>
-                            {capFirst(exp.org)}
-                            {exp.location ? `  ·  ${exp.location}` : ''}
-                          </Text>
-                          <View style={{ gap: 5, marginTop: 2 }}>
-                            {exp.bullets.map((b, i) => (
-                              <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                                <Text style={{ color: colors.inkTertiary, fontSize: 13 }}>•</Text>
-                                <Text
-                                  style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
-                                  {capFirst(b)}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      ))
-                    )}
-                  </View>
-                ) : null}
-
-                {/* Bottom actions (Rylan 2026-08-11, round 3): Edit far left,
-                    Replace center, trash far right, evenly spread across the
-                    row. With no resume yet, the lone Upload button centers. */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: profile.hasResume ? 'space-between' : 'center',
-                    borderTopWidth: 1,
-                    borderTopColor: colors.hairlineLight,
-                    paddingHorizontal: 4,
-                  }}>
-                  {RESUME_BUILDER_LIVE && profile.hasResume ? (
-                    <Pressable
-                      onPress={() => router.push('/resume-edit')}
-                      disabled={resumeBusy}
-                      accessibilityRole="button"
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 7,
-                        paddingVertical: 13,
-                        paddingHorizontal: 14,
-                        opacity: resumeBusy ? 0.5 : 1,
-                      }}>
-                      <Ionicons name="create-outline" size={15} color={colors.accent} />
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
-                        Edit
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  <Pressable
-                    onPress={onPickResume}
-                    disabled={resumeBusy}
-                    accessibilityRole="button"
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 7,
-                      paddingVertical: 13,
-                      paddingHorizontal: 14,
-                      opacity: resumeBusy ? 0.5 : 1,
-                    }}>
-                    <Ionicons name="cloud-upload-outline" size={15} color={colors.accent} />
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.accent }}>
-                      {profile.hasResume ? 'Replace' : 'Upload resume'}
-                    </Text>
-                  </Pressable>
-                  {profile.hasResume ? (
-                    <Pressable
-                      onPress={onRemoveResume}
-                      disabled={resumeBusy}
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove resume"
-                      hitSlop={8}
-                      style={{
-                        paddingVertical: 13,
-                        paddingHorizontal: 14,
-                        opacity: resumeBusy ? 0.5 : 1,
-                      }}>
-                      <Ionicons name="trash-outline" size={15} color={colors.negative} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              </Card>
-
-              {/* Doors two and three, permanent home: build from LinkedIn or
-                  from a typed description. The Feed's blocked-swipe sheet
-                  offers these too, but nobody should need a blocked swipe to
-                  find the builder. */}
-              {RESUME_BUILDER_LIVE && !profile.hasResume ? (
-                <>
-                  <Button
-                    label="Build one from your LinkedIn"
-                    variant="outline"
-                    fullWidth
-                    icon="logo-linkedin"
-                    disabled={resumeBusy}
-                    onPress={() => router.push('/resume-preview')}
-                  />
-                  <Button
-                    label="Describe your experience instead"
-                    variant="outline"
-                    fullWidth
-                    icon="create-outline"
-                    disabled={resumeBusy}
-                    onPress={() => router.push('/resume-from-text')}
-                  />
-                </>
-              ) : null}
-
-              {!parseOpen ? (
-                <View style={{ alignItems: 'center', paddingVertical: 12, gap: 10 }}>
-                  <Image
-                    source={require('../../../assets/images/scout-prep.png')}
-                    style={{ width: 130, height: 104 }}
-                    resizeMode="contain"
-                  />
-                  <Text
-                    style={{
-                      fontFamily: fonts.sans,
-                      fontSize: 12.5,
-                      color: colors.inkTertiary,
-                      textAlign: 'center',
-                      maxWidth: 250,
-                      lineHeight: 18,
-                    }}>
-                    Scout read your resume so every draft sounds like you. Tap above to see
-                    what we picked up.
-                  </Text>
-                </View>
-              ) : null}
-
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                Replace your resume or update your LinkedIn and this view refreshes with it.
-              </Text>
-            </>
-          ) : null}
-
-          {tab === 'settings' ? (
-            <>
-              {/* Swipe settings is gone (Nick 2026-08-16): draft-or-send moved
-                  onto the feed bars, applying is simply what a right swipe
-                  does, and the rest of that screen configured a find step the
-                  decks no longer expose. This row now points at the one thing
-                  from it that had nowhere else to live. */}
-              <Pressable onPress={() => router.push('/attachments')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="attach-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Attached to every email
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      What travels with your outreach
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              <Pressable onPress={() => router.push('/outreach-template')}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: colors.accent + '14',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    <Ionicons name="create-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                      Outreach template
-                    </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                      How your drafted emails are written and signed
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-                </Card>
-              </Pressable>
-
-              <AppearanceSelector />
-
-              <Card style={{ gap: 14 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Ionicons name="mail-outline" size={18} color={colors.inkSecondary} />
-                    <View>
-                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                        Gmail
-                      </Text>
-                      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                        {profile.gmailConnected ? profile.gmailAddress : 'Not connected'}
-                      </Text>
-                    </View>
-                  </View>
-                  {/* Real in-app OAuth: the product runs on the user's Gmail
-                      (sends, drafts, reply tracking), so connecting must never
-                      require a detour to the website. */}
-                  <Pressable
-                    onPress={() => {
-                      if (!profile.gmailConnected && !gmailConnecting) void connectGmail();
-                    }}
-                    disabled={profile.gmailConnected || gmailConnecting}>
-                    <Chip
-                      label={
-                        profile.gmailConnected
-                          ? 'Connected'
-                          : gmailConnecting
-                            ? 'Connecting...'
-                            : 'Connect'
-                      }
-                      tone={profile.gmailConnected ? 'positive' : 'accent'}
-                      dot={profile.gmailConnected}
-                    />
-                  </Pressable>
-                </View>
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Ionicons name="notifications-outline" size={18} color={colors.inkSecondary} />
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                      Push notifications
-                    </Text>
-                  </View>
-                  <Switch
-                    value={notificationsEnabled}
-                    onValueChange={setNotificationsEnabled}
-                    trackColor={{ true: colors.accent, false: colors.hairline }}
-                  />
-                </View>
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-                {/* In-app dialog, not Alert.alert (2026-08-16). Alert is a
-                    NO-OP on react-native-web, so in the browser preview this
-                    button opened nothing and read as broken: you could sign in
-                    but never out, which makes re-testing signup impossible
-                    without clearing site data by hand. Same fix the feed's
-                    ask-first controls already got. */}
-                <Button
-                  label="Sign out"
-                  variant="ghost"
-                  onPress={() => setConfirmSignOut(true)}
-                />
-              </Card>
-
-              {/* Legal + account controls. Privacy/Terms links and in-app account
-                  deletion are App Store requirements (deletion is Apple 5.1.1(v),
-                  a hard rejection without it). */}
-              <Card padded={false} style={{ paddingHorizontal: 16 }}>
-                {/* AI data-sharing choice, reviewable and reversible any time
-                    (guidelines 5.1.1(i)/5.1.2(i)). */}
-                <Pressable
-                  onPress={() => router.push({ pathname: '/ai-consent', params: { mode: 'settings' } })}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
-                  <Ionicons name="sparkles-outline" size={18} color={colors.inkSecondary} />
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    AI and your data
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-                    {aiConsent === 'granted' ? 'Allowed' : 'Off'}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={15} color={colors.inkTertiary} />
-                </Pressable>
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-                <Pressable
-                  onPress={() => Linking.openURL('https://offerloop.ai/privacy')}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
-                  <Ionicons name="shield-checkmark-outline" size={18} color={colors.inkSecondary} />
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    Privacy Policy
-                  </Text>
-                  <Ionicons name="open-outline" size={15} color={colors.inkTertiary} />
-                </Pressable>
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-                <Pressable
-                  onPress={() => Linking.openURL('https://offerloop.ai/terms-of-service')}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
-                  <Ionicons name="document-text-outline" size={18} color={colors.inkSecondary} />
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                    Terms of Service
-                  </Text>
-                  <Ionicons name="open-outline" size={15} color={colors.inkTertiary} />
-                </Pressable>
-                <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
-                <Pressable
-                  disabled={deletingAccount}
-                  onPress={() =>
-                    Alert.alert(
-                      'Delete account',
-                      'This permanently deletes your account and all your data — contacts, drafts, applications, and settings. This can’t be undone.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Delete',
-                          style: 'destructive',
-                          onPress: async () => {
-                            setDeletingAccount(true);
-                            try {
-                              await deleteAccount();
-                              await signOut();
-                            } catch {
-                              setDeletingAccount(false);
-                              Alert.alert('Couldn’t delete', 'Something went wrong — try again, or email us at team@offerloop.ai.');
-                            }
-                          },
-                        },
-                      ],
-                    )
-                  }
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
-                  <Ionicons name="trash-outline" size={18} color={colors.negative} />
-                  <Text style={{ flex: 1, fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.negative }}>
-                    {deletingAccount ? 'Deleting…' : 'Delete account'}
-                  </Text>
-                </Pressable>
-              </Card>
-              {__DEV__ ? (
-                <Button label="Design gallery" variant="outline" onPress={() => router.push('/design')} />
-              ) : null}
-              {/* P0 prototype for the voice tab (PLAN-scout-voice.md) — here so
-                  the orb can be felt on-device before the design locks. Dev
-                  builds only: both screens carry placeholder fixture content
-                  (Apple 2.2 risk in a store build; sweep blocker #2). */}
-              {__DEV__ ? (
-                <Button
-                  label="Scout orb preview"
-                  variant="outline"
-                  onPress={() => router.push('/dev/scout-orb' as never)}
-                />
-              ) : null}
-              {__DEV__ ||
-              REVIEWER_REPLAY_EMAILS.includes((user?.email || '').toLowerCase()) ? (
-                <Button
-                  label="Replay onboarding"
-                  variant="outline"
-                  onPress={() => {
-                    // Onboarding is opt-in now (not force-gated), so enter it
-                    // explicitly. resetOnboarding clears the completion flag so
-                    // a future new-user gate would show it again. Exposed for
-                    // reviewer/founder accounts to re-test without a reinstall.
-                    resetOnboarding();
-                    router.push('/(onboarding)');
-                  }}
-                />
-              ) : null}
-              {/* Which OTA is this phone actually running? Bumped on every
-                  publish (src/lib/buildInfo.ts) so testers can tell at a
-                  glance whether the change they are checking has landed.
-                  Hidden on store builds; it is a staging QA affordance. */}
-              {SHOW_BUILD_STAMP && (
-                <View style={{ gap: 2, paddingTop: 6 }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sansMedium,
-                      fontSize: 11.5,
-                      color: colors.inkTertiary,
-                      textAlign: 'center',
-                    }}>
-                    {otaStamp()}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sans,
-                      fontSize: 11,
-                      color: colors.inkTertiary,
-                      textAlign: 'center',
-                    }}>
-                    {OTA_NOTES}
-                  </Text>
-                </View>
-              )}
-            </>
-          ) : null}
-
-          {/* Which JS bundle is this phone actually running? Answers
-              "did the OTA land" at a glance — updateId is null while on
-              the build's embedded bundle. Outside the segment conditionals
-              on purpose: visible from any Profile segment. */}
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 11,
-              color: colors.inkTertiary,
-              textAlign: 'center',
-              marginTop: 4,
-            }}>
-            {Updates.updateId
-              ? `Update ${Updates.updateId.slice(0, 8)}${
-                  Updates.createdAt ? ` · ${new Date(Updates.createdAt).toLocaleString()}` : ''
-                }`
-              : 'Embedded bundle — no OTA applied yet'}
-          </Text>
         </View>
       </ScrollView>
 
@@ -1443,7 +856,7 @@ export default function ProfileScreen() {
         visible={confirmSignOut}
         icon="log-out-outline"
         title="Sign out?"
-        body="You'll need to sign back in to reach your feed, drafts, and credits. Nothing is deleted."
+        body="You'll need to sign back in to reach your feed, drafts, and credits."
         confirmLabel="Sign out"
         cancelLabel="Stay signed in"
         onConfirm={() => void signOut()}

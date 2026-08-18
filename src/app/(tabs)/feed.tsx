@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -16,8 +15,8 @@ import GlassBar from '@/components/GlassBar';
 import NightSky from '@/components/NightSky';
 import Header from '@/components/Header';
 import ReferralCard from '@/components/ReferralCard';
+import { requestReviewIfDue } from '@/lib/appRating';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
-import PlanBorder from '@/components/PlanBorder';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
@@ -98,8 +97,18 @@ export default function FeedScreen() {
   const queryClient = useQueryClient();
 
   // Which deck is showing. Jobs opens first: it is the familiar surface, and
-  // applying is the lower-commitment action of the two.
-  const [mode, setMode] = useState<FeedMode>('jobs');
+  // applying is the lower-commitment action of the two. ?deck=people opens on
+  // the other one, which is how the first-run tour lands on it.
+  const { deck: deckParam } = useLocalSearchParams<{ deck?: string }>();
+  const [mode, setMode] = useState<FeedMode>(deckParam === 'people' ? 'people' : 'jobs');
+  // The tab is already mounted when a deep link arrives (the first-run tour
+  // sends ?deck=people at someone who is looking at Jobs), so the initial
+  // state above is not enough: follow the param when it CHANGES. It never
+  // fights a manual toggle, because toggling does not touch the URL.
+  useEffect(() => {
+    if (deckParam === 'people') setMode('people');
+    else if (deckParam === 'jobs') setMode('jobs');
+  }, [deckParam]);
 
   // The hiring-manager add-on has three states, and both of the upgrades
   // between them are ask-first. Off -> draft spends credits beyond the apply
@@ -224,6 +233,30 @@ export default function FeedScreen() {
   // LinkedIn once the backend flag flips, or bail politely).
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [resumeUploading, setResumeUploading] = useState(false);
+
+  // Backup App Store rating trigger (lib/appRating), for the students who are
+  // grinding but have not had a reply yet. The primary ask lives on the reply
+  // screen; this one needs a pause instead of a win, so it waits for a settled
+  // Feed with nothing open over it, once per session. appRating enforces the
+  // real thresholds (5 separate days, 10+ emails out) and the pacing.
+  const sheetOpenRef = useRef(false);
+  sheetOpenRef.current = doorsOpen || referralPromptOpen || expanded || hmConfirm !== null;
+  const sentCount = outreach.filter(
+    (o) => o.status === 'sent' || o.status === 'replied',
+  ).length;
+  const sentCountRef = useRef(sentCount);
+  sentCountRef.current = sentCount;
+  const habitAskedRef = useRef(false);
+  useEffect(() => {
+    if (habitAskedRef.current) return;
+    if (!jobs.length) return;
+    habitAskedRef.current = true;
+    const t = setTimeout(() => {
+      if (sheetOpenRef.current) return;
+      void requestReviewIfDue('habit', Date.now(), { sentCount: sentCountRef.current });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [jobs.length]);
   const onApplyProfileBlocked = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setDoorsOpen(true);
@@ -325,29 +358,6 @@ export default function FeedScreen() {
   // inside it, which read as unfinished rather than minimal. Fill it with a soft
   // brand wash so it has presence at a glance without shouting over the deck.
   // The PlanBorder still carries the tier; this just gives the card a body.
-  const creditsPill = (
-    <Pressable onPress={() => router.push('/credits')} accessibilityRole="button">
-      <PlanBorder plan={profile.plan} radius={9}>
-        <LinearGradient
-          colors={[colors.accent + '2E', colors.accent + '10']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 5,
-            paddingHorizontal: 9,
-            paddingVertical: 4,
-          }}>
-          <Ionicons name="flash" size={12} color={colors.accent} />
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.ink }}>
-            {profile.credits}
-          </Text>
-        </LinearGradient>
-      </PlanBorder>
-    </Pressable>
-  );
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
       {/* Sky gradient only: dark mode keeps the app's shared backdrop, but the
@@ -356,7 +366,6 @@ export default function FeedScreen() {
       <Header
         title="Offerloop"
         logo
-        left={creditsPill}
         unreadCount={unreadCount}
         onBellPress={() => router.push('/notifications')}
       />
@@ -399,6 +408,25 @@ export default function FeedScreen() {
                     ? ' (apply + send)'
                     : ' (apply + draft)'}
               </Text>
+            </Text>
+          </Pressable>
+
+          {/* A right swipe submits a real application to a real employer. The
+              student should be able to see exactly what goes out BEFORE they
+              send one, from the screen they send it from — not by hunting
+              through Profile hoping to find it. */}
+          <Pressable
+            onPress={() => router.push('/what-we-send')}
+            accessibilityRole="button"
+            style={{ alignSelf: 'center', paddingTop: 4, paddingBottom: 2 }}>
+            <Text
+              style={{
+                fontFamily: fonts.sansMedium,
+                fontSize: 12.5,
+                color: colors.accent,
+                textAlign: 'center',
+              }}>
+              What gets submitted?
             </Text>
           </Pressable>
 

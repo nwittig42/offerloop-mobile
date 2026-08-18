@@ -33,7 +33,10 @@ export default function NewMeetingPrepScreen() {
       router.replace({ pathname: '/ai-consent', params: { mode: 'prompt' } });
     }
   }, [consent, router]);
-  const { scanned } = useLocalSearchParams<{ scanned?: string }>();
+  // `scanned` comes from the QR scanner; `linkedin` from a contact's Prep
+  // button, which already knows the URL. Same seeding either way.
+  const { scanned, linkedin } = useLocalSearchParams<{ scanned?: string; linkedin?: string }>();
+  const seedUrl = typeof linkedin === 'string' && linkedin ? linkedin : scanned;
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,11 +48,11 @@ export default function NewMeetingPrepScreen() {
   // preview effect below). Guarded so editing the field afterward isn't undone.
   const seededFromScan = useRef('');
   useEffect(() => {
-    if (scanned && typeof scanned === 'string' && scanned !== seededFromScan.current) {
-      seededFromScan.current = scanned;
-      setUrl(scanned);
+    if (seedUrl && typeof seedUrl === 'string' && seedUrl !== seededFromScan.current) {
+      seededFromScan.current = seedUrl;
+      setUrl(seedUrl);
     }
-  }, [scanned]);
+  }, [seedUrl]);
 
   // Free "who is this" lookup once a real LinkedIn URL is entered, so the user
   // confirms the right person before spending 15 credits. Debounced; never

@@ -130,7 +130,7 @@ export function ResumeRefine({
           {busy ? (
             <ActivityIndicator size="small" color={colors.paper} />
           ) : (
-            <Ionicons name="sparkles-outline" size={15} color={colors.paper} />
+            <Ionicons name="checkmark-circle-outline" size={15} color={colors.paper} />
           )}
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
             {busy ? 'Applying…' : 'Apply changes'}

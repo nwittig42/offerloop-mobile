@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { type ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import PlanBorder from '@/components/PlanBorder';
+import { useApp } from '@/store/app';
 import { fonts } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 
@@ -22,6 +25,7 @@ export function Header({
   onBellPress,
   left,
   right,
+  hideCredits = false,
 }: {
   title: string;
   logo?: boolean;
@@ -30,10 +34,43 @@ export function Header({
   onBellPress?: () => void;
   left?: ReactNode;
   right?: ReactNode;
+  /** Hide the credits pill. Only for screens that show the balance themselves
+   *  (the credits screen), where two copies of one number is noise. */
+  hideCredits?: boolean;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useApp();
+
+  // Credits live in the header on EVERY page, in the same spot. It used to be
+  // the Feed only, which meant the number a student spends all day watching
+  // disappeared the moment they went looking for anyone or anything.
+  const creditsPill = hideCredits ? null : (
+    <Pressable
+      onPress={() => router.push('/credits')}
+      accessibilityRole="button"
+      accessibilityLabel={`${profile.credits} credits remaining`}>
+      <PlanBorder plan={profile.plan} radius={9}>
+        <LinearGradient
+          colors={[colors.accent + '2E', colors.accent + '10']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            paddingHorizontal: 9,
+            paddingVertical: 4,
+          }}>
+          <Ionicons name="flash" size={12} color={colors.accent} />
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.ink }}>
+            {profile.credits}
+          </Text>
+        </LinearGradient>
+      </PlanBorder>
+    </Pressable>
+  );
 
   return (
     <View
@@ -86,6 +123,7 @@ export function Header({
             accessibilityLabel="Offerloop"
           />
         ) : null}
+        {creditsPill}
         {left}
       </View>
 

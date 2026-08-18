@@ -360,3 +360,17 @@ export function appliedStatusMeta(
       return { label: 'Auto-applying…', tone: 'neutral' };
   }
 }
+
+/**
+ * Applications stopped on something only the student can answer.
+ *
+ * The single definition of "needs you": the Applications screen pins this
+ * group to the top, and the badge on the Network tab counts it. One function
+ * so the badge can never disagree with the list it points at.
+ */
+export function needsUserCount(jobs: AppliedJob[] | undefined): number {
+  if (!jobs?.length) return 0;
+  return jobs.filter(
+    (j) => j.status === 'needs_attention' || j.status === 'needs_verification',
+  ).length;
+}

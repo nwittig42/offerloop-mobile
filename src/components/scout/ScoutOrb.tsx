@@ -5,7 +5,9 @@ import Animated, {
   cancelAnimation,
   interpolate,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSpring,
   withTiming,
@@ -14,39 +16,64 @@ import Animated, {
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 /**
- * The Scout orb — the voice tab's centerpiece (PLAN-scout-voice.md, P0 mock).
- * Soft radial-gradient plumes (never hard-edged shapes) drift inside the
- * sphere so the light reads as one glowing mass, matching the mock's blurred
- * look. One intensity dial drives everything: idle breathes slow, listening
- * swells with mic volume, thinking spins tight, acting/done shrink to hand
- * the stage to the work. Scout's badge face sits at the center.
- * Pure Reanimated + SVG — OTA-safe, no native modules.
+ * The Scout circle. Plasma, not a ball (Rylan 2026-08-17, picked from three
+ * directions in the orb lab: "make it futuristic and AI-like, not a solid
+ * color").
+ *
+ * There is no hard edge anywhere in here. A hot core fades out through violet
+ * into a cyan corona that dissolves into whatever background it sits on, so it
+ * reads as light in the room rather than an object pasted on top of it. Three
+ * coloured masses drift inside at different speeds and directions, which is
+ * what keeps it from ever looking like one flat gradient. Two hairline arcs
+ * orbit outside it: that is the deliberate bit of hardware in an otherwise
+ * organic thing.
+ *
+ * Motion, one dial per state:
+ *   idle       slow breathe
+ *   listening  scales with LIVE mic volume; rings push out on the peaks
+ *   thinking   the arcs speed up and the masses swirl wider
+ *   speaking   steady pulse in time with Scout's voice
+ *   acting     shrinks back and hands the stage to the work
+ *
+ * Everything is react-native-svg + Reanimated on purpose. Skia and real blur
+ * would open up shaders, but both are native modules, and this has to keep
+ * shipping over the air to builds already on people's phones.
  */
 
-export type OrbState = 'idle' | 'listening' | 'thinking' | 'acting' | 'done';
+export type OrbState = 'idle' | 'listening' | 'thinking' | 'acting' | 'done' | 'speaking';
 
-const FACE = require('../../../assets/images/scout-face.png');
+/**
+ * The cutout head, not scout-face.png. That one is a square illustration with
+ * its own pale background baked in, so on the light it read as a sticker
+ * pasted on (Rylan: "the yeti face looks pretty weird"). This one has a
+ * transparent background, so Scout sits IN the light.
+ */
+const FACE = require('../../../assets/images/scout-yeti-head.png');
 
-/** A soft plume: an SVG circle whose radial gradient fades to fully
- *  transparent well before its edge — layered plumes visually merge. */
-function Plume({
+/** A soft mass of light drifting inside the corona. Fades to fully
+ *  transparent well before its own edge, so several of them merge into one
+ *  body instead of reading as overlapping discs. */
+function Mass({
   id,
   color,
   size,
   duration,
   reverse,
-  orbitRatio,
+  orbit,
   intensity,
+  peak,
 }: {
   id: string;
   color: string;
   size: number;
   duration: number;
   reverse?: boolean;
-  orbitRatio: number;
+  orbit: number;
   intensity: SharedValue<number>;
+  peak: number;
 }) {
   const spin = useSharedValue(0);
+
   useEffect(() => {
     spin.value = 0;
     spin.value = withRepeat(withTiming(1, { duration, easing: Easing.linear }), -1, false);
@@ -54,29 +81,126 @@ function Plume({
   }, [duration, spin]);
 
   const style = useAnimatedStyle(() => {
-    const angle = spin.value * 2 * Math.PI * (reverse ? -1 : 1);
-    const radius = size * orbitRatio * (0.55 + intensity.value * 0.75);
+    const a = spin.value * 2 * Math.PI * (reverse ? -1 : 1);
+    const r = orbit * (0.5 + intensity.value * 0.7);
     return {
       transform: [
-        { translateX: Math.cos(angle) * radius },
-        { translateY: Math.sin(angle) * radius },
-        { scale: 1 + intensity.value * 0.22 },
+        { translateX: Math.cos(a) * r },
+        { translateY: Math.sin(a) * r },
+        { scale: 1 + intensity.value * 0.16 },
       ],
-      opacity: 0.85,
     };
   });
 
   return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size }, style]}>
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor={color} stopOpacity="0.9" />
-            <Stop offset="45%" stopColor={color} stopOpacity="0.5" />
+            <Stop offset="0%" stopColor={color} stopOpacity={peak} />
+            <Stop offset="50%" stopColor={color} stopOpacity={peak * 0.42} />
             <Stop offset="100%" stopColor={color} stopOpacity="0" />
           </RadialGradient>
         </Defs>
         <Circle cx="50%" cy="50%" r="50%" fill={`url(#${id})`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** A hairline arc orbiting the corona. Two of these, opposite directions:
+ *  the one piece of hardware in an otherwise organic thing. */
+function OrbitArc({
+  size,
+  color,
+  dash,
+  duration,
+  reverse,
+  intensity,
+  base,
+}: {
+  size: number;
+  color: string;
+  dash: string;
+  duration: number;
+  reverse?: boolean;
+  intensity: SharedValue<number>;
+  base: number;
+}) {
+  const spin = useSharedValue(0);
+
+  useEffect(() => {
+    cancelAnimation(spin);
+    spin.value = 0;
+    spin.value = withRepeat(withTiming(1, { duration, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(spin);
+  }, [duration, spin]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360 * (reverse ? -1 : 1)}deg` }],
+    opacity: base + intensity.value * 0.45,
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size }, style]}>
+      <Svg width="100%" height="100%">
+        <Circle
+          cx="50%"
+          cy="50%"
+          r="47%"
+          fill="none"
+          stroke={color}
+          strokeWidth="1"
+          strokeDasharray={dash}
+          strokeLinecap="round"
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** A ring that pushes out of the corona and fades on the loud parts of what
+ *  you are saying. Louder voice, brighter ring, so the circle reads as
+ *  listening rather than decorating. */
+function VoiceRing({
+  size,
+  delay,
+  active,
+  level,
+}: {
+  size: number;
+  delay: number;
+  active: boolean;
+  level: SharedValue<number>;
+}) {
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    cancelAnimation(t);
+    t.value = 0;
+    if (!active) return;
+    t.value = withDelay(
+      delay,
+      withRepeat(withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }), -1, false),
+    );
+    return () => cancelAnimation(t);
+  }, [active, delay, t]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: active ? (1 - t.value) * 0.32 * (0.35 + level.value * 0.9) : 0,
+    transform: [{ scale: 0.9 + t.value * 0.55 }],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size }, style]}>
+      <Svg width="100%" height="100%">
+        <Circle cx="50%" cy="50%" r="49%" fill="none" stroke="#7FB0FF" strokeWidth={1.5} />
       </Svg>
     </Animated.View>
   );
@@ -90,124 +214,138 @@ export default function ScoutOrb({
 }: {
   state: OrbState;
   size?: number;
-  /** Live mic loudness 0..1 while listening — drives the swell. */
+  /** Live mic loudness 0..1 while listening. This is what makes the circle
+   *  move when someone talks. */
   volume?: SharedValue<number>;
   onPress?: () => void;
 }) {
   const intensity = useSharedValue(0.15);
   const breathe = useSharedValue(0);
+  const pulse = useSharedValue(0);
+  const listening = state === 'listening';
+  const speaking = state === 'speaking';
+  const thinking = state === 'thinking';
+  const quiet = state === 'acting' || state === 'done';
+
+  // Smoothed microphone level. The raw value jumps every frame, which reads as
+  // jitter; a short timing pass turns it into breath.
+  const level = useDerivedValue(
+    () => withTiming(listening ? (volume?.value ?? 0) : 0, { duration: 110 }),
+    [listening, volume],
+  );
 
   useEffect(() => {
     breathe.value = withRepeat(
-      withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.quad) }),
       -1,
       true,
     );
     return () => cancelAnimation(breathe);
   }, [breathe]);
 
+  // Scout's own voice. No amplitude comes back from text-to-speech, so this is
+  // a steady cadence: enough to read as talking, never a lip-sync claim.
   useEffect(() => {
-    const target =
-      state === 'idle' ? 0.15 : state === 'listening' ? 0.7 : state === 'thinking' ? 1 : 0.4;
-    intensity.value = withSpring(target, { damping: 14, stiffness: 90 });
-  }, [state, intensity]);
+    cancelAnimation(pulse);
+    pulse.value = 0;
+    if (!speaking) return;
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 620, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+    return () => cancelAnimation(pulse);
+  }, [speaking, pulse]);
 
-  const orbStyle = useAnimatedStyle(() => {
-    const breatheScale = interpolate(breathe.value, [0, 1], [1, 1.04]);
-    const vol = state === 'listening' && volume ? volume.value * 0.12 : 0;
-    const shrink = state === 'acting' || state === 'done' ? 0.66 : 1;
+  useEffect(() => {
+    const target = listening ? 0.75 : thinking ? 1 : speaking ? 0.6 : 0.15;
+    intensity.value = withSpring(target, { damping: 15, stiffness: 90 });
+  }, [listening, thinking, speaking, intensity]);
+
+  const coronaStyle = useAnimatedStyle(() => {
+    const breatheScale = interpolate(breathe.value, [0, 1], [1, 1.05]);
+    const voice = level.value * 0.16;
+    const talk = speaking ? interpolate(pulse.value, [0, 1], [0, 0.05]) : 0;
+    const shrink = quiet ? 0.72 : 1;
     return {
-      transform: [{ scale: breatheScale * shrink * (1 + intensity.value * 0.05 + vol) }],
+      transform: [{ scale: breatheScale * shrink * (1 + intensity.value * 0.08 + voice + talk) }],
+      opacity: 0.85 + intensity.value * 0.15,
     };
   });
 
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: 0.45 + intensity.value * 0.5 + (state === 'listening' && volume ? volume.value * 0.2 : 0),
-    transform: [{ scale: 1 + intensity.value * 0.16 }],
-  }));
-
-  const faceStyle = useAnimatedStyle(() => ({
-    opacity: state === 'listening' || state === 'thinking' ? 0.5 : 1,
-    transform: [
-      { scale: state === 'listening' || state === 'thinking' ? 0.84 : state === 'done' ? 1.12 : 1 },
-    ],
-  }));
-
-  const speed = state === 'thinking' ? 0.32 : state === 'listening' ? 0.55 : 1;
+  // Face at rest, light while talking. Anything that is not plain waiting
+  // hands the circle over to the light.
+  const faceStyle = useAnimatedStyle(() => {
+    const busy = listening || speaking || thinking;
+    return {
+      opacity: withTiming(busy ? 0 : 1, { duration: 260 }),
+      transform: [{ scale: withTiming(busy ? 0.86 : 1, { duration: 260 }) }],
+    };
+  });
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Halo — reaches well past the sphere so it melts into the sky */}
+      {/* The body: a hot core through violet into a cyan corona, fading to
+          nothing well inside its own box so there is never an edge. */}
       <Animated.View
         pointerEvents="none"
-        style={[{ position: 'absolute', width: size * 2.4, height: size * 2.4 }, glowStyle]}>
+        style={[{ position: 'absolute', width: size * 1.5, height: size * 1.5 }, coronaStyle]}>
         <Svg width="100%" height="100%">
           <Defs>
-            <RadialGradient id="scout-halo" cx="50%" cy="50%" r="50%">
-              <Stop offset="0%" stopColor="#6D7BFF" stopOpacity="0.5" />
-              <Stop offset="45%" stopColor="#4A60D8" stopOpacity="0.22" />
-              <Stop offset="75%" stopColor="#3B82F6" stopOpacity="0.07" />
-              <Stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+            <RadialGradient id="scout-corona" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#F2F7FF" stopOpacity="1" />
+              <Stop offset="12%" stopColor="#A8C8FF" stopOpacity="0.95" />
+              <Stop offset="26%" stopColor="#3B82F6" stopOpacity="0.9" />
+              <Stop offset="38%" stopColor="#1D4ED8" stopOpacity="0.72" />
+              <Stop offset="50%" stopColor="#38BDF8" stopOpacity="0.4" />
+              <Stop offset="64%" stopColor="#60A5FA" stopOpacity="0.14" />
+              <Stop offset="100%" stopColor="#60A5FA" stopOpacity="0" />
             </RadialGradient>
           </Defs>
-          <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-halo)" />
+          <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-corona)" />
         </Svg>
       </Animated.View>
 
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Scout">
-        <Animated.View
-          style={[
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              overflow: 'hidden',
-              backgroundColor: '#131F3D',
-              alignItems: 'center',
-              justifyContent: 'center',
-            },
-            orbStyle,
-          ]}>
-          {/* Base wash so the sphere itself glows from within */}
-          <Svg width="100%" height="100%" style={{ position: 'absolute' }}>
-            <Defs>
-              <RadialGradient id="scout-base" cx="50%" cy="42%" r="62%">
-                <Stop offset="0%" stopColor="#4A5BD6" stopOpacity="0.85" />
-                <Stop offset="60%" stopColor="#2B3B78" stopOpacity="0.6" />
-                <Stop offset="100%" stopColor="#131F3D" stopOpacity="0.2" />
-              </RadialGradient>
-            </Defs>
-            <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-base)" />
-          </Svg>
+      {/* All blue on purpose (Rylan 2026-08-17). The three masses are three
+          different blues, not one: deep cobalt, sky, and a near-white
+          highlight. Same blue three times would be the flat ball again. */}
+      <Mass id="scout-m1" color="#1D4ED8" size={size * 0.9} duration={9000} orbit={size * 0.12} intensity={intensity} peak={0.5} />
+      <Mass id="scout-m2" color="#38BDF8" size={size * 0.66} duration={7000} reverse orbit={size * 0.16} intensity={intensity} peak={0.45} />
+      <Mass id="scout-m3" color="#C7DDFF" size={size * 0.44} duration={5400} orbit={size * 0.2} intensity={intensity} peak={0.32} />
 
-          <Plume id="p1" color="#7C5CFF" size={size * 0.95} duration={9000 * speed} orbitRatio={0.12} intensity={intensity} />
-          <Plume id="p2" color="#3B82F6" size={size * 0.85} duration={6400 * speed} reverse orbitRatio={0.16} intensity={intensity} />
-          <Plume id="p3" color="#22D3EE" size={size * 0.6} duration={4800 * speed} orbitRatio={0.2} intensity={intensity} />
-          <Plume id="p4" color="#FACC15" size={size * 0.32} duration={3600 * speed} reverse orbitRatio={0.24} intensity={intensity} />
+      <OrbitArc
+        size={size * 1.12}
+        color="#7FB0FF"
+        dash="42 220"
+        duration={thinking ? 3400 : 9000}
+        intensity={intensity}
+        base={0.25}
+      />
+      <OrbitArc
+        size={size * 1.3}
+        color="#38BDF8"
+        dash="20 300"
+        duration={thinking ? 5200 : 13000}
+        reverse
+        intensity={intensity}
+        base={0.18}
+      />
 
-          <Animated.View style={faceStyle}>
-            <Image
-              source={FACE}
-              style={{
-                width: size * 0.42,
-                height: size * 0.42,
-                borderRadius: size * 0.21,
-                borderWidth: 2,
-                borderColor: 'rgba(190,205,255,0.55)',
-              }}
-              resizeMode="cover"
-            />
-          </Animated.View>
+      <VoiceRing size={size * 1.05} delay={0} active={listening} level={level} />
+      <VoiceRing size={size * 1.05} delay={1000} active={listening} level={level} />
 
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              borderRadius: size / 2,
-              borderWidth: 1.25,
-              borderColor: 'rgba(170,195,255,0.4)',
-            }}
+      {/* Last child, so it sits over the light and the whole circle stays
+          tappable even when the face has faded out. */}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="Scout"
+        style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View style={faceStyle}>
+          <Image
+            source={FACE}
+            style={{ width: size * 0.46, height: size * 0.46, marginTop: size * 0.05 }}
+            resizeMode="contain"
           />
         </Animated.View>
       </Pressable>

@@ -331,7 +331,7 @@ export default function MeetingPrepDetailScreen() {
 
         <PrepText
           title="Why you two connect"
-          icon="sparkles-outline"
+          icon="git-merge-outline"
           color={colors.positive}
           body={prep.commonGround}
         />

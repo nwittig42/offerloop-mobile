@@ -3,14 +3,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PurchasesStoreProduct } from 'react-native-purchases';
 
-import { requestWebHandoff } from '@/api/endpoints/upgrade';
 import {
   fetchPaywallData,
   fetchStorefrontCountry,
@@ -85,10 +83,9 @@ const PLAN_CHIP: Record<string, readonly [string, string] | null> = {
 export default function CreditsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, showToast, connection } = useApp();
+  const { profile, showToast, connection, draftsLeft, costPerSwipe } = useApp();
   const colors = useColors();
   const queryClient = useQueryClient();
-  const [opening, setOpening] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
 
   // Store products for the inline tiles. null = still loading from Apple.
@@ -166,27 +163,6 @@ export default function CreditsScreen() {
       setConfirming(false);
     }
   }, [confirming, profile.credits, connection.usingSampleData, showToast]);
-
-  const openPlans = async () => {
-    if (opening) return;
-    setOpening(true);
-    try {
-      const url = await requestWebHandoff();
-      // One-shot foreground hook: when the user switches back from Safari,
-      // refetch /me so a completed upgrade or top-up shows up right away.
-      const sub = AppState.addEventListener('change', (s) => {
-        if (s === 'active') {
-          queryClient.invalidateQueries({ queryKey: qk.me });
-          sub.remove();
-        }
-      });
-      await Linking.openURL(url);
-    } catch {
-      showToast("Couldn't open the web account page right now. Try again.");
-    } finally {
-      setOpening(false);
-    }
-  };
 
   const usedPct = profile.maxCredits
     ? Math.round((profile.credits / profile.maxCredits) * 100)
@@ -272,6 +248,14 @@ export default function CreditsScreen() {
           </View>
           <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#DCE6FB' }}>
             of {profile.maxCredits.toLocaleString()} a month · {profile.resetLabel}
+          </Text>
+          {/* What the balance BUYS. This line used to live on the profile
+              banner; the banner is gone, and the number is more use here,
+              next to the balance it describes. */}
+          <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: '#DCE6FB' }}>
+            {draftsLeft > 0
+              ? `${draftsLeft} ${draftsLeft === 1 ? 'draft' : 'drafts'} left · ${costPerSwipe} credits each`
+              : 'Out of credits'}
           </Text>
         </LinearGradient>
 
@@ -531,51 +515,6 @@ export default function CreditsScreen() {
           </Text>
         )}
 
-        {/* Web checkout fallback: dev and internal builds only. A store build
-            whose RevenueCat config ever failed must show NOTHING purchasable
-            rather than a web checkout link (3.1.1). */}
-        {!iapLive && Updates.channel !== 'production' && (
-          <>
-            <Pressable onPress={() => void openPlans()} disabled={opening}>
-              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: opening ? 0.6 : 1 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: colors.accent + '14',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                  {opening ? (
-                    <ActivityIndicator size="small" color={colors.accent} />
-                  ) : (
-                    <Ionicons name="open-outline" size={19} color={colors.accent} />
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.ink }}>
-                    {opening ? 'Opening offerloop.ai…' : 'View plans on the web'}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                    Upgrade or top up on offerloop.ai, already signed in
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
-              </Card>
-            </Pressable>
-            <Text
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: 11.5,
-                color: colors.inkTertiary,
-                textAlign: 'center',
-                lineHeight: 16,
-              }}>
-              Opens in Safari. Changes show up here as soon as you come back.
-            </Text>
-          </>
-        )}
       </ScrollView>
     </View>
   );

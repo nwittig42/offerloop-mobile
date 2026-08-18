@@ -59,13 +59,22 @@ import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
 import { useIsFocused } from '@react-navigation/native';
 
-import { scoutThread } from '@/lib/scoutThread';
+import { scoutThread, type ScoutThreadEntry } from '@/lib/scoutThread';
 import { useAuth } from '@/auth/AuthProvider';
 import { pollDraftJob } from '@/api/endpoints/swipe';
 import { fetchSectorJobs } from '@/api/endpoints/feed';
 import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
+import ChatComposer from '@/components/scout/ChatComposer';
+import TapHand from '@/components/tour/TapHand';
+import { useTour } from '@/components/tour/TourProvider';
+import { isTourPending } from '@/lib/tourFlag';
+import ChatHistoryPanel from '@/components/scout/ChatHistoryPanel';
+import ChatMessage from '@/components/scout/ChatMessage';
+import VoiceMode from '@/components/scout/VoiceMode';
+import WhatScoutDoes from '@/components/scout/WhatScoutDoes';
 import type { Job } from '@/types';
 import { useApp } from '@/store/app';
+import { useScoutRoom } from '@/theme/scoutRoom';
 import { fonts } from '@/theme/tokens';
 import ScoutErrorBoundary from '@/components/scout/ScoutErrorBoundary';
 import { requestSpeechPermissions, speechSupported, startListening } from '@/lib/speech';
@@ -86,19 +95,6 @@ import { track } from '@/lib/analytics';
  * Voice is feature-detected: on builds without the native speech module the
  * tab is type-first and the orb explains the coming update.
  */
-
-const NIGHT = {
-  bg: '#0C1526',
-  sky: '#12203A',
-  deep: '#0A111F',
-  ink: '#EAF0FF',
-  ink2: '#8FA3CC',
-  ink3: '#5A6B8F',
-  line: 'rgba(160,190,255,0.25)',
-  lineSoft: 'rgba(160,190,255,0.14)',
-  accent: '#3B82F6',
-  transcript: '#DCE6FF',
-};
 
 /** Rotating pool — three show at a time, refreshing while the tab idles so
  *  the door never looks the same twice (all real, runnable asks). */
@@ -131,7 +127,9 @@ const NO_GMAIL_POOL = [
   'Analysts at Morgan Stanley in LA',
 ];
 
-const INTRO_SEEN_KEY = 'offerloop.scoutIntro.v1';
+/** The question that is already in the box on a brand-new account. Sending it
+ *  starts the tour; it never reaches the model. */
+const TOUR_OPENER = 'How can you help me?';
 
 // Voice audio-upload founder gate: LIFTED 2026-07-09. The permission copy
 // in this build's app.json is honest about server transcription ("short
@@ -232,22 +230,9 @@ type ActionCard = {
   progressPct?: number;
 };
 
-/** The brand watercolor, night-tinted offline (light sky baked to
- *  transparency, ridges to glowing periwinkle) so it draws exactly like the
- *  mock's blended horizon without runtime blend modes. */
-const RIDGES = require('../../../assets/images/scout-ridges-night.png');
-
-function Ridgeline() {
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '44%' }}>
-      <Image
-        source={RIDGES}
-        resizeMode="cover"
-        style={{ width: '100%', height: '100%', opacity: 0.9 }}
-      />
-    </View>
-  );
-}
+/* The watercolor ridgeline came off this screen (Rylan 2026-08-17): the room
+   is the sky gradient and the orb, nothing else. The art still lives in
+   NightSky for the rest of the app's dark mode. */
 
 export default function ScoutTab() {
   return (
@@ -260,6 +245,8 @@ export default function ScoutTab() {
 function ScoutTabInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Scout follows the app's Light/Dark setting like every other screen.
+  const room = useScoutRoom();
   const { showToast, unreadCount, savedJobs, allJobs, profile, loops, swipeSettings, bootPending, loopsReady } = useApp();
   const { user } = useAuth();
 
@@ -278,9 +265,17 @@ function ScoutTabInner() {
   // header button + transcript overlay when entries land.
   const [threadSize, setThreadSize] = useState(0);
   // Focus re-render: the sheet appends to the shared thread while this tab
-  // is backgrounded — coming back must light the transcript button up.
+  // is backgrounded, so coming back has to redraw the conversation.
   const isFocused = useIsFocused();
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Voice takes over the screen while it is open (Rylan 2026-08-17). The chat
+  // keeps running underneath: every turn still lands in the thread, so closing
+  // voice mode is a change of instrument, not a loss of the conversation.
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  // The permanent version of the first-run intro: the explainer someone can go
+  // back to later, from the empty state or the chats drawer.
+  const [explainerOpen, setExplainerOpen] = useState(false);
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
@@ -318,7 +313,50 @@ function ScoutTabInner() {
   const lastDraftRef = useRef<DraftIntent | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const volume = useSharedValue(0);
+
+  // The conversation IS the screen now (Rylan 2026-08-17). scoutThread is
+  // module state on purpose (the tab and the header sheet share one thread),
+  // so threadSize is what tells React a turn landed. isFocused is in the deps
+  // because the sheet can append while this tab is backgrounded.
+  const messages: ScoutThreadEntry[] = useMemo(
+    () => scoutThread.entries(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [threadSize, isFocused],
+  );
+  const hasThread = messages.length > 0;
+
+  // Keep the newest turn in view, the way every chat app does.
+  useEffect(() => {
+    if (!hasThread) return;
+    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 70);
+    return () => clearTimeout(t);
+  }, [threadSize, phase, hasThread]);
+
+  /** Clear the stage and start a fresh conversation. Live action cards are
+   *  deliberately left alone: a running apply is real work, not chat. */
+  const newChat = useCallback(() => {
+    stopSpeaking();
+    scoutThread.reset();
+    setThreadSize(0);
+    setReply(null);
+    setClarify(null);
+    setPreflight(null);
+    setDidYouMean(null);
+    setRefine(null);
+    setJobPicks(null);
+    setApplyOne(null);
+    setApplySome(null);
+    setPeoplePicks(null);
+    setReceipt(null);
+    setCtx(null);
+    setTyped('');
+    setTranscript('');
+    setPhase('idle');
+    setHistoryOpen(false);
+    track('scout_new_chat', {});
+  }, []);
 
   // The landing-screen bet needs first-tap data, not anecdotes
   // (SCOUT-RISK-REGISTER.md #1): what does a user touch first on this tab?
@@ -334,26 +372,42 @@ function ScoutTabInner() {
   // from it (post-crash hardening, 2026-07-08).
   const voiceReady = () => speechSupported();
 
-  // First-run overlay (SCOUT-RISK-REGISTER.md #5): fresh signups land on an
-  // empty orb with no idea what to say. One-time, and only for accounts that
-  // actually look new (no loops, no saved jobs) — established users never
-  // see it, even after this ships OTA. null = flag not loaded yet.
-  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  /**
+   * First run. The old three-example overlay is gone (Rylan 2026-08-17: it
+   * asked people to pick one of three things before they knew what any of them
+   * meant). What replaces it: the question is already typed, a hand motions at
+   * the send button, and sending starts the guided tour.
+   *
+   * Armed only by completeOnboarding(), so an established user updating the
+   * app never gets it, and only on a genuinely empty thread.
+   */
+  const tour = useTour();
+  const [tourArmed, setTourArmed] = useState(false);
   useEffect(() => {
-    AsyncStorage.getItem(INTRO_SEEN_KEY)
-      .then((v) => setIntroSeen(v === '1'))
-      .catch(() => setIntroSeen(true)); // storage broken → never block the tab
+    let alive = true;
+    isTourPending()
+      .then((pending) => {
+        if (!alive || !pending) return;
+        setTourArmed(true);
+        setTyped(TOUR_OPENER);
+        track('tour_offered', {});
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
-  const showIntro =
-    introSeen === false && !bootPending && loopsReady && loops.length === 0 && savedJobs.length === 0;
-  useEffect(() => {
-    if (showIntro) track('scout_intro_shown', {});
-  }, [showIntro]);
-  const dismissIntro = useCallback((outcome: string) => {
-    setIntroSeen(true);
-    AsyncStorage.setItem(INTRO_SEEN_KEY, '1').catch(() => {});
-    track('scout_intro_outcome', { outcome });
-  }, []);
+  // Sending the prefilled question is the tour's start button. It deliberately
+  // does NOT reach the model: this is the first thing a new user ever sends,
+  // and it should be instant, free, and the same for everyone. Scout's answer
+  // is the tour's first card.
+  const startTourFromScout = useCallback(() => {
+    setTourArmed(false);
+    setTyped('');
+    scoutThread.append({ from: 'user', text: TOUR_OPENER });
+    setThreadSize(scoutThread.size());
+    tour.start();
+  }, [tour]);
 
   // Chips lean toward no-setup asks until Gmail is connected (risk #5).
   const suggestionPool = profile?.gmailConnected ? SUGGESTION_POOL : NO_GMAIL_POOL;
@@ -391,8 +445,14 @@ function ScoutTabInner() {
     if (!reply) return;
     ageContext();
     // Spoken asks get spoken replies (the full assistant loop); typed asks
-    // stay silent — gyms and lectures are why the type bar exists.
-    if (askByVoice.current) speak(reply.say);
+    // stay silent — gyms and lectures are why the type bar exists. The
+    // handlers are what let the circle pulse while Scout is actually talking.
+    if (askByVoice.current) {
+      speak(reply.say, {
+        onStart: () => setSpeaking(true),
+        onDone: () => setSpeaking(false),
+      });
+    }
     if (reply.say) {
       scoutThread.append({ from: 'scout', text: reply.say });
       setThreadSize(scoutThread.size());
@@ -588,6 +648,56 @@ function ScoutTabInner() {
     [upsertCard, dropCard],
   );
 
+  /**
+   * Follow one live auto-apply to a terminal state: a card while it runs, a
+   * reply when it lands. Shared by the re-hydration sweep (work that survived
+   * an app kill) and by a Scout chat turn that just queued one, so a
+   * submission looks identical however it started.
+   *
+   * isAlive lets a caller inside an effect stop the loop on teardown.
+   */
+  const trackAutoApply = useCallback(
+    async (
+      autoApplyId: string,
+      title: string,
+      opts?: { isAlive?: () => boolean; initialStage?: string },
+    ) => {
+      const alive = opts?.isAlive ?? (() => true);
+      const cardId = `aa-${autoApplyId}`;
+      const cardTitle = title || 'Submitting application';
+      upsertCard({ id: cardId, title: cardTitle, stageLabel: humanStage(opts?.initialStage) });
+      for (let i = 0; i < 45 && alive(); i += 1) {
+        await new Promise((res) => setTimeout(res, 4000));
+        if (!alive()) return;
+        let doc: AutoApplyStatusDoc;
+        try {
+          doc = await fetchAutoApplyStatus(autoApplyId);
+        } catch {
+          continue; // transient — keep the card, try again
+        }
+        if (!alive()) return;
+        if (AUTO_APPLY_TERMINAL.includes(doc.status)) {
+          dropCard(cardId);
+          const who = doc.job_title
+            ? `${doc.job_title}${doc.company ? ` at ${doc.company}` : ''}`
+            : cardTitle;
+          setReply(
+            doc.status === 'submitted'
+              ? { say: `Submitted — ${who} is in.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] }
+              : doc.status === 'needs_attention' || doc.status === 'needs_verification'
+                ? { say: `${who} needs you — a question or a verification code is waiting.`, actions: [{ label: 'Finish it', href: `/apply-questions/${autoApplyId}` }] }
+                : { say: `${who} didn't go through — check Applications for what happened.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] },
+          );
+          return;
+        }
+        upsertCard({ id: cardId, title: cardTitle, stageLabel: humanStage(doc.stage) });
+      }
+      // Poll budget spent (~3 min) — server zombie-filters at 8; let it go quietly.
+      if (alive()) dropCard(cardId);
+    },
+    [upsertCard, dropCard],
+  );
+
   // Re-hydration (SCOUT-ACTION-CONTRACT.md): after an app kill, in-flight
   // server work re-appears as cards instead of silently finishing offstage.
   useEffect(() => {
@@ -617,38 +727,11 @@ function ScoutTabInner() {
               .catch(() => alive && dropCard(id));
           } else if (item.jobRef.kind === 'auto_apply') {
             // Previously skipped with a bare `continue` — a submitting
-            // application survived the app kill invisibly. Poll the real
-            // status doc until a terminal state, no invented numbers.
-            const cardId = `aa-${id}`;
-            upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: humanStage(item.stageLabel) });
-            void (async () => {
-              for (let i = 0; i < 45 && alive; i += 1) {
-                await new Promise((res) => setTimeout(res, 4000));
-                if (!alive) return;
-                let doc: AutoApplyStatusDoc;
-                try {
-                  doc = await fetchAutoApplyStatus(id);
-                } catch {
-                  continue; // transient — keep the card, try again
-                }
-                if (!alive) return;
-                if (AUTO_APPLY_TERMINAL.includes(doc.status)) {
-                  dropCard(cardId);
-                  const who = doc.job_title ? `${doc.job_title}${doc.company ? ` at ${doc.company}` : ''}` : item.title;
-                  setReply(
-                    doc.status === 'submitted'
-                      ? { say: `Submitted — ${who} is in.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] }
-                      : doc.status === 'needs_attention' || doc.status === 'needs_verification'
-                        ? { say: `${who} needs you — a question or a verification code is waiting.`, actions: [{ label: 'Finish it', href: `/apply-questions/${id}` }] }
-                        : { say: `${who} didn't go through — check Applications for what happened.`, actions: [{ label: 'See your Applications', href: '/(tabs)/network' }] },
-                  );
-                  return;
-                }
-                upsertCard({ id: cardId, title: item.title || 'Submitting application', stageLabel: humanStage(doc.stage) });
-              }
-              // Poll budget spent (~3 min) — server zombie-filters at 8; let it go quietly.
-              if (alive) dropCard(cardId);
-            })();
+            // application survived the app kill invisibly.
+            void trackAutoApply(id, item.title, {
+              isAlive: () => alive,
+              initialStage: item.stageLabel,
+            });
           } else if (item.jobRef.kind === 'meeting_prep') {
             // A prep started from Scout chat survived the app kill. Preps
             // build in ~60s; poll the same doc the Meeting Prep screen
@@ -694,7 +777,7 @@ function ScoutTabInner() {
     return () => {
       alive = false;
     };
-  }, [upsertCard, dropCard]);
+  }, [upsertCard, dropCard, trackAutoApply]);
 
   const submitAsk = useCallback(
     async (
@@ -1276,7 +1359,11 @@ function ScoutTabInner() {
             location: intent.location,
           });
           if (seqF !== requestSeq.current) return;
-          const items = env.actions[0]?.results?.items ?? [];
+          // This is the find_contacts RPC, so the only receipt shape it can
+          // return is contacts; the kind check narrows the union the brain
+          // path added (jobs ride the same envelope now).
+          const res0 = env.actions[0]?.results;
+          const items = res0?.kind === 'contacts' ? res0.items : [];
           setReply({ say: env.say, actions: [] });
           if (items.length) {
             setPeoplePicks({ items, role: intent.role, company: intent.company, location: intent.location });
@@ -1515,12 +1602,53 @@ function ScoutTabInner() {
             } else if (a.type === 'draft_outreach' && a.results?.items?.length) {
               const n = a.results.items.length;
               actions.push({ label: `Open Inbox — ${n} draft${n === 1 ? '' : 's'} ready`, href: '/(tabs)/inbox' });
+            } else if (a.type === 'followup' && a.params?.contactName) {
+              // Scout just said someone is going cold. Make the offer
+              // tappable: saying it in prose and leaving the student to type
+              // "yes" is how this feature stays invisible.
+              const who = String(a.params.contactName);
+              const at = a.params.company ? ` at ${a.params.company}` : '';
+              actions.push({
+                label: a.params.draftReady ? `Send the follow-up to ${who}` : `Draft a follow-up to ${who}`,
+                chatMessage: `draft a follow-up to ${who}${at}`,
+              });
+            } else if (a.type === 'find_jobs' && a.results?.kind === 'jobs' && a.results.items.length) {
+              // Jobs the brain found in chat. The app has no results screen to
+              // send them to, so each eligible one becomes a chip that asks
+              // for it BY NAME. The server now sees the transcript, so that
+              // follow-up resolves against this exact list instead of dying
+              // as "which job did you mean".
+              for (const j of a.results.items.filter((x) => x.autoApplyEligible).slice(0, 3)) {
+                const where = j.company ? ` at ${j.company}` : '';
+                actions.push({
+                  label: `Apply: ${j.title}${where}`,
+                  chatMessage: `apply to the ${j.title} role${where}`,
+                });
+              }
+            } else if (a.type === 'auto_apply' && a.jobRef?.id) {
+              // A real submission is running on the server. Previously this
+              // receipt was dropped on the floor: the application went out and
+              // the app said nothing, which is why asking Scout to apply felt
+              // like it did nothing at all. Same live card the swipe-to-apply
+              // path uses, polled to a terminal state.
+              const who = [a.params?.title, a.params?.company].filter(Boolean).join(' at ')
+                || 'your application';
+              void trackAutoApply(String(a.jobRef.id), String(who));
+              actions.push({ label: 'See your Applications', href: '/(tabs)/network' });
             }
           }
           // error.code affordances (contract Errors section) — say already
           // speaks the problem in user words; the chip is the next move.
           if (env.error && (env.error.code === 'insufficient_credits' || env.error.code === 'cap_reached')) {
             actions.push({ label: 'View credits', href: '/credits' });
+          }
+          // Auto-apply's own blockers. Each is fixable by the student in a
+          // couple of taps, so each gets the tap rather than a dead sentence.
+          if (env.error?.code === 'application_profile_required') {
+            actions.push({ label: 'Finish application profile', href: '/application-profile' });
+          }
+          if (env.error?.code === 'auto_apply_unavailable') {
+            actions.push({ label: 'See your Applications', href: '/(tabs)/network' });
           }
         } catch {
           const res = await sendScoutMessage({
@@ -1613,16 +1741,6 @@ function ScoutTabInner() {
     }
   }, [voiceReady, showToast, submitAsk, volume, speechVocab]);
 
-  const orbPressed = useCallback(() => {
-    firstAction('orb');
-    if (phase === 'listening') {
-      stopRef.current?.(); // stop → onEnd handles the handoff
-      return;
-    }
-    if (phase === 'thinking') return; // let it cook; Edit is the escape hatch
-    void beginListening();
-  }, [phase, beginListening, firstAction]);
-
   const editAsk = useCallback(() => {
     requestSeq.current += 1; // orphan any in-flight reply
     track('scout_ask_edited', {});
@@ -1635,8 +1753,9 @@ function ScoutTabInner() {
   // should say so (Rylan: users need to know this is a rolling conversation).
   const awaitingAnswer = !!reply && /\?\s*$/.test(reply.say.trim());
 
-  const orbState: OrbState =
-    cards.length > 0
+  const orbState: OrbState = speaking
+    ? 'speaking'
+    : cards.length > 0
       ? 'acting'
       : phase === 'clarify' || phase === 'receipt'
         ? 'idle'
@@ -1646,56 +1765,138 @@ function ScoutTabInner() {
             : 'idle'
           : phase;
 
+  /** Anything waiting on a decision lives in the chat, not in voice mode:
+   *  spending credits should never be confirmed by a screen the user cannot
+   *  read the fine print on. Voice mode steps aside when one opens. */
+  const gateOpen = !!(
+    preflight ||
+    receipt ||
+    applyOne ||
+    applySome ||
+    didYouMean ||
+    refine ||
+    peoplePicks ||
+    jobPicks ||
+    clarify
+  );
+  useEffect(() => {
+    if (voiceOpen && gateOpen) setVoiceOpen(false);
+  }, [voiceOpen, gateOpen]);
+
+  /** Open voice mode and start listening. Falls back to the type bar with a
+   *  toast on builds where the speech module is missing (beginListening
+   *  already handles that), so this never opens an empty room. */
+  const openVoice = useCallback(() => {
+    firstAction('voice');
+    if (!voiceReady()) {
+      showToast('Voice needs the latest version of the app, type below for now');
+      return;
+    }
+    stopSpeaking();
+    setSpeaking(false);
+    setVoiceOpen(true);
+    void beginListening();
+  }, [beginListening, firstAction, showToast, voiceReady]);
+
+  const closeVoice = useCallback(() => {
+    stopRef.current?.();
+    stopSpeaking();
+    setSpeaking(false);
+    setVoiceOpen(false);
+  }, []);
+
   return (
-    <View style={{ flex: 1, backgroundColor: NIGHT.bg }}>
+    <View style={{ flex: 1, backgroundColor: room.bg }}>
       <LinearGradient
-        colors={[NIGHT.sky, NIGHT.bg, NIGHT.deep]}
+        colors={[room.sky, room.bg, room.deep]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <Ridgeline />
 
       {/* Title centered like the rest of the app's headers; the bell is the
-          standard notifications icon + badge, just on the night palette. */}
-      <View
-        style={{
-          paddingTop: insets.top + 12,
-          paddingHorizontal: 22,
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}>
+          standard notifications icon + badge, just on the night palette.
+          The title is absolutely centred rather than flexed, because the
+          right-hand cluster (info, Scout, new chat, bell) is much wider than
+          the menu button and a flexed title would sit visibly off-centre. */}
+      <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 18 }}>
+        <View style={{ height: 38, flexDirection: 'row', alignItems: 'center' }}>
+          <View
+            pointerEvents="none"
+            style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
+            <Text style={{ fontFamily: fonts.display, fontSize: 26, color: room.ink }}>Scout</Text>
+          </View>
+
+          <Pressable
+            onPress={() => setHistoryOpen(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Chats"
+            style={{ paddingRight: 6 }}>
+            <Ionicons name="menu-outline" size={24} color={room.ink} />
+          </Pressable>
+
+          <View style={{ flex: 1 }} />
+
+        {/* What Scout does, always one tap away (Rylan 2026-08-17). The link
+            under the orb only exists on an empty chat; this is the version
+            that survives the conversation starting. */}
         <Pressable
           onPress={() => {
-            if (scoutThread.size()) setTranscriptOpen(true);
+            track('scout_explainer_opened', { from: 'header' });
+            setExplainerOpen(true);
           }}
-          hitSlop={10}
+          hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Conversation transcript"
-          style={{ width: 32, alignItems: 'flex-start' }}>
-          <Ionicons
-            name="chatbubbles-outline"
-            size={22}
-            color={isFocused && (threadSize || scoutThread.size()) ? NIGHT.ink : NIGHT.ink3}
+          accessibilityLabel="What does Scout do"
+          style={{ paddingHorizontal: 5 }}>
+          <Ionicons name="information-circle-outline" size={22} color={room.ink2} />
+        </Pressable>
+
+        {/* Scout's face, same circular button as every other screen's header.
+            Here it is the way into voice: on other tabs it summons the chat,
+            and you are already in the chat. */}
+        <Pressable
+          onPress={openVoice}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Talk to Scout"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            borderWidth: 1,
+            borderColor: room.lineSoft,
+            backgroundColor: room.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            marginHorizontal: 5,
+          }}>
+          <Image
+            source={require('../../../assets/images/scout-yeti-head.png')}
+            style={{ width: 25, height: 25, marginTop: 3 }}
+            resizeMode="contain"
           />
         </Pressable>
-        <Text
-          style={{
-            flex: 1,
-            textAlign: 'center',
-            fontFamily: fonts.display,
-            fontSize: 26,
-            color: NIGHT.ink,
-          }}>
-          Scout
-        </Text>
+
+        {hasThread ? (
+          <Pressable
+            onPress={newChat}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            style={{ paddingHorizontal: 5 }}>
+            <Ionicons name="create-outline" size={22} color={room.ink} />
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => {
             firstAction('notifications');
             router.push('/notifications');
           }}
           hitSlop={10}
-          style={{ width: 32, alignItems: 'flex-end' }}>
+          style={{ paddingLeft: 5 }}>
           <View>
-            <Ionicons name="notifications-outline" size={23} color={NIGHT.ink} />
+            <Ionicons name="notifications-outline" size={23} color={room.ink} />
             {unreadCount > 0 ? (
               <View
                 style={{
@@ -1717,6 +1918,7 @@ function ScoutTabInner() {
             ) : null}
           </View>
         </Pressable>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -1724,49 +1926,91 @@ function ScoutTabInner() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={insets.bottom + 46}>
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 18, paddingHorizontal: 22, paddingBottom: 8 }}
+          ref={scrollRef}
+          contentContainerStyle={{
+            flexGrow: 1,
+            alignItems: hasThread ? 'stretch' : 'center',
+            justifyContent: hasThread ? 'flex-start' : 'center',
+            gap: 14,
+            paddingHorizontal: 18,
+            paddingTop: hasThread ? 14 : 0,
+            paddingBottom: 10,
+          }}
           keyboardShouldPersistTaps="handled">
-          <ScoutOrb state={orbState} volume={volume} onPress={orbPressed} />
+          {/* Empty state: the orb IS the front door. Once a conversation
+              exists it steps aside and the thread takes the screen, which is
+              what people expect from a chat (Rylan 2026-08-17). */}
+          {!hasThread ? (
+            <View style={{ alignItems: 'center', gap: 16 }}>
+              <ScoutOrb state={orbState} volume={volume} size={244} onPress={openVoice} />
+              <Text
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 14.5,
+                  color: room.ink2,
+                  textAlign: 'center',
+                  paddingHorizontal: 30,
+                }}>
+                {phase === 'listening'
+                  ? transcript || 'Listening…'
+                  : 'Tap and ask Scout for anything'}
+              </Text>
+              {phase === 'idle' ? (
+                <Pressable
+                  onPress={() => {
+                    track('scout_explainer_opened', { from: 'empty_state' });
+                    setExplainerOpen(true);
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button">
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 13,
+                      color: room.accent,
+                      textDecorationLine: 'underline',
+                    }}>
+                    What does Scout do?
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            messages.map((m, i) => (
+              <ChatMessage key={`${i}-${m.from}`} from={m.from} text={m.text} room={room} />
+            ))
+          )}
 
-          {phase === 'listening' ? (
-            <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(140)} style={{ alignItems: 'center', gap: 10 }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 16.5, lineHeight: 24, color: NIGHT.transcript, textAlign: 'center' }}>
-                {transcript || 'Listening…'}
-                <Text style={{ color: '#5B7BFF' }}>▍</Text>
-              </Text>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: NIGHT.ink3 }}>
-                tap the orb when you're done
-              </Text>
-            </Animated.View>
+          {/* The live utterance, as the bubble it is about to become. */}
+          {hasThread && phase === 'listening' ? (
+            <ChatMessage from="user" text={transcript || 'Listening…'} room={room} pending />
           ) : null}
 
           {phase === 'thinking' ? (
-            <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(140)} style={{ alignItems: 'center', gap: 10, paddingHorizontal: 12 }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 15, lineHeight: 22, color: NIGHT.transcript, textAlign: 'center' }}>
-                “{ask}”
-              </Text>
-              <Pressable
-                onPress={editAsk}
-                style={{ borderWidth: 1, borderColor: NIGHT.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink2 }}>✎ Edit</Text>
-              </Pressable>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: NIGHT.ink2 }}>
+            <Animated.View
+              entering={FadeInDown.duration(200)}
+              exiting={FadeOut.duration(140)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <ActivityIndicator size="small" color={room.live} />
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: room.ink2 }}>
                 {thinkWord}…
               </Text>
+              <Pressable onPress={editAsk} hitSlop={8}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.accent }}>
+                  Edit
+                </Text>
+              </Pressable>
             </Animated.View>
           ) : null}
 
           {phase === 'clarify' && clarify ? (
             <Animated.View
               entering={FadeInDown.duration(220)}
-              style={{ alignItems: 'center', gap: 10, paddingHorizontal: 14 }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: NIGHT.ink3, textAlign: 'center' }}>
-                “{clarify.baseAsk}”
-              </Text>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink, textAlign: 'center' }}>
+              style={{ alignSelf: 'flex-start', maxWidth: '92%', gap: 8 }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, lineHeight: 22, color: room.ink }}>
                 {clarify.question}
               </Text>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: NIGHT.ink3 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink3 }}>
                 say it, type it below, or
               </Text>
               <Pressable
@@ -1778,8 +2022,8 @@ function ScoutTabInner() {
                   const intent = parseIntent(base);
                   if (intent?.kind === 'draft') void runDraftAction(intent);
                 }}
-                style={{ borderWidth: 1, borderColor: NIGHT.line, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 15 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink2 }}>
+                style={{ alignSelf: 'flex-start', borderWidth: 1, borderColor: room.line, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 15 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.ink2 }}>
                   Search anywhere
                 </Text>
               </Pressable>
@@ -1790,18 +2034,18 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 11,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: room.ink }}>
                 You have {receipt.eligible.length} saved job{receipt.eligible.length === 1 ? '' : 's'} ready
               </Text>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: room.ink2 }}>
                 Pick a scope — applications submit for real:
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -1814,10 +2058,10 @@ function ScoutTabInner() {
                       paddingVertical: 7,
                       paddingHorizontal: 12,
                       borderWidth: 1,
-                      borderColor: receipt.chosen === t.count ? 'rgba(91,123,255,0.7)' : NIGHT.line,
-                      backgroundColor: receipt.chosen === t.count ? 'rgba(59,130,246,0.3)' : 'transparent',
+                      borderColor: receipt.chosen === t.count ? room.tintLine : room.line,
+                      backgroundColor: receipt.chosen === t.count ? room.tintStrong : 'transparent',
                     }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: receipt.chosen === t.count ? NIGHT.ink : '#B9C8EE' }}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: receipt.chosen === t.count ? room.ink : room.note }}>
                       {t.label} · {t.creditEstimate} cr
                     </Text>
                   </Pressable>
@@ -1830,15 +2074,15 @@ function ScoutTabInner() {
                     setReceipt(null);
                     setPhase('idle');
                   }}
-                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink2 }}>Not now</Text>
+                  style={{ flex: 1, borderWidth: 1, borderColor: room.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink2 }}>Not now</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
                     track('scout_gate_outcome', { gate: 'receipt', outcome: 'run', method: 'tap', count: receipt.chosen });
                     void runApplyAction(receipt.eligible.slice(0, receipt.chosen));
                   }}
-                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  style={{ flex: 1, backgroundColor: room.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#fff' }}>
                     Apply to {receipt.chosen}
                   </Text>
@@ -1852,35 +2096,35 @@ function ScoutTabInner() {
               key={c.id}
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 15,
                 padding: 14,
                 gap: 8,
               }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator size="small" color="#9DB4FF" />
-                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{c.title}</Text>
+                <ActivityIndicator size="small" color={room.live} />
+                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }}>{c.title}</Text>
               </View>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9DB4FF' }}>{c.stageLabel}</Text>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.live }}>{c.stageLabel}</Text>
               {typeof c.progressPct === 'number' ? (
-                <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)', overflow: 'hidden' }}>
+                <View style={{ height: 4, borderRadius: 2, backgroundColor: room.track, overflow: 'hidden' }}>
                   <Animated.View
                     layout={LinearTransition.duration(700)}
                     style={{
                       height: '100%',
                       width: `${Math.max(4, Math.min(c.progressPct, 96))}%`,
                       borderRadius: 2,
-                      backgroundColor: NIGHT.accent,
+                      backgroundColor: room.accent,
                     }}
                   />
                 </View>
               ) : (
                 // No number yet (re-hydrated card) — an empty track, never an
                 // invented percentage. The spinner above already says "live".
-                <View style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(160,190,255,0.18)' }} />
+                <View style={{ height: 4, borderRadius: 2, backgroundColor: room.track }} />
               )}
             </Animated.View>
           ))}
@@ -1889,24 +2133,24 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 10,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: room.ink }}>
                 Ready to search: “{preflight.pf.interpreted}”
               </Text>
               {preflight.pf.heardRaw ? (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink3 }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink3 }}>
                   heard “{preflight.pf.heardRaw}” — I cleaned it up
                 </Text>
               ) : null}
               {preflight.pf.note ? (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 18, color: '#B9C8EE' }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 18, color: room.note }}>
                   {preflight.pf.note}
                 </Text>
               ) : null}
@@ -1921,13 +2165,13 @@ function ScoutTabInner() {
                       }}
                       style={{
                         borderWidth: 1,
-                        borderColor: 'rgba(91,123,255,0.5)',
-                        backgroundColor: 'rgba(59,130,246,0.18)',
+                        borderColor: room.tintLine,
+                        backgroundColor: room.tint,
                         borderRadius: 12,
                         paddingVertical: 10,
                         paddingHorizontal: 13,
                       }}>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{o}</Text>
+                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }}>{o}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -1938,8 +2182,8 @@ function ScoutTabInner() {
                     track('scout_gate_outcome', { gate: preflight.gate, outcome: 'cancel', method: 'tap' });
                     setPreflight(null);
                   }}
-                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Cancel</Text>
+                  style={{ flex: 1, borderWidth: 1, borderColor: room.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: room.ink2 }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -1948,7 +2192,7 @@ function ScoutTabInner() {
                     setPreflight(null);
                     void runDraftAction(it);
                   }}
-                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  style={{ flex: 1, backgroundColor: room.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Run it as-is</Text>
                 </Pressable>
               </View>
@@ -1956,23 +2200,23 @@ function ScoutTabInner() {
           ) : null}
 
           {phase === 'idle' && peoplePicks ? (
-            <Animated.View entering={FadeInDown.duration(220)} style={{ width: '96%', gap: 7 }}>
+            <Animated.View entering={FadeInDown.duration(220)} style={{ alignSelf: 'stretch', gap: 7 }}>
               {peoplePicks.items.map((c) => (
                 <View
                   key={c.name + c.title}
                   style={{
                     borderWidth: 1,
-                    borderColor: NIGHT.lineSoft,
-                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    borderColor: room.lineSoft,
+                    backgroundColor: room.cardSoft,
                     borderRadius: 13,
                     paddingVertical: 10,
                     paddingHorizontal: 13,
                     gap: 2,
                   }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }} numberOfLines={1}>
                     {c.name}
                   </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink2 }} numberOfLines={1}>
                     {c.title || 'Team member'} · {c.company}
                   </Text>
                 </View>
@@ -1991,12 +2235,12 @@ function ScoutTabInner() {
                     wantedSend: false,
                   });
                 }}
-                style={{ backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}>
+                style={{ backgroundColor: room.accent, borderRadius: 12, paddingVertical: 11, alignItems: 'center' }}>
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#fff' }}>
                   Draft the best {Math.min(peoplePicks.items.length, 5)} · {Math.min(peoplePicks.items.length, 5) * 5} credits
                 </Text>
               </Pressable>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: NIGHT.ink3, textAlign: 'center' }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: room.ink3, textAlign: 'center' }}>
                 preview is free — drafting finds and charges the top matches
               </Text>
             </Animated.View>
@@ -2005,7 +2249,7 @@ function ScoutTabInner() {
           {phase === 'idle' && jobPicks && !applyOne ? (
             <Animated.View
               entering={FadeInDown.duration(220)}
-              style={{ width: '96%', gap: 7 }}>
+              style={{ alignSelf: 'stretch', gap: 7 }}>
               {jobPicks.jobs.map((j) => (
                 <Pressable
                   key={j.id}
@@ -2017,17 +2261,17 @@ function ScoutTabInner() {
                   }}
                   style={{
                     borderWidth: 1,
-                    borderColor: 'rgba(91,123,255,0.5)',
-                    backgroundColor: 'rgba(59,130,246,0.15)',
+                    borderColor: room.tintLine,
+                    backgroundColor: room.tint,
                     borderRadius: 13,
                     paddingVertical: 11,
                     paddingHorizontal: 13,
                     gap: 2,
                   }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }} numberOfLines={1}>
                     {j.title}
                   </Text>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink2 }} numberOfLines={1}>
                     {j.company}{j.location ? ` · ${j.location}` : ''}
                     {j.autoApplyEligible ? '  ·  auto-apply ✓' : '  ·  view in Feed'}
                   </Text>
@@ -2040,18 +2284,18 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 10,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: room.ink }}>
                 Apply to {applyOne.title}?
               </Text>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: room.ink2 }}>
                 {applyOne.company}{applyOne.location ? ` · ${applyOne.location}` : ''} · submits for real · {AUTO_APPLY_CREDITS} credits
               </Text>
               <View style={{ flexDirection: 'row', gap: 9 }}>
@@ -2060,8 +2304,8 @@ function ScoutTabInner() {
                     track('scout_gate_outcome', { gate: 'apply_one', outcome: 'cancel', method: 'tap' });
                     setApplyOne(null);
                   }}
-                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Not now</Text>
+                  style={{ flex: 1, borderWidth: 1, borderColor: room.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: room.ink2 }}>Not now</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -2071,7 +2315,7 @@ function ScoutTabInner() {
                     setJobPicks(null);
                     void runApplyAction([j]);
                   }}
-                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  style={{ flex: 1, backgroundColor: room.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>Apply</Text>
                 </Pressable>
               </View>
@@ -2082,19 +2326,19 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 11,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: room.ink }}>
                 Apply to these {applySome.jobs.length}?
               </Text>
               {applySome.requested > applySome.jobs.length ? (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink3 }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink3 }}>
                   You asked for {applySome.requested} — {applySome.jobs.length} {applySome.jobs.length === 1 ? 'is' : 'are'} eligible right now.
                 </Text>
               ) : null}
@@ -2104,23 +2348,23 @@ function ScoutTabInner() {
                     key={j.id}
                     style={{
                       borderWidth: 1,
-                      borderColor: NIGHT.lineSoft,
-                      backgroundColor: 'rgba(255,255,255,0.04)',
+                      borderColor: room.lineSoft,
+                      backgroundColor: room.cardSoft,
                       borderRadius: 13,
                       paddingVertical: 10,
                       paddingHorizontal: 13,
                       gap: 2,
                     }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }} numberOfLines={1}>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }} numberOfLines={1}>
                       {j.title}
                     </Text>
-                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: NIGHT.ink2 }} numberOfLines={1}>
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink2 }} numberOfLines={1}>
                       {j.company}{j.location ? ` · ${j.location}` : ''}
                     </Text>
                   </View>
                 ))}
               </View>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: room.ink2 }}>
                 {applySome.fromPool ? 'Pulled from the wider job pool · ' : ''}applications submit for real · {applySome.jobs.length * AUTO_APPLY_CREDITS} credits
               </Text>
               <View style={{ flexDirection: 'row', gap: 9 }}>
@@ -2129,8 +2373,8 @@ function ScoutTabInner() {
                     track('scout_gate_outcome', { gate: 'apply_some', outcome: 'cancel', method: 'tap' });
                     setApplySome(null);
                   }}
-                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>Not now</Text>
+                  style={{ flex: 1, borderWidth: 1, borderColor: room.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: room.ink2 }}>Not now</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -2139,7 +2383,7 @@ function ScoutTabInner() {
                     setApplySome(null);
                     void runApplyAction(picks);
                   }}
-                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  style={{ flex: 1, backgroundColor: room.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>
                     Apply to {applySome.jobs.length}
                   </Text>
@@ -2152,15 +2396,15 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 10,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: room.ink }}>
                 I heard “{refine.heard}” — did you mean one of these?
               </Text>
               <View style={{ gap: 7 }}>
@@ -2173,17 +2417,17 @@ function ScoutTabInner() {
                     }}
                     style={{
                       borderWidth: 1,
-                      borderColor: 'rgba(91,123,255,0.5)',
-                      backgroundColor: 'rgba(59,130,246,0.18)',
+                      borderColor: room.tintLine,
+                      backgroundColor: room.tint,
                       borderRadius: 12,
                       paddingVertical: 10,
                       paddingHorizontal: 13,
                     }}>
-                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>{o}</Text>
+                    <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }}>{o}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: NIGHT.ink3 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: room.ink3 }}>
                 or say it again / type your own below
               </Text>
             </Animated.View>
@@ -2193,18 +2437,18 @@ function ScoutTabInner() {
             <Animated.View
               entering={FadeInDown.duration(220)}
               style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
+                alignSelf: 'stretch',
+                backgroundColor: room.card,
+                borderColor: room.line,
                 borderWidth: 1,
                 borderRadius: 16,
                 padding: 16,
                 gap: 11,
               }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: NIGHT.ink }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: room.ink }}>
                 Did you mean {didYouMean.suggestion}?
               </Text>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: NIGHT.ink2 }}>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: room.ink2 }}>
                 I heard “{didYouMean.intent.company}” — that doesn't look like a company I know.
               </Text>
               <View style={{ flexDirection: 'row', gap: 9 }}>
@@ -2215,8 +2459,8 @@ function ScoutTabInner() {
                     setDidYouMean(null);
                     void runDraftAction(it);
                   }}
-                  style={{ flex: 1, borderWidth: 1, borderColor: NIGHT.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: NIGHT.ink2 }}>
+                  style={{ flex: 1, borderWidth: 1, borderColor: room.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: room.ink2 }}>
                     Keep “{didYouMean.intent.company}”
                   </Text>
                 </Pressable>
@@ -2227,7 +2471,7 @@ function ScoutTabInner() {
                     setDidYouMean(null);
                     void runDraftAction(it);
                   }}
-                  style={{ flex: 1, backgroundColor: NIGHT.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  style={{ flex: 1, backgroundColor: room.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
                   <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#fff' }}>
                     Yes — {didYouMean.suggestion}
                   </Text>
@@ -2236,74 +2480,52 @@ function ScoutTabInner() {
             </Animated.View>
           ) : null}
 
-          {phase === 'idle' && reply && !didYouMean ? (
+          {/* Scout's reply text already lives in the transcript above; what
+              is left here are its chips, sitting under the last thing it
+              said the way a chat app puts quick replies under a message. */}
+          {phase === 'idle' && reply && !didYouMean && reply.actions.length ? (
             <Animated.View
               entering={FadeInDown.duration(240)}
-              style={{
-                width: '96%',
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                borderColor: NIGHT.line,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 15,
-                gap: 10,
-              }}>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 14.5, lineHeight: 21.5, color: NIGHT.ink }}>
-                {reply.say}
-              </Text>
-              {reply.actions.length ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {reply.actions.map((a) => (
-                    <Pressable
-                      key={a.label}
-                      onPress={() => {
-                        setReply(null);
-                        // chat_message chips run in the conversation (e.g.
-                        // company intel → "Find people at X"); route chips
-                        // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
-                        if (a.chatMessage) {
-                          void submitAsk(a.chatMessage, { source: 'chip' });
-                        } else if (a.href === '#paywall') {
-                          presentPaywall({ context: 'scout' });
-                        } else if (a.href) {
-                          router.push(a.href as never);
-                        }
-                      }}
-                      style={{
-                        borderRadius: 999,
-                        paddingVertical: 7,
-                        paddingHorizontal: 13,
-                        backgroundColor: 'rgba(59,130,246,0.25)',
-                        borderWidth: 1,
-                        borderColor: 'rgba(91,123,255,0.5)',
-                      }}>
-                      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink }}>
-                        {a.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
+              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {reply.actions.map((a) => (
+                <Pressable
+                  key={a.label}
+                  onPress={() => {
+                    setReply(null);
+                    // chat_message chips run in the conversation (e.g.
+                    // company intel → "Find people at X"); route chips
+                    // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
+                    if (a.chatMessage) {
+                      void submitAsk(a.chatMessage, { source: 'chip' });
+                    } else if (a.href === '#paywall') {
+                      presentPaywall({ context: 'scout' });
+                    } else if (a.href) {
+                      router.push(a.href as never);
+                    }
+                  }}
+                  style={{
+                    borderRadius: 999,
+                    paddingVertical: 7,
+                    paddingHorizontal: 13,
+                    backgroundColor: room.tintStrong,
+                    borderWidth: 1,
+                    borderColor: room.tintLine,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.ink }}>
+                    {a.label}
+                  </Text>
+                </Pressable>
+              ))}
             </Animated.View>
           ) : null}
 
-          {phase === 'idle' && !reply ? (
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14.5, color: NIGHT.ink2, textAlign: 'center', paddingHorizontal: 30 }}>
-              Tap and ask Scout for anything
-            </Text>
-          ) : null}
-
-          {phase === 'idle' && awaitingAnswer ? (
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: '#9DB4FF', textAlign: 'center' }}>
-              ↑ Scout's waiting on you — tap the orb to answer, or type below
-            </Text>
-          ) : null}
-
+          {/* What Scout is still holding onto from earlier turns, tappable
+              to forget. */}
           {phase === 'idle' && ctx && Object.keys(ctx.slots).length ? (
             <Pressable
               onPress={() => setCtx(null)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 12 }}>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: NIGHT.ink3 }} numberOfLines={1}>
+              style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: room.ink3 }} numberOfLines={1}>
                 {[
                   ctx.slots.company,
                   ctx.slots.role,
@@ -2313,82 +2535,8 @@ function ScoutTabInner() {
                   .filter(Boolean)
                   .join(' · ')}
               </Text>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: NIGHT.ink3 }}>✕</Text>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: room.ink3 }}>✕</Text>
             </Pressable>
-          ) : null}
-
-          {(phase === 'idle' && cards.length === 0) || phase === 'clarify' ? (
-            <View style={{ alignItems: 'center', gap: 12, width: '100%' }}>
-              <View
-                style={{
-                  width: '96%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  borderWidth: 1,
-                  borderColor: NIGHT.lineSoft,
-                  borderRadius: 14,
-                  paddingLeft: 14,
-                  paddingRight: 5,
-                  paddingVertical: 5,
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                }}>
-                <TextInput
-                  ref={inputRef}
-                  value={typed}
-                  onChangeText={setTyped}
-                  placeholder={awaitingAnswer ? "Answer Scout…" : "Type a command…"}
-                  placeholderTextColor={NIGHT.ink3}
-                  returnKeyType="send"
-                  onSubmitEditing={() => {
-                    const t = typed;
-                    firstAction('typed');
-                    setTyped('');
-                    void submitAsk(t);
-                  }}
-                  style={{ flex: 1, color: NIGHT.transcript, fontFamily: fonts.sans, fontSize: 14.5, paddingVertical: 8 }}
-                />
-                <Pressable
-                  onPress={() => {
-                    const t = typed;
-                    firstAction('typed');
-                    setTyped('');
-                    void submitAsk(t);
-                  }}
-                  style={{ backgroundColor: NIGHT.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 13 }}>
-                  <Text style={{ color: '#fff', fontFamily: fonts.sansSemibold, fontSize: 13 }}>➤</Text>
-                </Pressable>
-              </View>
-
-              {/* Quieter suggestions, under the input — prompts, not the show.
-                  The window rotates every 8s while idle (key remount fades). */}
-              <Animated.View
-                key={sugOffset}
-                entering={FadeInDown.duration(350)}
-                style={{ display: phase === 'clarify' ? 'none' : 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 8 }}>
-                {[0, 1, 2].map((i) => {
-                  const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
-                  return (
-                    <Pressable
-                      key={sug}
-                      onPress={() => {
-                        firstAction('chip');
-                        void submitAsk(sug, { source: 'chip' });
-                      }}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: NIGHT.lineSoft,
-                        borderRadius: 999,
-                        paddingVertical: 5,
-                        paddingHorizontal: 10,
-                        backgroundColor: 'rgba(255,255,255,0.03)',
-                      }}>
-                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11, color: '#8FA3CC' }}>{sug}</Text>
-                    </Pressable>
-                  );
-                })}
-              </Animated.View>
-            </View>
           ) : null}
 
           {/* Loops are shelved for v1 — the Ongoing section is gone (Rylan,
@@ -2397,186 +2545,155 @@ function ScoutTabInner() {
               and a future "autopilot" revival; `loops` still feeds the ASR
               vocabulary and the first-run gate above. */}
         </ScrollView>
+
+        {/* Composer. Pinned under the conversation, never scrolls away.
+            Suggestions ride above it on a fresh chat only: once there is a
+            thread, the conversation is the prompt. */}
+        <View style={{ paddingHorizontal: 16, paddingBottom: 10, gap: 10 }}>
+          {!hasThread && phase !== 'thinking' ? (
+            <Animated.View
+              key={sugOffset}
+              entering={FadeInDown.duration(350)}
+              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+              {[0, 1, 2].map((i) => {
+                const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
+                return (
+                  <Pressable
+                    key={sug}
+                    onPress={() => {
+                      firstAction('chip');
+                      void submitAsk(sug, { source: 'chip' });
+                    }}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: room.lineSoft,
+                      borderRadius: 999,
+                      paddingVertical: 6,
+                      paddingHorizontal: 11,
+                      backgroundColor: room.card,
+                    }}>
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: room.ink2 }}>
+                      {sug}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
+          ) : null}
+
+          <ChatComposer
+            ref={inputRef}
+            room={room}
+            value={typed}
+            onChangeText={(t) => {
+              // Typing over the prefilled question means they came here to do
+              // something, not to be shown around. Drop the hand, keep the tour
+              // reachable from the info button.
+              if (tourArmed && t !== TOUR_OPENER) setTourArmed(false);
+              setTyped(t);
+            }}
+            placeholder={awaitingAnswer ? 'Answer Scout' : 'Ask Scout'}
+            listening={phase === 'listening'}
+            busy={phase === 'thinking'}
+            onSubmit={() => {
+              if (tourArmed) {
+                startTourFromScout();
+                return;
+              }
+              const t = typed;
+              firstAction('typed');
+              setTyped('');
+              void submitAsk(t);
+            }}
+            onMic={openVoice}
+            onStop={() => {
+              // Listening: end the utterance and let it run. Thinking: cancel
+              // and hand the ask back, which is what Edit already does.
+              if (phase === 'listening') stopRef.current?.();
+              else editAsk();
+            }}
+            onPlus={() => {
+              firstAction('attachments');
+              router.push('/attachments');
+            }}
+          />
+
+          {/* The hand. Positioned off the composer's right edge so its
+              fingertip lands on the send button, and it never eats the tap:
+              TapHand is pointerEvents none all the way down. */}
+          {tourArmed ? (
+            <View
+              pointerEvents="none"
+              // Fingertip on the button's near edge, body reaching in from
+              // below the screen. Deliberately NOT centred on the button: the
+              // hand must point at the thing to tap without covering it.
+              style={{ position: 'absolute', right: 44, bottom: -50 }}>
+              <TapHand color={room.ink2} size={78} flip />
+            </View>
+          ) : null}
+        </View>
       </KeyboardAvoidingView>
 
-      {showIntro ? (
-        <Animated.View
-          entering={FadeInDown.duration(280)}
-          exiting={FadeOut.duration(160)}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(10,17,31,0.88)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 26,
-          }}>
-          <View
-            style={{
-              width: '100%',
-              backgroundColor: NIGHT.sky,
-              borderColor: NIGHT.line,
-              borderWidth: 1,
-              borderRadius: 20,
-              padding: 22,
-              gap: 14,
-              alignItems: 'center',
-            }}>
-            <Image
-              source={require('../../../assets/images/scout-face.png')}
-              style={{ width: 64, height: 64 }}
-              resizeMode="contain"
-            />
-            <Text style={{ fontFamily: fonts.display, fontSize: 24, color: NIGHT.ink }}>
-              Meet Scout
-            </Text>
-            <Text
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: 14,
-                lineHeight: 21,
-                color: NIGHT.ink2,
-                textAlign: 'center',
-              }}>
-              Say what you need — finding people, hunting roles, drafting outreach — and Scout
-              does it. Try one:
-            </Text>
-            <View style={{ width: '100%', gap: 8 }}>
-              {suggestionPool.slice(0, 3).map((ex) => (
-                <Pressable
-                  key={ex}
-                  onPress={() => {
-                    dismissIntro('example');
-                    void submitAsk(ex, { source: 'chip' });
-                  }}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: 'rgba(91,123,255,0.5)',
-                    backgroundColor: 'rgba(59,130,246,0.18)',
-                    borderRadius: 12,
-                    paddingVertical: 11,
-                    paddingHorizontal: 13,
-                  }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: NIGHT.ink }}>
-                    “{ex}”
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable
-              onPress={() => {
-                dismissIntro('voice');
-                void beginListening();
-              }}
-              style={{
-                width: '100%',
-                backgroundColor: NIGHT.accent,
-                borderRadius: 12,
-                paddingVertical: 12,
-                alignItems: 'center',
-              }}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: '#fff' }}>
-                Say it out loud
-              </Text>
-            </Pressable>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: NIGHT.ink3, textAlign: 'center' }}>
-              iOS will ask to use the mic — that's Scout listening so it can act on your ask
-            </Text>
-            <Pressable onPress={() => dismissIntro('dismiss')} hitSlop={8}>
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: NIGHT.ink3 }}>
-                I'll explore on my own
-              </Text>
-            </Pressable>
-          </View>
-        </Animated.View>
+      {explainerOpen ? (
+        <WhatScoutDoes
+          room={room}
+          onClose={() => setExplainerOpen(false)}
+          onExample={(ask) => {
+            setExplainerOpen(false);
+            firstAction('explainer_example');
+            void submitAsk(ask, { source: 'explainer' });
+          }}
+        />
       ) : null}
 
-      {transcriptOpen ? (
-        <Animated.View
-          entering={FadeInDown.duration(180)}
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: 'rgba(10,13,22,0.97)',
-          }}>
-          <View
-            style={{
-              paddingTop: insets.top + 12,
-              paddingHorizontal: 22,
-              paddingBottom: 10,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}>
-            <View style={{ width: 32 }} />
-            <Text
-              style={{
-                flex: 1,
-                textAlign: 'center',
-                fontFamily: fonts.display,
-                fontSize: 22,
-                color: NIGHT.ink,
-              }}>
-              This conversation
-            </Text>
-            <Pressable
-              onPress={() => setTranscriptOpen(false)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Close transcript"
-              style={{ width: 32, alignItems: 'flex-end' }}>
-              <Ionicons name="close" size={23} color={NIGHT.ink} />
-            </Pressable>
-          </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, gap: 9 }}
-            // Latest exchange is what you came to re-read.
-            ref={(r) => r?.scrollToEnd({ animated: false })}>
-            {scoutThread.entries().map((m, i) =>
-              m.from === 'user' ? (
-                <View
-                  key={i}
-                  style={{
-                    alignSelf: 'flex-end',
-                    maxWidth: '85%',
-                    backgroundColor: 'rgba(59,130,246,0.28)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(91,123,255,0.45)',
-                    borderRadius: 13,
-                    paddingVertical: 9,
-                    paddingHorizontal: 13,
-                  }}>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: NIGHT.ink }}>
-                    {m.text}
-                  </Text>
-                </View>
-              ) : (
-                <View
-                  key={i}
-                  style={{
-                    alignSelf: 'flex-start',
-                    maxWidth: '88%',
-                    backgroundColor: 'rgba(255,255,255,0.07)',
-                    borderWidth: 1,
-                    borderColor: NIGHT.lineSoft,
-                    borderRadius: 13,
-                    paddingVertical: 9,
-                    paddingHorizontal: 13,
-                  }}>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: NIGHT.ink }}>
-                    {m.text}
-                  </Text>
-                </View>
-              ),
-            )}
-          </ScrollView>
-        </Animated.View>
+      {voiceOpen ? (
+        <VoiceMode
+          room={room}
+          orbState={orbState}
+          volume={volume}
+          listening={phase === 'listening'}
+          thinking={phase === 'thinking'}
+          transcript={transcript}
+          say={phase === 'idle' && reply ? reply.say : null}
+          thinkWord={thinkWord}
+          onTalk={() => {
+            stopSpeaking();
+            setSpeaking(false);
+            void beginListening();
+          }}
+          onStop={() => stopRef.current?.()}
+          onClose={closeVoice}
+        />
+      ) : null}
+
+      {historyOpen ? (
+        <ChatHistoryPanel
+          room={room}
+          onClose={() => setHistoryOpen(false)}
+          onNewChat={newChat}
+          onLoaded={(entries) => {
+            // A saved chat is the live thread now: clear whatever the stage
+            // was holding so nothing from the old conversation lingers.
+            setReply(null);
+            setClarify(null);
+            setPreflight(null);
+            setDidYouMean(null);
+            setRefine(null);
+            setJobPicks(null);
+            setApplyOne(null);
+            setApplySome(null);
+            setPeoplePicks(null);
+            setReceipt(null);
+            setPhase('idle');
+            setThreadSize(entries.length);
+          }}
+          onError={(m) => showToast(m)}
+          onExplain={() => {
+            track('scout_explainer_opened', { from: 'chats' });
+            setHistoryOpen(false);
+            setExplainerOpen(true);
+          }}
+        />
       ) : null}
     </View>
   );

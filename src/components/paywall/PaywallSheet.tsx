@@ -29,6 +29,7 @@ import {
 } from '@/api/purchases';
 import { qk } from '@/api/queryKeys';
 import { type PaywallContext } from '@/components/paywall/paywallBus';
+import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -111,8 +112,51 @@ function Rim({
   );
 }
 
+/**
+ * What the student just ran into, in their words.
+ *
+ * `context` was destructured as `_context` and thrown away: every caller
+ * (running dry mid-draft, mid-auto-apply, asking Scout, opening the credits
+ * screen) got the same generic "Keep the outreach going". The moment names
+ * itself here instead. Falls back to the generic line for an unknown context
+ * rather than inventing a story about what happened.
+ */
+function heroFor(
+  context: PaywallContext | undefined,
+  credits: number,
+): { title: string; subtitle: string } {
+  const dry = credits <= 0;
+  switch (context) {
+    case 'draft':
+      return {
+        title: dry ? 'You are out of credits' : 'Not enough for that draft',
+        subtitle: `You have ${credits.toLocaleString()} left, and writing to someone costs more than that.`,
+      };
+    case 'auto-apply':
+      return {
+        title: dry ? 'You are out of credits' : 'Not enough to apply',
+        subtitle: `You have ${credits.toLocaleString()} left, and submitting an application costs more than that.`,
+      };
+    case 'scout':
+      return {
+        title: 'Scout needs credits to run that',
+        subtitle: `You have ${credits.toLocaleString()} left. Finding people, writing emails and applying all spend credits.`,
+      };
+    case 'low-balance':
+      return {
+        title: 'Running low',
+        subtitle: `${credits.toLocaleString()} credits left. Top up before you hit the wall mid-search.`,
+      };
+    default:
+      return {
+        title: 'Keep the outreach going',
+        subtitle: 'Student pricing, built for recruiting season.',
+      };
+  }
+}
+
 export default function PaywallSheet({
-  context: _context,
+  context,
   packsFirst,
   onClose,
 }: {
@@ -126,6 +170,7 @@ export default function PaywallSheet({
   const { profile, showToast, connection } = useApp();
 
   const isSubscriber = profile.plan !== 'Free';
+  const hero = heroFor(context, profile.credits);
   const [data, setData] = useState<PaywallData | null>(null);
   const [showPacks, setShowPacks] = useState(isSubscriber || packsFirst);
   const [busy, setBusy] = useState(false);
@@ -346,7 +391,7 @@ export default function PaywallSheet({
               {!isSubscriber && (
                 <>
                   <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading }}>
-                    Keep the outreach going
+                    {hero.title}
                   </Text>
                   <Text
                     style={{
@@ -356,7 +401,7 @@ export default function PaywallSheet({
                       marginTop: 4,
                       marginBottom: 16,
                     }}>
-                    Student pricing, built for recruiting season.
+                    {hero.subtitle}
                   </Text>
 
                   {pro && (
@@ -421,7 +466,10 @@ export default function PaywallSheet({
                             color: 'rgba(255,255,255,0.85)',
                             marginTop: 6,
                           }}>
-                          2,000 credits a month for drafts, contacts, and auto-applies.
+                          2,000 credits a month. An email is {profile.creditsPerSwipe}, an
+                          application is {AUTO_APPLY_CREDITS}, about{' '}
+                          {Math.floor(2000 / profile.creditsPerSwipe)} emails or{' '}
+                          {Math.floor(2000 / AUTO_APPLY_CREDITS)} applications.
                         </Text>
                         <Pressable
                           onPress={() => void buyPro()}
@@ -511,7 +559,9 @@ export default function PaywallSheet({
                                 color: 'rgba(255,255,255,0.85)',
                                 marginTop: 3,
                               }}>
-                              5,000 credits a month for a heavy recruiting push.
+                              5,000 credits a month, about{' '}
+                              {Math.floor(5000 / profile.creditsPerSwipe)} emails or{' '}
+                              {Math.floor(5000 / AUTO_APPLY_CREDITS)} applications.
                             </Text>
                           </View>
                           <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
@@ -543,7 +593,7 @@ export default function PaywallSheet({
               {isSubscriber && (
                 <>
                   <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading }}>
-                    Top up your credits
+                    {context && context !== 'credits-screen' ? hero.title : 'Top up your credits'}
                   </Text>
                   <Text
                     style={{
@@ -553,7 +603,9 @@ export default function PaywallSheet({
                       marginTop: 4,
                       marginBottom: 12,
                     }}>
-                    Purchased credits never expire and sit on top of your monthly allowance.
+                    {context && context !== 'credits-screen'
+                      ? `${hero.subtitle} Purchased credits never expire.`
+                      : 'Purchased credits never expire and sit on top of your monthly allowance.'}
                   </Text>
 
                   {/* Plan switching, Apple-managed subscriptions only (both

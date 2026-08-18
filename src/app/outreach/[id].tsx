@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import Input from '@/components/ui/Input';
+import { requestReviewIfDue } from '@/lib/appRating';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -116,6 +117,27 @@ export default function OutreachDetailScreen() {
       updateOutreach(item.id, { attended: true });
     }
   }, [item, updateOutreach]);
+
+  // The App Store rating ask (lib/appRating). A reply landing is the one moment
+  // in this app that is unambiguously good news, so it is the primary trigger.
+  // Delayed a beat so the stars arrive after they have read the thing, not on
+  // top of it, and fired at most once per screen. appRating owns every other
+  // rule (30 day gap, 3 per year, quiet after an error).
+  //
+  // Deliberately NOT gated on !attended. The server marks a thread attended
+  // whenever hasUnreadReply is false, so anyone who reads their mail in Gmail
+  // first would never qualify, which is most students. Opening a reply thread
+  // at all is good news, and the 30 day gap is what stops it being a nag.
+  const askedForReviewRef = useRef(false);
+  useEffect(() => {
+    if (askedForReviewRef.current) return;
+    if (!item || item.status !== 'replied') return;
+    askedForReviewRef.current = true;
+    const t = setTimeout(() => {
+      void requestReviewIfDue('reply', Date.now());
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [item]);
 
   // Open the Gmail app (not Safari). Requires googlegmail in the app's
   // LSApplicationQueriesSchemes; falls back to the web draft URL.

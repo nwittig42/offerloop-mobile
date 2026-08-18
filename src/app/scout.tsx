@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { fetchTopFollowup } from '@/api/endpoints/followups';
 import {
   getScoutChat,
   listScoutChats,
@@ -78,6 +79,50 @@ export default function ScoutScreen() {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Open on the thing that's actually going cold, not on a menu of features.
+  // Only on a genuinely fresh sheet: mid-conversation, or when the sheet was
+  // summoned from a job, the last thing the student needs is Scout changing
+  // the subject. Read straight from the follow-ups the daemon already wrote,
+  // so the person gets named without paying for a model turn to find out.
+  // Silent on failure and silent when there is nobody: an invented nudge
+  // would be worse than none.
+  const openerDone = useRef(false);
+  useEffect(() => {
+    if (openerDone.current || job || scoutThread.entries().length) return;
+    openerDone.current = true;
+    let alive = true;
+    void (async () => {
+      const top = await fetchTopFollowup();
+      if (!alive || !top) return;
+      const where = top.company ? ` at ${top.company}` : '';
+      setMessages((prev) =>
+        // Nothing was typed while we were fetching, or the moment has passed.
+        prev.length > 1
+          ? prev
+          : [
+              ...prev,
+              {
+                from: 'scout',
+                text:
+                  top.suggestion ||
+                  `${top.contactName}${where} hasn't written back yet. Want me to send a follow-up?`,
+                actions: [
+                  {
+                    label: top.draftReady
+                      ? `Send the follow-up to ${top.contactName}`
+                      : `Draft a follow-up to ${top.contactName}`,
+                    chatMessage: `draft a follow-up to ${top.contactName}${where}`,
+                  },
+                ],
+              },
+            ],
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [job]);
   const [savedChats, setSavedChats] = useState<ScoutChatMeta[] | 'loading' | 'error'>('loading');
 
   const userInfo = {

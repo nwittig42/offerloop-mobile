@@ -46,7 +46,7 @@ export default function ReferralCard({ compact }: { compact?: boolean }) {
             gap: 9,
           }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={15} color="#FFFFFF" />
+            <Ionicons name={r.unlocked ? 'trophy' : 'gift'} size={15} color="#FFFFFF" />
             <Text
               numberOfLines={1}
               style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
@@ -87,7 +87,7 @@ export default function ReferralCard({ compact }: { compact?: boolean }) {
         end={{ x: 1, y: 1 }}
         style={{ borderRadius: 16, padding: 16, gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name={r.unlocked ? 'sparkles' : 'gift'} size={18} color="#FFFFFF" />
+          <Ionicons name={r.unlocked ? 'trophy' : 'gift'} size={18} color="#FFFFFF" />
           <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 15.5, color: '#FFFFFF' }}>
             {r.unlocked ? 'Elite unlocked, thank you!' : 'Invite friends, unlock Elite free'}
           </Text>

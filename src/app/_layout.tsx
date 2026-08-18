@@ -17,16 +17,19 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purchases';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import ConnectionBanner from '@/components/ConnectionBanner';
+import { TourProvider } from '@/components/tour/TourProvider';
+import TourOverlay from '@/components/tour/TourOverlay';
 import Toast from '@/components/Toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useScreenshotShare } from '@/hooks/useScreenshotShare';
 import { loadAIConsent } from '@/lib/aiConsent';
+import { noteAppOpen } from '@/lib/appRating';
 import { AppProvider, useApp } from '@/store/app';
 import { ThemeProvider, useColors, useTheme } from '@/theme/ThemeProvider';
 import { resolveSchool } from '@/theme/tokens';
@@ -157,6 +160,18 @@ function useAuthGate() {
 /** Inside ThemeProvider so the status bar and screen background follow the setting. */
 function ThemedShell() {
   const colors = useColors();
+  // The web document has no background of its own: html, body and the React
+  // root all compute to transparent, so anything the app does not paint over
+  // falls through to the browser's white. Invisible in light mode, a white
+  // band in dark. Native ignores this.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const doc = globalThis.document;
+    if (!doc) return;
+    doc.documentElement.style.backgroundColor = colors.surface;
+    doc.body.style.backgroundColor = colors.surface;
+  }, [colors.surface]);
+
   const { scheme, setSchool } = useTheme();
   const { profile, bootPending } = useApp();
   const { user } = useAuth();
@@ -184,6 +199,14 @@ function ThemedShell() {
     prevUid.current = uid;
   }, [user?.uid]);
 
+  // One tick toward the App Store rating prompt's backup trigger ("5 separate
+  // days in the app"). Signed-in only, so a bounced visitor never counts, and
+  // deduped by calendar day inside noteAppOpen.
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    void noteAppOpen(Date.now());
+  }, [status]);
+
   // Keep the school-colors theme pointed at the school the user signed up with.
   useEffect(() => {
     setSchool(resolveSchool(profile.school));
@@ -201,7 +224,11 @@ function ThemedShell() {
   }
 
   return (
-    <>
+    // Themed ground under everything. GestureHandlerRootView has no
+    // background, so any region a screen does not paint itself fell through to
+    // white: invisible in light mode, a white band above the header in dark.
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <TourProvider>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
@@ -230,6 +257,9 @@ function ThemedShell() {
         <Stack.Screen name="meeting-prep/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="meeting-prep/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="company/[name]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="contact/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="what-we-send" options={{ presentation: 'card' }} />
+        <Stack.Screen name="settings" options={{ presentation: 'card' }} />
         <Stack.Screen name="passed-jobs" options={{ presentation: 'card' }} />
         <Stack.Screen name="milestones" options={{ presentation: 'card' }} />
         <Stack.Screen name="share" options={{ presentation: 'modal' }} />
@@ -237,8 +267,11 @@ function ThemedShell() {
         {/* One screen, both decks, chosen by ?deck=jobs|people. */}
         <Stack.Screen name="feed-filter" options={{ presentation: 'modal' }} />
       </Stack>
-      <ConnectionBanner />
-      <Toast />
-    </>
+      {/* Above the tabs on purpose: the tour walks the user between them. */}
+      <TourOverlay />
+        <ConnectionBanner />
+        <Toast />
+      </TourProvider>
+    </View>
   );
 }

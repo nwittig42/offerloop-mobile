@@ -114,11 +114,16 @@ export type SwipeSettings = {
    * fields, so the thing we persist is the thing the user recognises when it
    * comes back as a chip. Null means the default deck.
    *
-   * Both live here rather than in screen state because they have to survive a
-   * relaunch: a student who set up "entry level finance in NYC" last night
-   * should not open the app to an unexplained general feed. `recents` keeps the
-   * last few so switching back is one tap, and is capped (FILTER_RECENTS_MAX)
-   * because a chip row nobody can read is not a shortcut.
+   * The ACTIVE filter is session-scoped: it is deliberately not written to
+   * disk, so relaunching the app always lands on the normal ranked feed. A
+   * filter is something you asked for a minute ago, not a mode to get stuck
+   * in, and a deck still narrowed by yesterday's sentence (with no memory of
+   * setting it) reads as a broken feed rather than a saved preference.
+   *
+   * The RECENTS lists DO persist, which is what makes that safe: the sentence
+   * is never lost, and getting back to it is one tap in the settings screen.
+   * Capped at FILTER_RECENTS_MAX, because a chip row nobody can read is not a
+   * shortcut. See the persist effect in store/app for where the split happens.
    */
   jobFilter: string | null;
   jobFilterRecents: string[];

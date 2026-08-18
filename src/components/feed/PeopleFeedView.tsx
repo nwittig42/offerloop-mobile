@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { listAppliedJobs } from '@/api/endpoints/autoApply';
+import { appliedCompanyKeys } from '@/lib/appliedPeople';
 import GlassBar from '@/components/GlassBar';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import PersonDeck, { type PersonDeckHandle } from '@/components/feed/PersonDeck';
@@ -85,7 +87,6 @@ export default function PeopleFeedView() {
   // lib/profileNudge rather than by this screen.
   const [nudge, setNudge] = useState<NudgeKey | null>(null);
   const deckRef = useRef<PersonDeckHandle>(null);
-  const [expanded, setExpanded] = useState(false);
   /** Cards already swiped, held locally so the deck advances instantly rather
    *  than waiting on a refetch. */
   const [consumed, setConsumed] = useState<string[]>([]);
@@ -113,6 +114,18 @@ export default function PeopleFeedView() {
    * hence the mirrored `enabled` flags below.
    */
   const peopleFilter = swipeSettings.peopleFilter?.trim() || null;
+
+  /**
+   * Everywhere this user has applied, for the card badge. Shared query key with
+   * the tab bar's owed-applications count, so this is a cache read rather than
+   * a second fetch, and it badges people in ANY deck: if you applied there, the
+   * fact is true however they were surfaced.
+   */
+  const appliedQuery = useQuery({ queryKey: ['applied-jobs'], queryFn: () => listAppliedJobs() });
+  const appliedCompanies = useMemo(
+    () => appliedCompanyKeys(appliedQuery.data),
+    [appliedQuery.data],
+  );
 
   const deckQuery = useQuery<Deck>({
     queryKey: ['rankerDeck'],
@@ -383,6 +396,43 @@ export default function PeopleFeedView() {
   const loading = peopleFilter ? searchQuery.isLoading : deckQuery.isLoading;
   const errored = peopleFilter ? searchQuery.isError : deckQuery.isError;
 
+  /**
+   * A search is a real wait, so it gets a real screen (Nick 2026-08-17).
+   *
+   * The skeleton the ranked deck uses is a lie here: it implies cards are a
+   * moment away, and a PDL search with progressive relaxation runs half a
+   * minute. Thirty seconds of shimmering placeholder reads as a hang, and the
+   * student closes the app before it lands. So this says what is happening,
+   * what it is looking for, and roughly how long, which is the whole difference
+   * between waiting and being stuck.
+   */
+  if (peopleFilter && (loading || loadingMore)) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
+        <ActivityIndicator color={colors.accent} />
+        <Text
+          style={{
+            fontFamily: fonts.display,
+            fontSize: 22,
+            color: colors.heading,
+            textAlign: 'center',
+          }}>
+          {loadingMore ? 'Finding more' : 'Building your feed'}
+        </Text>
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 13.5,
+            color: colors.inkSecondary,
+            textAlign: 'center',
+            lineHeight: 20,
+          }}>
+          {`Finding ${PEOPLE_SEARCH_BATCH} ${loadingMore ? 'more people' : 'people'} who match “${peopleFilter}”. This usually takes 20 to 30 seconds.`}
+        </Text>
+      </View>
+    );
+  }
+
   if (loading) return <FeedSkeleton />;
 
   // A search that failed knows WHY, and the fix differs by reason: rewrite the
@@ -513,12 +563,11 @@ export default function PeopleFeedView() {
         <PersonDeck
           ref={deckRef}
           people={people}
-          expanded={expanded}
-          onToggleExpand={setExpanded}
           onSwiped={handleSwiped}
           blockRight={!canReveal || !canDraft}
           onBlockedRight={onBlockedRight}
           action={action}
+          appliedCompanies={appliedCompanies}
         />
       </View>
 
@@ -537,7 +586,7 @@ export default function PeopleFeedView() {
             corner (where the Jobs deck puts its undo) is the match badge and
             LinkedIn stack here. Passes only — a right swipe has already spent
             credits and written an email, and there is no unspending that. */}
-        {passed.length && !expanded ? (
+        {passed.length ? (
           <Pressable
             onPress={undoLastPass}
             accessibilityRole="button"
