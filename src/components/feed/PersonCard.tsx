@@ -102,9 +102,20 @@ function MatchGrade({ score }: { score: number }) {
   );
 }
 
+/** Prompt-search people arrive with schemeless ("linkedin.com/in/x") or
+ *  junk ("Not available") URLs; the button LOOKED live but the tap died
+ *  inside openURL (Rylan 2026-08-18 round 5). Normalize or hide. */
+function usableLinkedin(raw?: string): string | null {
+  const v = (raw || '').trim();
+  if (!v || v.toLowerCase() === 'not available') return null;
+  if (!/linkedin\.com\//i.test(v)) return null;
+  return /^https?:\/\//i.test(v) ? v : `https://${v.replace(/^\/+/, '')}`;
+}
+
 function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolean }) {
   const colors = useColors();
   const router = useRouter();
+  const linkedin = usableLinkedin(person.linkedinUrl);
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -164,11 +175,11 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
               it the card's most tappable-looking object after the name. Stops
               the card's tap from firing so opening a profile never also
               triggers anything underneath. */}
-          {person.linkedinUrl ? (
+          {linkedin ? (
             <Pressable
               onPress={(e) => {
                 e.stopPropagation();
-                void Linking.openURL(person.linkedinUrl!);
+                void Linking.openURL(linkedin);
               }}
               accessibilityRole="link"
               accessibilityLabel={`Open ${person.name}'s LinkedIn`}

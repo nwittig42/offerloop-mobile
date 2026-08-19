@@ -20,6 +20,8 @@ export function StateView({
   actionLoading,
   secondaryLabel,
   onSecondary,
+  tertiaryLabel,
+  onTertiary,
   tone = 'neutral',
   card = false,
 }: {
@@ -32,6 +34,8 @@ export function StateView({
   actionLoading?: boolean;
   secondaryLabel?: string;
   onSecondary?: () => void;
+  tertiaryLabel?: string;
+  onTertiary?: () => void;
   /** 'success' tints the icon green: a finished deck is a win, not an
    *  absence (Rylan 2026-08-18 round 4). */
   tone?: 'neutral' | 'error' | 'success';
@@ -84,7 +88,10 @@ export function StateView({
         />
       ) : null}
       {secondaryLabel && onSecondary ? (
-        <Button label={secondaryLabel} variant="ghost" onPress={onSecondary} />
+        <Button label={secondaryLabel} variant="outline" onPress={onSecondary} />
+      ) : null}
+      {tertiaryLabel && onTertiary ? (
+        <Button label={tertiaryLabel} variant="ghost" onPress={onTertiary} />
       ) : null}
     </View>
   );

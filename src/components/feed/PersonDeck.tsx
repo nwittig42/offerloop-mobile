@@ -37,7 +37,7 @@ type Props = {
    *  scans of the applications list. */
   appliedCompanies?: Set<string>;
   /** Undo on the card's top-right corner; travels with the swipe. */
-  undo?: { visible: boolean; onPress: () => void };
+  undo?: { visible: boolean; onPress: () => void; position?: 'top-right' | 'bottom-right' };
 };
 
 /**

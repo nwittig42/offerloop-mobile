@@ -26,7 +26,9 @@ export type FeedMode = 'jobs' | 'people';
 // leftmost segment should be the one the screen opens on.
 const SEGMENTS: { mode: FeedMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { mode: 'people', label: 'People', icon: 'people-outline' },
-  { mode: 'jobs', label: 'Jobs', icon: 'briefcase-outline' },
+  // "Apply" not "Jobs" (Rylan 2026-08-18: the deck's verb, not its noun —
+  // "what am I doing with these jobs?" answered in the label itself).
+  { mode: 'jobs', label: 'Apply', icon: 'briefcase-outline' },
 ];
 
 /** Fixed track geometry, so the pill can land exactly on a segment. */

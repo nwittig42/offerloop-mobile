@@ -416,28 +416,45 @@ export default function PeopleFeedView() {
    * between waiting and being stuck.
    */
   if (peopleFilter && (loading || loadingMore)) {
+    // On a white card: ink-on-navy was illegible once the stage went dark
+    // (Rylan 2026-08-18 round 5).
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
-        <ActivityIndicator color={colors.accent} />
-        <Text
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <View
           style={{
-            fontFamily: fonts.display,
-            fontSize: 22,
-            color: colors.heading,
-            textAlign: 'center',
+            alignSelf: 'stretch',
+            backgroundColor: colors.paper,
+            borderRadius: 20,
+            alignItems: 'center',
+            padding: 32,
+            gap: 14,
+            shadowColor: '#000000',
+            shadowOpacity: 0.14,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 5,
           }}>
-          {loadingMore ? 'Finding more' : 'Building your feed'}
-        </Text>
-        <Text
-          style={{
-            fontFamily: fonts.sans,
-            fontSize: 13.5,
-            color: colors.inkSecondary,
-            textAlign: 'center',
-            lineHeight: 20,
-          }}>
-          {`Finding ${PEOPLE_SEARCH_BATCH} ${loadingMore ? 'more people' : 'people'} who match “${peopleFilter}”. This usually takes 20 to 30 seconds.`}
-        </Text>
+          <ActivityIndicator color={colors.accent} />
+          <Text
+            style={{
+              fontFamily: fonts.display,
+              fontSize: 22,
+              color: colors.heading,
+              textAlign: 'center',
+            }}>
+            {loadingMore ? 'Finding more' : 'Building your feed'}
+          </Text>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 13.5,
+              color: colors.inkSecondary,
+              textAlign: 'center',
+              lineHeight: 20,
+            }}>
+            {`Finding ${PEOPLE_SEARCH_BATCH} ${loadingMore ? 'more people' : 'people'} who match “${peopleFilter}”. This usually takes 20 to 30 seconds.`}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -541,11 +558,31 @@ export default function PeopleFeedView() {
           icon="checkmark-done-circle-outline"
           tone="success"
           title="That’s everyone for now"
-          body="You’ve been through the people we ranked for you. Describe who else you want and we’ll go find them."
+          body="That’s this batch from your targets. Describe who else you want, or let us run a fresh search from your profile."
           actionLabel="Describe who to find"
           onAction={() => router.push('/feed-filter?deck=people')}
-          secondaryLabel={deckQuery.isFetching ? 'Refreshing…' : 'Refresh this deck'}
-          onSecondary={() => deckQuery.refetch()}
+          secondaryLabel="Surprise me"
+          onSecondary={() => {
+            // One tap, no typing (Rylan 2026-08-18 round 5: "keep it going,
+            // keep it quick"). Compose a real search from their own stated
+            // targets; with nothing to compose from, fall through to the
+            // editor rather than inventing a query.
+            const role = profile.targetRoles[0]?.trim();
+            const industry = profile.industries[0]?.trim();
+            if (!role && !industry) {
+              router.push('/feed-filter?deck=people');
+              return;
+            }
+            const prompt = role && industry
+              ? `${role}s at ${industry} companies`
+              : role
+                ? `${role}s at top companies`
+                : `People at ${industry} companies`;
+            updateSwipeSettings({ peopleFilter: prompt });
+            showToast('Building a fresh feed from your targets.');
+          }}
+          tertiaryLabel={deckQuery.isFetching ? 'Refreshing…' : 'Refresh this deck'}
+          onTertiary={() => deckQuery.refetch()}
         />
         {/* Scout, under the empty state rather than over it: the answer to
             "that's everyone" is usually "because you only told me two firms",
@@ -585,7 +622,7 @@ export default function PeopleFeedView() {
           onBlockedRight={onBlockedRight}
           action={action}
           appliedCompanies={appliedCompanies}
-          undo={{ visible: passed.length > 0, onPress: undoLastPass }}
+          undo={{ visible: passed.length > 0, onPress: undoLastPass, position: 'bottom-right' }}
         />
       </View>
 

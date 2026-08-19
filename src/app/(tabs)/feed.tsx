@@ -419,9 +419,14 @@ export default function FeedScreen() {
         </Animated.View>
       ) : null}
 
-      {mode === 'people' ? (
+      {/* People stays MOUNTED while Jobs is showing (Rylan 2026-08-18 round
+          5: flipping tabs reset the deck and replayed every card he had
+          already passed — the swipe memory lived in component state that
+          unmounting threw away). display:none keeps state and skips work. */}
+      <View style={{ flex: 1, display: mode === 'people' ? 'flex' : 'none' }}>
         <PeopleFeedView />
-      ) : feedState.loading ? (
+      </View>
+      {mode !== 'jobs' ? null : feedState.loading ? (
         <FeedSkeleton />
       ) : feedState.error ? (
         <StateView
@@ -531,7 +536,6 @@ export default function FeedScreen() {
               onBlockedRight={onApplyProfileBlocked}
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
               shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
-              costLabel={`${rightSwipeCost} credits`}
               undo={{ visible: canUndo, onPress: undoLastPass }}
             />
 

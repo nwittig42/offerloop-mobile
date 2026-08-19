@@ -44,7 +44,7 @@ type Props = {
   /** Worn by the collapsed card's bottom-right corner ("10 credits"). */
   costLabel?: string;
   /** Undo on the card's top-right corner; travels with the swipe. */
-  undo?: { visible: boolean; onPress: () => void };
+  undo?: { visible: boolean; onPress: () => void; position?: 'top-right' | 'bottom-right' };
 };
 
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };

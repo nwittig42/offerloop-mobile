@@ -100,7 +100,7 @@ export type SwipeStackProps<T> = {
   /** Undo, worn by the card's top-right corner so it travels WITH the swipe
    *  instead of floating (Rylan 2026-08-18 round 4). Hidden while expanded
    *  (the collapse chevron owns that corner in reading mode). */
-  undo?: { visible: boolean; onPress: () => void };
+  undo?: { visible: boolean; onPress: () => void; position?: 'top-right' | 'bottom-right' };
   /** Veto for the win toast. The stack cannot know a swipe is about to be
    *  refused downstream (out of credits bounces the job back AFTER the
    *  fly-out), and celebrating an action that did not happen is worse than no
@@ -644,7 +644,7 @@ function SwipeStackInner<T>(
               hitSlop={8}
               style={{
                 position: 'absolute',
-                top: 22,
+                ...(undo.position === 'bottom-right' ? { bottom: 22 } : { top: 22 }),
                 right: 14,
                 width: 36,
                 height: 36,
