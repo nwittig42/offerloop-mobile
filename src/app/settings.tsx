@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { deleteAccount } from '@/api/endpoints/preferences';
+import { hasAppleSubscription, iapAvailable, showManageSubscriptions } from '@/api/purchases';
 import { useAuth } from '@/auth/AuthProvider';
 import ReferralCard from '@/components/ReferralCard';
 import { Button } from '@/components/ui/Button';
@@ -161,6 +162,13 @@ export default function SettingsScreen() {
   const { signOut, user } = useAuth();
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  // Tucked-away by design (Rylan 2026-08-19): cancellation exists, findable
+  // but never advertised. Apple-managed subs only; web/grant plans are
+  // managed where they started.
+  const [appleManaged, setAppleManaged] = useState(false);
+  useEffect(() => {
+    if (iapAvailable()) void hasAppleSubscription().then(setAppleManaged);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
@@ -494,6 +502,13 @@ export default function SettingsScreen() {
         <SettingsSection label="Account" />
 
         <Card>
+          {appleManaged ? (
+            <Button
+              label="Manage or cancel subscription"
+              variant="ghost"
+              onPress={() => void showManageSubscriptions()}
+            />
+          ) : null}
           <Button
             label="Sign out"
             variant="ghost"

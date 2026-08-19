@@ -238,7 +238,7 @@ export default function FeedScreen() {
   // The deck's bar clearance, animated: full while the bar is on stage, a
   // sliver while a card is enlarged and the bar is gone. Sized for the slim
   // bar plus the floating circles' 30pt of overlap past the card edge.
-  const deckPadBase = swipeSettings.emailHiringManager ? 176 : 134;
+  const deckPadBase = swipeSettings.emailHiringManager ? 198 : 156;
   const deckPadStyle = useAnimatedStyle(
     () => ({
       paddingBottom: deckPadBase - (deckPadBase - 14) * barShrink.value,
@@ -251,7 +251,7 @@ export default function FeedScreen() {
   const dragX = useSharedValue(0);
   const deckActionsStyle = useAnimatedStyle(
     () => ({
-      bottom: deckPadBase - (deckPadBase - 14) * barShrink.value - 20,
+      bottom: deckPadBase - (deckPadBase - 14) * barShrink.value - 56,
       opacity: 1 - barShrink.value,
     }),
     [deckPadBase],
@@ -536,7 +536,7 @@ export default function FeedScreen() {
               onBlockedRight={onApplyProfileBlocked}
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
               shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
-              undo={{ visible: canUndo, onPress: undoLastPass }}
+              undo={{ visible: canUndo, onPress: undoLastPass, position: 'bottom-right' }}
             />
 
           </Animated.View>
@@ -552,7 +552,7 @@ export default function FeedScreen() {
                 drag={dragX}
                 onPass={() => deckRef.current?.swipe('left')}
                 onCommit={() => deckRef.current?.swipe('right')}
-                commitIcon={top?.autoApplyEligible ? 'checkmark' : 'bookmark'}
+                commitIcon="checkmark"
                 passLabel="Pass on this job"
                 commitLabel={top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'}
               />

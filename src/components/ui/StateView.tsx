@@ -84,6 +84,7 @@ export function StateView({
         </Text>
       ) : null}
       {actionLabel && onAction ? (
+        <View style={{ alignSelf: 'center' }}>
         <Button
           label={actionLoading ? 'Loading…' : actionLabel}
           variant={prominent ? 'primary' : 'outline'}
@@ -91,12 +92,17 @@ export function StateView({
           disabled={actionLoading}
           onPress={onAction}
         />
+        </View>
       ) : null}
       {secondaryLabel && onSecondary ? (
-        <Button label={secondaryLabel} variant="outline" onPress={onSecondary} />
+        <View style={{ alignSelf: 'center' }}>
+          <Button label={secondaryLabel} variant="outline" onPress={onSecondary} />
+        </View>
       ) : null}
       {tertiaryLabel && onTertiary ? (
-        <Button label={tertiaryLabel} variant="ghost" onPress={onTertiary} />
+        <View style={{ alignSelf: 'center' }}>
+          <Button label={tertiaryLabel} variant="ghost" onPress={onTertiary} />
+        </View>
       ) : null}
     </View>
   );

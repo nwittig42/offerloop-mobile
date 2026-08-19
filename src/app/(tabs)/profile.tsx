@@ -462,9 +462,9 @@ export default function ProfileScreen() {
               rhyme). The page below stays paper; this is the one vibrant
               thing on it (Rylan 2026-08-18: "so much white on this page"). */}
           <LinearGradient
-            colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
+            colors={['#1B1E2C', '#12141C'] as const}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            end={{ x: 0, y: 1 }}
             style={{ padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             {profile.photoUrl ? (
@@ -508,7 +508,7 @@ export default function ProfileScreen() {
               </Text>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sans, fontSize: 13, color: '#DDE3FB' }}>
+                style={{ fontFamily: fonts.sans, fontSize: 13, color: '#C4B5FD' }}>
                 {profile.school}
               </Text>
             </View>
@@ -543,7 +543,7 @@ export default function ProfileScreen() {
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#FDE68A' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#C4B5FD' }}>
                 credits left
               </Text>
             </Pressable>
@@ -573,49 +573,43 @@ export default function ProfileScreen() {
               </View>
             </Pressable>
           </View>
-          </LinearGradient>
-
           {/* The buying action, on the page people open when they wonder about
               credits. Only rendered when purchases actually work: a dead
               Upgrade button is worse than none, and a build with no working
-              purchase must show nothing buyable at all. */}
+              purchase must show nothing buyable at all. Lives INSIDE the dark
+              hero now: one card, one story (Rylan 2026-08-19 overhaul, in the
+              website's Elite-card language). */}
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               gap: 10,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
+              paddingBottom: 2,
+              paddingTop: 14,
             }}>
             <View style={{ flex: 1 }}>
               {/* The tier wears its shop color (Rylan 2026-08-18): Elite in
                   the purple its pack tiles use, Pro in the blue, Free plain.
                   A badge, not a sentence. */}
-              {/* One unit (Rylan 2026-08-18 round 4): "Elite plan" whole,
-                  in the tier's shop color. */}
-              <View style={{ flexDirection: 'row' }}>
-                <View
-                  style={{
-                    paddingHorizontal: 9,
-                    paddingVertical: 3,
-                    borderRadius: 6,
-                    backgroundColor:
-                      profile.plan === 'Elite'
-                        ? '#7C3AED'
-                        : profile.plan === 'Pro'
-                          ? colors.marketing
-                          : colors.surface,
-                  }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sansBold,
-                      fontSize: 12,
-                      color: profile.plan === 'Free' ? colors.inkSecondary : '#FFFFFF',
-                    }}>
-                    {profile.plan} plan
-                  </Text>
-                </View>
-              </View>
+              {/* The plan as the website writes it: the tier name in serif,
+                  purple for Elite, blue for Pro, quiet for Free. */}
+              <Text
+                style={{
+                  fontFamily: fonts.display,
+                  fontSize: 24,
+                  lineHeight: 28,
+                  color:
+                    profile.plan === 'Elite'
+                      ? '#A78BFA'
+                      : profile.plan === 'Pro'
+                        ? '#93C5FD'
+                        : '#9BA3C7',
+                }}>
+                {profile.plan}
+                <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: '#9BA3C7' }}>
+                  {'  '}plan
+                </Text>
+              </Text>
               {/* A bar, not a sentence (Rylan 2026-08-18 round 3): the fill
                   is what is LEFT, so it drains as the month goes. Numbers
                   ride underneath for anyone who wants the figures. */}
@@ -625,7 +619,7 @@ export default function ProfileScreen() {
                     style={{
                       height: 8,
                       borderRadius: 4,
-                      backgroundColor: colors.surface,
+                      backgroundColor: 'rgba(255,255,255,0.12)',
                       overflow: 'hidden',
                     }}>
                     <View
@@ -633,17 +627,17 @@ export default function ProfileScreen() {
                         width: `${Math.round((profile.credits / profile.maxCredits) * 100)}%`,
                         height: 8,
                         borderRadius: 4,
-                        backgroundColor: colors.marketing,
+                        backgroundColor: '#8B5CF6',
                       }}
                     />
                   </View>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: '#9BA3C7' }}>
                     {profile.credits.toLocaleString()} of {profile.maxCredits.toLocaleString()} left
                     {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
                   </Text>
                 </View>
               ) : (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9BA3C7' }}>
                   {profile.credits.toLocaleString()} left
                   {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
                 </Text>
@@ -656,30 +650,41 @@ export default function ProfileScreen() {
                 }
                 accessibilityRole="button"
                 style={{
-                  height: 34,
-                  paddingHorizontal: 14,
-                  borderRadius: 8,
-                  backgroundColor: colors.marketing,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: colors.marketing,
-                  shadowOpacity: 0.35,
-                  shadowRadius: 6,
+                  borderRadius: 10,
+                  shadowColor: '#8B5CF6',
+                  shadowOpacity: 0.45,
+                  shadowRadius: 8,
                   shadowOffset: { width: 0, height: 3 },
-                  elevation: 3,
+                  elevation: 4,
                 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
-                  {profile.plan === 'Free' ? 'Upgrade' : 'Get more credits'}
-                </Text>
+                <LinearGradient
+                  colors={['#8B5CF6', '#6D28D9'] as const}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    height: 36,
+                    paddingHorizontal: 14,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 5,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
+                    {profile.plan === 'Free' ? 'Upgrade' : 'Get more credits'}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+                </LinearGradient>
               </Pressable>
             ) : (
               <Pressable onPress={() => router.push('/credits')} accessibilityRole="button">
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#A78BFA' }}>
                   See credits
                 </Text>
               </Pressable>
             )}
           </View>
+          </LinearGradient>
           </Card>
 
           {/* Resume, reachable from the top of the page at any time. It used
@@ -769,7 +774,7 @@ export default function ProfileScreen() {
             <Text style={{ fontFamily: fonts.sansBold, fontSize: 16, color: colors.heading }}>
               Go to
             </Text>
-            <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: colors.marketing }} />
+            <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: '#8B5CF6' }} />
           </View>
           {/* Doors as TILES (Rylan 2026-08-18 round 3): big colored icons,
               one tap each, instead of a list that reads like scrolling.
@@ -794,7 +799,7 @@ export default function ProfileScreen() {
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: colors.accent,
+                  backgroundColor: '#7C3AED',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
@@ -867,7 +872,7 @@ export default function ProfileScreen() {
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: colors.positive,
+                  backgroundColor: '#DB2777',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
@@ -893,7 +898,7 @@ export default function ProfileScreen() {
                 <Text style={{ fontFamily: fonts.sansBold, fontSize: 16, color: colors.heading }}>
                   Your details
                 </Text>
-                <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: colors.marketing }} />
+                <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: '#8B5CF6' }} />
               </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19, marginTop: -6 }}>
                 Used to find the right people and to draft outreach in your voice.

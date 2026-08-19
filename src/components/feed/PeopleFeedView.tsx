@@ -560,10 +560,9 @@ export default function PeopleFeedView() {
           tone="success"
           title="That’s everyone for now"
           body="That’s this batch from your targets. Describe who else you want, or let us run a fresh search from your profile."
-          actionLabel="Describe who to find"
-          onAction={() => router.push('/feed-filter?deck=people')}
-          secondaryLabel="Search my targets"
-          onSecondary={() => {
+          prominent
+          actionLabel="Search my targets"
+          onAction={() => {
             // One tap, no typing (Rylan 2026-08-18 round 5: "keep it going,
             // keep it quick"). Compose a real search from their own stated
             // targets; with nothing to compose from, fall through to the
@@ -582,6 +581,8 @@ export default function PeopleFeedView() {
             updateSwipeSettings({ peopleFilter: prompt });
             showToast('Building a fresh feed from your targets.');
           }}
+          secondaryLabel="Describe who to find"
+          onSecondary={() => router.push('/feed-filter?deck=people')}
           tertiaryLabel={deckQuery.isFetching ? 'Refreshing…' : 'Refresh this deck'}
           onTertiary={() => deckQuery.refetch()}
         />
@@ -613,7 +614,7 @@ export default function PeopleFeedView() {
       {/* Same clearance as the jobs deck, so the card bottom lands in the same
           place when you flip between them: bar height (68) + float (26) + a
           16pt gap, instead of the card ending flush against the bar. */}
-      <View style={{ flex: 1, marginTop: 10, paddingBottom: peopleFilter ? 168 : 134 }}>
+      <View style={{ flex: 1, marginTop: 10, paddingBottom: peopleFilter ? 190 : 156 }}>
         <PersonDeck
           ref={deckRef}
           people={people}
@@ -633,7 +634,7 @@ export default function PeopleFeedView() {
       {people.length ? (
         <View
           pointerEvents="box-none"
-          style={{ position: 'absolute', left: 0, right: 0, bottom: peopleFilter ? 148 : 114 }}>
+          style={{ position: 'absolute', left: 0, right: 0, bottom: peopleFilter ? 134 : 100 }}>
           <DeckActions
             drag={dragX}
             onPass={() => deckRef.current?.swipe('left')}
