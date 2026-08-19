@@ -656,14 +656,14 @@ export default function ProfileScreen() {
                 accessibilityRole="button"
                 style={{
                   borderRadius: 10,
-                  shadowColor: '#8B5CF6',
-                  shadowOpacity: 0.45,
+                  shadowColor: '#3B82F6',
+                  shadowOpacity: 0.4,
                   shadowRadius: 8,
                   shadowOffset: { width: 0, height: 3 },
                   elevation: 4,
                 }}>
                 <LinearGradient
-                  colors={['#8B5CF6', '#6D28D9'] as const}
+                  colors={['#4B8AF9', '#3B82F6', '#2563EB'] as const}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
@@ -877,7 +877,7 @@ export default function ProfileScreen() {
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: '#DB2777',
+                  backgroundColor: colors.positive,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
