@@ -612,7 +612,16 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               : role
                 ? `${role}s at top companies`
                 : `People at ${industry} companies`;
-            updateSwipeSettings({ peopleFilter: prompt });
+            // The 30-minute query cache replayed the identical sentence
+            // instantly with the same people (Rylan 2026-08-19: "it doesn't
+            // take the 20-30 seconds, it goes to the same ones"). Drop the
+            // cached deck so this press is a real search.
+            queryClient.removeQueries({ queryKey: ['peopleSearch', prompt] });
+            if (peopleFilter === prompt) {
+              void searchQuery.refetch();
+            } else {
+              updateSwipeSettings({ peopleFilter: prompt });
+            }
             showToast('Building a fresh feed from your targets.');
           }}
           secondaryLabel="Describe who to find"
@@ -677,7 +686,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           the card's rounded bottom, static while cards swipe away, with the
           verb circles floating below it. */}
       {people.length ? (
-        <View style={{ paddingHorizontal: 18 }}>
+        <View>
           <GlassBar
             solid
             style={{

@@ -25,9 +25,11 @@ import {
   packActionCounts,
   packCreditAmount,
   PACK_CREDIT_AMOUNTS,
+  purchasePackage,
   purchaseProduct,
   showManageSubscriptions,
 } from '@/api/purchases';
+import type { PurchasesPackage } from 'react-native-purchases';
 import { qk } from '@/api/queryKeys';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import Card from '@/components/ui/Card';
@@ -133,6 +135,7 @@ export default function CreditsScreen() {
   // Store products for the inline tiles. null = still loading from Apple.
   const [packs, setPacks] = useState<PurchasesStoreProduct[] | null>(null);
   const [planPrices, setPlanPrices] = useState<{ pro?: string; elite?: string }>({});
+  const [planPkgs, setPlanPkgs] = useState<{ pro?: PurchasesPackage; elite?: PurchasesPackage }>({});
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   // Apple-managed subscription: shows the native manage sheet row. Web
@@ -151,6 +154,7 @@ export default function CreditsScreen() {
         pro: d.proPackage?.product.priceString,
         elite: d.elitePackage?.product.priceString,
       });
+      setPlanPkgs({ pro: d.proPackage ?? undefined, elite: d.elitePackage ?? undefined });
     });
     void hasAppleSubscription().then(setAppleManaged);
   }, []);
@@ -158,6 +162,50 @@ export default function CreditsScreen() {
   useEffect(() => {
     loadPacks();
   }, [loadPacks]);
+
+  /** Direct plan switch from the tier squares (Rylan 2026-08-19: "an
+   *  actual action button", no popup hop). Apple-managed only: Apple
+   *  prorates upgrades and times downgrades to renewal; going to Free is a
+   *  cancellation, which is Apple's own sheet. Anything else is managed
+   *  where they subscribed. */
+  const switchPlan = useCallback(
+    async (tier: 'Free' | 'Pro' | 'Elite') => {
+      if (tier === profile.plan || buyingId || confirming) return;
+      if (!appleManaged) {
+        showToast('Your plan is managed where you subscribed. Switch it there.');
+        return;
+      }
+      if (tier === 'Free') {
+        void showManageSubscriptions();
+        return;
+      }
+      const pkg = tier === 'Pro' ? planPkgs.pro : planPkgs.elite;
+      if (!pkg) {
+        showToast('Apple is still preparing the plans. Try again in a moment.');
+        return;
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setBuyingId(pkg.product.identifier);
+      baseline.current = {
+        credits: profile.credits,
+        plan: profile.plan,
+        live: !connection.usingSampleData,
+      };
+      const r = await purchasePackage(pkg);
+      setBuyingId(null);
+      if (r.ok) {
+        setConfirming(true);
+        for (let i = 0; i < 8; i++) {
+          await new Promise((res) => setTimeout(res, 2000));
+          await queryClient.refetchQueries({ queryKey: qk.me });
+        }
+        setConfirming(false);
+      } else if (!r.cancelled) {
+        showToast('That switch did not go through. Nothing changed.');
+      }
+    },
+    [profile.plan, profile.credits, buyingId, confirming, appleManaged, planPkgs, connection.usingSampleData, queryClient, showToast],
+  );
 
   const buyPack = useCallback(
     async (product: PurchasesStoreProduct) => {
@@ -554,11 +602,15 @@ export default function CreditsScreen() {
             const price =
               tier === 'Free' ? '$0' : tier === 'Pro' ? planPrices.pro : planPrices.elite;
             return (
-              <View
+              <Pressable
                 key={tier}
-                accessible
+                disabled={current}
+                onPress={() => void switchPlan(tier)}
+                accessibilityRole="button"
                 accessibilityLabel={
-                  current ? `Your plan: ${tier}` : `${tier} plan${price ? `, ${price} a month` : ''}`
+                  current
+                    ? `Your plan: ${tier}`
+                    : `Switch to ${tier}${price ? `, ${price} a month` : ''}`
                 }
                 style={{
                   flex: 1,
@@ -590,7 +642,15 @@ export default function CreditsScreen() {
                     {tier === 'Free' ? '' : '/mo'}
                   </Text>
                 ) : null}
-              </View>
+                {!current ? (
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10, color: tone }}>
+                    {(['Free', 'Pro', 'Elite'] as const).indexOf(tier) >
+                    (['Free', 'Pro', 'Elite'] as const).indexOf(profile.plan as 'Free' | 'Pro' | 'Elite')
+                      ? 'Upgrade'
+                      : 'Downgrade'}
+                  </Text>
+                ) : null}
+              </Pressable>
             );
           })}
         </View>
