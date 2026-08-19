@@ -4,10 +4,12 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 
 import { listAppliedJobs } from '@/api/endpoints/autoApply';
 import { appliedCompanyKeys } from '@/lib/appliedPeople';
 import GlassBar from '@/components/GlassBar';
+import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import PersonDeck, { type PersonDeckHandle } from '@/components/feed/PersonDeck';
 import ProfileGapSurvey from '@/components/feed/ProfileGapSurvey';
@@ -87,6 +89,9 @@ export default function PeopleFeedView() {
   // lib/profileNudge rather than by this screen.
   const [nudge, setNudge] = useState<NudgeKey | null>(null);
   const deckRef = useRef<PersonDeckHandle>(null);
+  /** Live drag, mirrored into the floating verb circles so they grow with
+   *  the gesture. */
+  const dragX = useSharedValue(0);
   /** Cards already swiped, held locally so the deck advances instantly rather
    *  than waiting on a refetch. */
   const [consumed, setConsumed] = useState<string[]>([]);
@@ -144,7 +149,11 @@ export default function PeopleFeedView() {
     queryKey: ['peopleSearch', peopleFilter],
     queryFn: ({ signal }) => searchPeople(peopleFilter as string, null, signal),
     enabled: !!peopleFilter,
-    staleTime: 30 * 60 * 1000,
+    // A deck with people in it is worth holding for the session; an EMPTY
+    // result is not. Caching the empty for 30 minutes meant "Change my
+    // search" back to the same sentence silently replayed the cached
+    // nothing instead of actually searching again (2026-08-18).
+    staleTime: (q) => ((q.state.data?.people?.length ?? 0) > 0 ? 30 * 60 * 1000 : 0),
     retry: false,
   });
 
@@ -559,17 +568,40 @@ export default function PeopleFeedView() {
       {/* Same clearance as the jobs deck, so the card bottom lands in the same
           place when you flip between them: bar height (68) + float (26) + a
           16pt gap, instead of the card ending flush against the bar. */}
-      <View style={{ flex: 1, marginTop: 10, paddingBottom: 110 }}>
+      <View style={{ flex: 1, marginTop: 10, paddingBottom: 134 }}>
         <PersonDeck
           ref={deckRef}
           people={people}
           onSwiped={handleSwiped}
+          drag={dragX}
           blockRight={!canReveal || !canDraft}
           onBlockedRight={onBlockedRight}
           action={action}
           appliedCompanies={appliedCompanies}
         />
       </View>
+
+      {/* The verbs, riding the card's bottom edge where Rylan circled
+          (2026-08-18): vibrant red pass, vibrant blue draft/send, undo beside
+          them, growing with the drag. Redundant with the swipe on purpose. */}
+      {people.length ? (
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 114 }}>
+          <DeckActions
+            drag={dragX}
+            canUndo={passed.length > 0}
+            onUndo={undoLastPass}
+            onPass={() => deckRef.current?.swipe('left')}
+            onCommit={() => deckRef.current?.swipe('right')}
+            commitIcon={action === 'send' ? 'paper-plane' : 'pencil'}
+            passLabel="Pass on this person"
+            commitLabel={
+              action === 'send' ? 'Send an email to this person' : 'Draft an email to this person'
+            }
+          />
+        </View>
+      ) : null}
 
       {/* Same cut as the jobs bar (Nick 2026-08-14): pass and reveal circles
           only duplicated the swipe, and refresh already exists on the empty
@@ -582,35 +614,8 @@ export default function PeopleFeedView() {
       <View
         pointerEvents="box-none"
         style={{ position: 'absolute', bottom: 26, left: 0, right: 0, alignItems: 'center' }}>
-        {/* Undo, above the bar rather than over the card: the card's top-right
-            corner (where the Jobs deck puts its undo) is the match badge and
-            LinkedIn stack here. Passes only — a right swipe has already spent
-            credits and written an email, and there is no unspending that. */}
-        {passed.length ? (
-          <Pressable
-            onPress={undoLastPass}
-            accessibilityRole="button"
-            accessibilityLabel="Bring back the last person you passed"
-            style={{
-              alignSelf: 'flex-start',
-              marginLeft: 18,
-              marginBottom: 10,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              paddingHorizontal: 12,
-              height: 34,
-              borderRadius: 17,
-              backgroundColor: colors.paper,
-              borderWidth: 1,
-              borderColor: colors.hairline,
-            }}>
-            <Ionicons name="arrow-undo" size={15} color={colors.inkSecondary} />
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>
-              Undo
-            </Text>
-          </Pressable>
-        ) : null}
+        {/* The undo pill moved into the floating verb row at the card's
+            bottom edge (Rylan 2026-08-18): anchored, not drifting. */}
         <GlassBar
           style={{
             alignSelf: 'stretch',

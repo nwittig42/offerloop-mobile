@@ -233,14 +233,28 @@ function CollapsedCard({
         ) : null}
         {details.roleType ? (
           <DetailGroup label="Role type" center={false}>
-            <Chip label={details.roleType} tone="brand" icon="briefcase-outline" size="lg" />
+            {/* Semantic color (Rylan 2026-08-18): internships pop in the
+                vibrant blue for the student audience, full-time recedes to
+                gray, everything else keeps the navy. */}
+            <Chip
+              label={details.roleType}
+              tone={
+                /intern/i.test(details.roleType)
+                  ? 'marketing'
+                  : /full[\s-]?time/i.test(details.roleType)
+                    ? 'neutral'
+                    : 'brand'
+              }
+              icon="briefcase-outline"
+              size="lg"
+            />
           </DetailGroup>
         ) : null}
         {details.arrangement ? (
           <DetailGroup label="Work arrangement" center={false}>
             <Chip
               label={details.arrangement}
-              tone="brand"
+              tone="accent"
               icon={arrangementIcon(details.arrangement)}
               size="lg"
             />
@@ -248,7 +262,7 @@ function CollapsedCard({
         ) : null}
         {details.experience ? (
           <DetailGroup label="Experience level" center={false}>
-            <Chip label={details.experience} tone="accent" icon="school-outline" size="lg" />
+            <Chip label={details.experience} tone="waiting" icon="school-outline" size="lg" />
           </DetailGroup>
         ) : null}
 
@@ -257,7 +271,7 @@ function CollapsedCard({
         {matches.length ? (
           <DetailGroup label="Matches your targets" center={false}>
             {matches.map((m) => (
-              <Chip key={m} label={m} tone="accent" icon="checkmark-circle-outline" size="lg" />
+              <Chip key={m} label={m} tone="marketing" icon="checkmark-circle-outline" size="lg" />
             ))}
           </DetailGroup>
         ) : null}
@@ -269,7 +283,7 @@ function CollapsedCard({
         {tags.length ? (
           <DetailGroup label="From the listing" center={false}>
             {tags.map((t) => (
-              <Chip key={t} label={t} tone="brand" icon="pricetag-outline" size="lg" />
+              <Chip key={t} label={t} tone="neutral" icon="pricetag-outline" size="lg" />
             ))}
           </DetailGroup>
         ) : null}
@@ -307,22 +321,42 @@ function CollapsedCard({
           </Text>
           <View style={{ flex: 1 }} />
           {costLabel ? (
+            /* The swipe's outcome as a picture (Rylan 2026-08-18): the send
+               arrow in a filled blue dot says "this flies out for you", then
+               the verb, then the price. Bookmark dot when the ATS cannot take
+               an auto-apply, because promising one would be a lie. */
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 4,
-                paddingHorizontal: 9,
+                gap: 6,
+                paddingLeft: 4,
+                paddingRight: 10,
                 paddingVertical: 4,
                 borderRadius: 999,
                 backgroundColor: colors.marketing + '14',
                 borderWidth: 1,
                 borderColor: colors.marketing + '2E',
               }}>
-              <Ionicons name="flash" size={11} color={colors.marketing} />
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.marketing,
+                }}>
+                <Ionicons
+                  name={job.autoApplyEligible ? 'paper-plane' : 'bookmark'}
+                  size={11}
+                  color="#FFFFFF"
+                />
+              </View>
               <Text
                 style={{ fontFamily: fonts.sansSemibold, fontSize: 11.5, color: colors.marketing }}>
-                {costLabel}
+                {job.autoApplyEligible ? 'Auto applies' : 'Saves'}
+                <Text style={{ color: colors.marketing + 'B0' }}>{'  ·  '}{costLabel}</Text>
               </Text>
             </View>
           ) : null}

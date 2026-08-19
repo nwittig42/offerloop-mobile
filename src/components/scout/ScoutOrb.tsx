@@ -381,23 +381,9 @@ export default function ScoutOrb({
             style={{ width: size * 0.46, height: size * 0.46, marginTop: size * 0.05 }}
             resizeMode="contain"
           />
-          {/* The asset ends in a hard crop across the torso, which read as
-              "the Scout is cut off" (Rylan 2026-08-18). A short blue ramp over
-              the last fifth melts that edge into the glow behind it. */}
-          <Svg
-            pointerEvents="none"
-            width={size * 0.46}
-            height={size * 0.14}
-            style={{ position: 'absolute', bottom: -1, left: 0 }}>
-            <Defs>
-              <RadialGradient id="scout-hemline" cx="50%" cy="100%" r="90%">
-                <Stop offset="0%" stopColor="#2E6BE8" stopOpacity="0.75" />
-                <Stop offset="60%" stopColor="#2E6BE8" stopOpacity="0.35" />
-                <Stop offset="100%" stopColor="#2E6BE8" stopOpacity="0" />
-              </RadialGradient>
-            </Defs>
-            <Ellipse cx="50%" cy="100%" rx="60%" ry="100%" fill="url(#scout-hemline)" />
-          </Svg>
+          {/* No hemline overlay. A blue blend was tried over the asset's hard
+              bottom crop and read as "a weird blue bar under the yeti"
+              (Rylan 2026-08-18); the grounding shadow + sheen carry the depth. */}
         </Animated.View>
       </Pressable>
     </View>

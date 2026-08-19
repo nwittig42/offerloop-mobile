@@ -2526,34 +2526,71 @@ function ScoutTabInner() {
             Suggestions ride above it on a fresh chat only: once there is a
             thread, the conversation is the prompt. */}
         <View style={{ paddingHorizontal: 16, paddingBottom: 10, gap: 10 }}>
+          {/* Fixed geometry: one chip centered on top, two below, inside a
+              constant-height box (Rylan 2026-08-18). Free-wrapping chips
+              reflowed to a different height every cycle and nudged the whole
+              screen; now the rotation happens inside a frame that never
+              moves. */}
           {!hasThread && phase !== 'thinking' ? (
             <Animated.View
               key={sugOffset}
               entering={FadeInDown.duration(350)}
-              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-              {[0, 1, 2].map((i) => {
-                const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
-                return (
-                  <Pressable
-                    key={sug}
-                    onPress={() => {
-                      firstAction('chip');
-                      void submitAsk(sug, { source: 'chip' });
-                    }}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: room.lineSoft,
-                      borderRadius: 999,
-                      paddingVertical: 6,
-                      paddingHorizontal: 11,
-                      backgroundColor: room.card,
-                    }}>
-                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: room.ink2 }}>
-                      {sug}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              style={{ gap: 6, alignItems: 'center', height: 66, justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+                {[0].map((i) => {
+                  const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
+                  return (
+                    <Pressable
+                      key={sug}
+                      onPress={() => {
+                        firstAction('chip');
+                        void submitAsk(sug, { source: 'chip' });
+                      }}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: room.lineSoft,
+                        borderRadius: 999,
+                        paddingVertical: 6,
+                        paddingHorizontal: 11,
+                        backgroundColor: room.card,
+                      }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: room.ink2 }}>
+                        {sug}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+                {[1, 2].map((i) => {
+                  const sug = suggestionPool[(sugOffset + i) % suggestionPool.length];
+                  return (
+                    <Pressable
+                      key={sug}
+                      onPress={() => {
+                        firstAction('chip');
+                        void submitAsk(sug, { source: 'chip' });
+                      }}
+                      style={{
+                        maxWidth: '49%',
+                        borderWidth: 1,
+                        borderColor: room.lineSoft,
+                        borderRadius: 999,
+                        paddingVertical: 6,
+                        paddingHorizontal: 11,
+                        backgroundColor: room.card,
+                      }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: room.ink2 }}>
+                        {sug}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </Animated.View>
           ) : null}
 

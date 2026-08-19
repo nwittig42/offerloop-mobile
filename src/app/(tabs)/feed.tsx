@@ -14,8 +14,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { LinearGradient } from 'expo-linear-gradient';
-
 import GlassBar from '@/components/GlassBar';
 import NightSky from '@/components/NightSky';
 import Header from '@/components/Header';
@@ -23,6 +21,7 @@ import ReferralCard from '@/components/ReferralCard';
 import { requestReviewIfDue } from '@/lib/appRating';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
+import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
 import PeopleFeedView from '@/components/feed/PeopleFeedView';
@@ -40,7 +39,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
 import { useApp } from '@/store/app';
-import { useColors } from '@/theme/ThemeProvider';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 import type { Job } from '@/types';
 
@@ -76,57 +75,6 @@ import type { Job } from '@/types';
  * run full-width and uncropped. Delete it if that never happens.
  */
 
-/**
- * The leading action: a filled marketing-blue circle that does what a right
- * swipe does. The deck's other controls are quiet outlines; this is the one
- * thing on the screen that visibly asks to be pressed (Rylan 2026-08-18,
- * "there's no leading action button"). Static styles + pressed state, never
- * function-form Pressable styles (release builds strip those).
- */
-function ApplyCircle({
-  icon,
-  onPress,
-  accessibilityLabel,
-}: {
-  icon: 'checkmark' | 'bookmark';
-  onPress?: () => void;
-  accessibilityLabel: string;
-}) {
-  const [pressed, setPressed] = useState(false);
-  return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={{
-        width: 58,
-        height: 58,
-        borderRadius: 29,
-        shadowColor: '#3B82F6',
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 6,
-        transform: [{ scale: pressed ? 0.92 : 1 }],
-      }}>
-      <LinearGradient
-        colors={['#4B8AF9', '#3B82F6', '#2563EB']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          flex: 1,
-          borderRadius: 29,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <Ionicons name={icon} size={27} color="#FFFFFF" />
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
 export default function FeedScreen() {
   const router = useRouter();
   const {
@@ -150,6 +98,11 @@ export default function FeedScreen() {
     feedState,
   } = useApp();
   const colors = useColors();
+  const { scheme } = useTheme();
+  // The navy stage (Rylan 2026-08-18, "wild change: make that gray background
+  // navy blue, I wanna see what it looks like"). Light mode gets the design
+  // system's deep navy behind the white cards; dark keeps its night sky.
+  const stageBg = scheme === 'dark' ? colors.feedBg : '#1B2A44';
   const queryClient = useQueryClient();
 
   // Which deck is showing. People opens first (Rylan 2026-08-18): the person
@@ -282,11 +235,23 @@ export default function FeedScreen() {
   }));
 
   // The deck's bar clearance, animated: full while the bar is on stage, a
-  // sliver while a card is enlarged and the bar is gone.
-  const deckPadBase = swipeSettings.emailHiringManager ? 214 : 172;
+  // sliver while a card is enlarged and the bar is gone. Sized for the slim
+  // bar plus the floating circles' 30pt of overlap past the card edge.
+  const deckPadBase = swipeSettings.emailHiringManager ? 176 : 134;
   const deckPadStyle = useAnimatedStyle(
     () => ({
       paddingBottom: deckPadBase - (deckPadBase - 14) * barShrink.value,
+    }),
+    [deckPadBase],
+  );
+
+  // The floating verbs track the card's bottom edge (which moves with the
+  // animated clearance) and clear the stage with the bar in reading mode.
+  const dragX = useSharedValue(0);
+  const deckActionsStyle = useAnimatedStyle(
+    () => ({
+      bottom: deckPadBase - (deckPadBase - 14) * barShrink.value - 20,
+      opacity: 1 - barShrink.value,
     }),
     [deckPadBase],
   );
@@ -434,7 +399,7 @@ export default function FeedScreen() {
   // brand wash so it has presence at a glance without shouting over the deck.
   // The PlanBorder still carries the tier; this just gives the card a body.
   return (
-    <View style={{ flex: 1, backgroundColor: colors.feedBg }}>
+    <View style={{ flex: 1, backgroundColor: stageBg }}>
       {/* Sky gradient only: dark mode keeps the app's shared backdrop, but the
           ridgeline comes off here for the same reason the day art did. */}
       <NightSky showRidge={false} />
@@ -489,7 +454,8 @@ export default function FeedScreen() {
                   style={{
                     fontFamily: fonts.sansMedium,
                     fontSize: 12.5,
-                    color: colors.accent,
+                    // Light-on-navy now that the stage is dark in both modes.
+                    color: '#AFC3F5',
                     textAlign: 'center',
                   }}>
                   What gets submitted?
@@ -558,6 +524,7 @@ export default function FeedScreen() {
               expanded={expanded}
               onToggleExpand={setExpanded}
               onSwiped={handleSwiped}
+              drag={dragX}
               blockRight={needsApplyProfile && !!top?.autoApplyEligible}
               onBlockedRight={onApplyProfileBlocked}
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
@@ -566,6 +533,26 @@ export default function FeedScreen() {
             />
 
           </Animated.View>
+
+          {/* The verbs, riding the card's bottom edge where Rylan circled:
+              vibrant, oversized, growing with the drag. Redundant with the
+              swipe on purpose; that redundancy is what teaches it. */}
+          {!expanded ? (
+            <Animated.View
+              pointerEvents="box-none"
+              style={[{ position: 'absolute', left: 0, right: 0 }, deckActionsStyle]}>
+              <DeckActions
+                drag={dragX}
+                canUndo={canUndo}
+                onUndo={undoLastPass}
+                onPass={() => deckRef.current?.swipe('left')}
+                onCommit={() => deckRef.current?.swipe('right')}
+                commitIcon={top?.autoApplyEligible ? 'checkmark' : 'bookmark'}
+                passLabel="Pass on this job"
+                commitLabel={top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'}
+              />
+            </Animated.View>
+          ) : null}
 
           {/* The bar used to disappear at zero credits, back when everything in
               it cost money. Both survivors are free (one changes what the next
@@ -630,55 +617,26 @@ export default function FeedScreen() {
                     behaves, which the bar itself now answers. What it opens now
                     is the one question the bar cannot: which roles this deck is
                     made of. */}
-                {/* The action row (back by Rylan's call, 2026-08-18). The
-                    swipe still exists and still feels best; these are the
-                    visible verbs for everyone who has not learned it yet, and
-                    the filled blue circle is the screen's one leading action.
-                    Undo lives here now too, anchored instead of floating.
-                    All four route through the same handlers as the gesture,
-                    so the wallet guard and the a11y story hold. */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 16,
-                  }}>
-                  <ActionCircle
-                    icon="arrow-undo"
-                    size={44}
-                    disabled={!canUndo}
-                    onPress={undoLastPass}
-                    accessibilityLabel="Bring back the last job you passed"
-                  />
-                  <ActionCircle
-                    icon="close"
-                    size={54}
-                    tone="negative"
-                    onPress={() => deckRef.current?.swipe('left')}
-                    accessibilityLabel="Pass on this job"
-                  />
-                  <ApplyCircle
-                    icon={top?.autoApplyEligible ? 'checkmark' : 'bookmark'}
-                    onPress={() => deckRef.current?.swipe('right')}
-                    accessibilityLabel={
-                      top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'
-                    }
-                  />
+                {/* The X and Apply circles left this bar 2026-08-18 (second
+                    round): they now float ON the card's bottom edge with the
+                    undo, where Rylan circled. The bar keeps what a swipe
+                    cannot do: the add-on switch and the deck filter. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <HiringManagerToggle
+                      on={swipeSettings.emailHiringManager}
+                      onPress={toggleHiringManager}
+                    />
+                  </View>
                   <ActionCircle
                     icon="options-outline"
-                    size={44}
+                    size={46}
                     onPress={() => router.push('/feed-filter?deck=jobs')}
                     accessibilityLabel={
                       jobFilter ? `Job feed filter: ${jobFilter}` : 'Filter the job feed'
                     }
                   />
                 </View>
-
-                <HiringManagerToggle
-                  on={swipeSettings.emailHiringManager}
-                  onPress={toggleHiringManager}
-                />
 
                 {/* The active filter, named. A deck that quietly stopped being
                     the general feed is the one thing here a user could not

@@ -235,7 +235,7 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
             labelled sections for two chips spent about 60pt of card height
             restating what the icons already say — a graduation cap is
             "School" and a person glyph is "who they are". */}
-        {person.school || person.relation || appliedHere ? (
+        {person.school || person.relation || person.joinedYear || appliedHere ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {/* The reason this person is in front of you, when it is the
                 strongest one there is: you already applied to this company, so
@@ -257,6 +257,23 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
                 label={person.relation}
                 tone={person.relation === 'Hiring manager' ? 'positive' : 'brand'}
                 icon={person.relation === 'Recruiter' ? 'people-outline' : 'person-outline'}
+                size="lg"
+              />
+            ) : null}
+            {/* Tenure, from the ranker's joined_year. A recent joiner is the
+                deck's best outreach hook (they remember interviewing); long
+                tenure is its own signal (they know the place). Real data only,
+                and nothing renders when the year is missing. */}
+            {person.joinedYear ? (
+              <Chip
+                label={
+                  new Date().getFullYear() - person.joinedYear <= 1
+                    ? 'Recently joined'
+                    : `There since ${person.joinedYear}`
+                }
+                tone={
+                  new Date().getFullYear() - person.joinedYear <= 1 ? 'positive' : 'accent'
+                }
                 size="lg"
               />
             ) : null}

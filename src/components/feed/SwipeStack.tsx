@@ -17,7 +17,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 
 import Card from '@/components/ui/Card';
-import { useColors } from '@/theme/ThemeProvider';
+import { useColors, useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
@@ -296,6 +296,11 @@ function SwipeStackInner<T>(
   }: SwipeStackProps<T>,
   ref: React.Ref<SwipeStackHandle>,
 ) {
+  const { scheme } = useTheme();
+  // Dark mode deck cards go rich navy instead of the app's dark paper
+  // (Rylan 2026-08-18: the paper read as washed/opaque against the night
+  // sky; the cards should feel like solid night-blue objects).
+  const cardBg = scheme === 'dark' ? { backgroundColor: '#1A2B4D' } : null;
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   /** Web drag origin; unused on native. */
@@ -570,7 +575,7 @@ function SwipeStackInner<T>(
         <Animated.View
           key={keyOf(next)}
           style={[{ position: 'absolute', top: 10, left: 0, right: 0, bottom: 10 }, nextStyle]}>
-          <Card elevated="md" padded style={{ flex: 1, borderRadius: 22, overflow: 'hidden' }}>
+          <Card elevated="md" padded style={[{ flex: 1, borderRadius: 22, overflow: 'hidden' }, cardBg]}>
             {renderCard(next, false, () => onToggleExpand(false))}
           </Card>
         </Animated.View>
@@ -590,7 +595,7 @@ function SwipeStackInner<T>(
           <Card
             elevated="lg"
             padded
-            style={{ flex: 1, borderRadius: 22, overflow: 'hidden' }}>
+            style={[{ flex: 1, borderRadius: 22, overflow: 'hidden' }, cardBg]}>
             {renderCard(top, expanded, () => onToggleExpand(false))}
           </Card>
           <Animated.View

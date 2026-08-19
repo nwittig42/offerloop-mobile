@@ -534,8 +534,8 @@ export default function ProfileScreen() {
                       ? 1
                       : 0
                 }
-                color="#FFFFFF"
-                trackColor="rgba(255,255,255,0.28)"
+                color="#FBBF24"
+                trackColor="rgba(255,255,255,0.24)"
                 labelColor="#FFFFFF"
                 label={
                   profile.credits >= 1000
@@ -543,7 +543,7 @@ export default function ProfileScreen() {
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: '#DDE3FB' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#FDE68A' }}>
                 credits left
               </Text>
             </Pressable>
@@ -555,20 +555,24 @@ export default function ProfileScreen() {
               onPress={() => router.push('/share')}
               accessibilityRole="button"
               accessibilityLabel="Share your progress">
-              {/* White glass on the gradient: the old gradient-filled chip
-                  vanished into the band it now sits on. */}
+              {/* Solid white with a soft halo (Rylan 2026-08-18: "make it
+                  radiant"): the brightest object on the band, so sharing
+                  reads as a prize action rather than chrome. */}
               <View
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 19,
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.5)',
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: '#FFFFFF',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  shadowColor: '#FFFFFF',
+                  shadowOpacity: 0.65,
+                  shadowRadius: 9,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 5,
                 }}>
-                <Ionicons name="share-social" size={18} color="#FFFFFF" />
+                <Ionicons name="share-social" size={19} color="#2563EB" />
               </View>
             </Pressable>
           </View>
@@ -587,9 +591,35 @@ export default function ProfileScreen() {
               paddingVertical: 12,
             }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                {profile.plan} plan
-              </Text>
+              {/* The tier wears its shop color (Rylan 2026-08-18): Elite in
+                  the purple its pack tiles use, Pro in the blue, Free plain.
+                  A badge, not a sentence. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                    backgroundColor:
+                      profile.plan === 'Elite'
+                        ? '#7C3AED'
+                        : profile.plan === 'Pro'
+                          ? colors.marketing
+                          : colors.surface,
+                  }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansBold,
+                      fontSize: 12,
+                      color: profile.plan === 'Free' ? colors.inkSecondary : '#FFFFFF',
+                    }}>
+                    {profile.plan}
+                  </Text>
+                </View>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
+                  plan
+                </Text>
+              </View>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
                 {profile.credits > profile.maxCredits || !profile.maxCredits
                   ? `${profile.credits.toLocaleString()} left`
@@ -607,11 +637,16 @@ export default function ProfileScreen() {
                   height: 34,
                   paddingHorizontal: 14,
                   borderRadius: 8,
-                  backgroundColor: colors.ink,
+                  backgroundColor: colors.marketing,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  shadowColor: colors.marketing,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 3,
                 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.paper }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
                   {profile.plan === 'Free' ? 'Upgrade' : 'Get more credits'}
                 </Text>
               </Pressable>
@@ -705,16 +740,15 @@ export default function ProfileScreen() {
               tabs, which put "delete my account" at the same level as "my
               name" and buried the application payload behind a coined label.
               They are destinations, so they look like destinations. */}
-          <Text
-            style={{
-              fontFamily: fonts.sansSemibold,
-              fontSize: 11,
-              letterSpacing: 0.9,
-              color: colors.accent,
-              paddingHorizontal: 4,
-            }}>
-            GO TO
-          </Text>
+          {/* Section headers upgraded from whisper-caps to real headings with
+              a blue tick under them (Rylan 2026-08-18: the page "reads like
+              it's scrolling", sections need to actually section). */}
+          <View style={{ gap: 5, paddingHorizontal: 4 }}>
+            <Text style={{ fontFamily: fonts.sansBold, fontSize: 16, color: colors.heading }}>
+              Go to
+            </Text>
+            <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: colors.marketing }} />
+          </View>
           <Card padded={false} style={{ paddingHorizontal: 16 }}>
             <Pressable
               onPress={() => router.push('/what-we-send')}
@@ -780,16 +814,13 @@ export default function ProfileScreen() {
 
         <View style={{ padding: 20, gap: 16 }}>
           <>
-              <Text
-                style={{
-                  fontFamily: fonts.sansSemibold,
-                  fontSize: 11,
-                  letterSpacing: 0.9,
-                  color: colors.accent,
-                }}>
-                YOUR DETAILS
-              </Text>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19, marginTop: -10 }}>
+              <View style={{ gap: 5 }}>
+                <Text style={{ fontFamily: fonts.sansBold, fontSize: 16, color: colors.heading }}>
+                  Your details
+                </Text>
+                <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: colors.marketing }} />
+              </View>
+              <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary, lineHeight: 19, marginTop: -6 }}>
                 Used to find the right people and to draft outreach in your voice.
               </Text>
 

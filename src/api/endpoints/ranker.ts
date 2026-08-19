@@ -157,6 +157,8 @@ export function mapCandidate(raw: RawCandidate, index: number): Candidate | null
     photoUrl: str(p.photo_url) || str(p.picture),
     department: str(p.department),
     relation: relationFor(title),
+    joinedYear:
+      typeof p.joinedYear === 'number' && p.joinedYear > 1900 ? p.joinedYear : undefined,
     // Score sits on the ITEM, not the person, so read the item first.
     matchScore: matchScoreFrom(raw) ?? matchScoreFrom(p),
     // Trust the server's rank when it sends one; the feedback call echoes it back.

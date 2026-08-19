@@ -164,29 +164,40 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      {/* Centered title, lone back chevron: the app's sub-page header pattern
+          (established on What's in auto apply; Rylan 2026-08-18, "make it a
+          recurring thing across the app"). */}
       <View
         style={{
           paddingTop: insets.top + 6,
           paddingHorizontal: 16,
-          paddingBottom: 10,
+          paddingBottom: 12,
           backgroundColor: colors.paper,
           borderBottomWidth: 1,
           borderBottomColor: colors.hairline,
-          gap: 2,
+          flexDirection: 'row',
+          alignItems: 'center',
         }}>
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
+          accessibilityLabel="Back to Profile"
           hitSlop={10}
-          style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="chevron-back" size={20} color={colors.accent} />
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.accent }}>
-            Profile
-          </Text>
+          style={{ width: 40, alignItems: 'flex-start' }}>
+          <Ionicons name="chevron-back" size={24} color={colors.accent} />
         </Pressable>
-        <Text style={{ fontFamily: fonts.display, fontSize: 32, color: colors.heading }}>
+        <Text
+          numberOfLines={1}
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: fonts.display,
+            fontSize: 26,
+            color: colors.heading,
+          }}>
           Settings
         </Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 40 }}>

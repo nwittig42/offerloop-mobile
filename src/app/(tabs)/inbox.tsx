@@ -367,8 +367,11 @@ function InboxRow({
           </Text>
           {/* Only the two relations worth calling out get a badge. An unknown
               or plainly junior title gets nothing, so the badge keeps meaning. */}
+          {/* Green for the hiring manager (Rylan 2026-08-18): the highest-
+              value relation in the inbox wears the win color, matching the
+              deck's Hiring manager chip. */}
           {badge ? (
-            <Chip label={badge === 'Hiring manager' ? 'Hiring mgr' : badge} tone={badge === 'Recruiter' ? 'waiting' : 'brand'} />
+            <Chip label={badge === 'Hiring manager' ? 'Hiring mgr' : badge} tone={badge === 'Recruiter' ? 'waiting' : 'positive'} />
           ) : null}
           {/* No title means the company never made it onto line two, so it
               keeps its old spot here rather than disappearing entirely. */}

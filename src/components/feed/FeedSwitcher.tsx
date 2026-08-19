@@ -42,7 +42,10 @@ export default function FeedSwitcher({
   onChange: (mode: FeedMode) => void;
 }) {
   const colors = useColors();
-  const index = mode === 'jobs' ? 0 : 1;
+  // Derived from SEGMENTS so reordering the segments can never strand the
+  // pill on the wrong side again (it did, 2026-08-18: People moved to the
+  // front but this stayed hardcoded, which highlighted the UNSELECTED tab).
+  const index = Math.max(0, SEGMENTS.findIndex((s) => s.mode === mode));
 
   // Fixed geometry beats percentages here: the pill has to land exactly on a
   // segment, and a percentage of the track ignores the 3pt padding, which left
@@ -80,9 +83,14 @@ export default function FeedSwitcher({
             left: TRACK_PAD,
             width: SEGMENT_W,
             borderRadius: 16,
-            backgroundColor: colors.paper,
-            borderWidth: 1,
-            borderColor: colors.hairline,
+            // Marketing blue, unmissable (Rylan 2026-08-18: "hard to tell
+            // what is actually selected"). The active segment is the one
+            // sitting on the blue.
+            backgroundColor: colors.marketing,
+            shadowColor: colors.marketing,
+            shadowOpacity: 0.35,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
           },
           pillStyle,
         ]}
@@ -110,14 +118,14 @@ export default function FeedSwitcher({
             <Ionicons
               name={segment.icon}
               size={15}
-              color={active ? colors.ink : colors.inkTertiary}
+              color={active ? '#FFFFFF' : colors.inkTertiary}
             />
             <Text
               maxFontSizeMultiplier={1.2}
               style={{
                 fontFamily: active ? fonts.sansSemibold : fonts.sansMedium,
                 fontSize: 14,
-                color: active ? colors.ink : colors.inkTertiary,
+                color: active ? '#FFFFFF' : colors.inkTertiary,
               }}>
               {segment.label}
             </Text>

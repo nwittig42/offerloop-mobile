@@ -18,7 +18,8 @@ export type ChipTone =
   | 'accent'
   | 'positive'
   | 'negative'
-  | 'waiting';
+  | 'waiting'
+  | 'marketing';
 
 const toneColor = (c: Palette): Record<Exclude<ChipTone, 'neutral'>, string> => ({
   brand: c.navy,
@@ -26,6 +27,7 @@ const toneColor = (c: Palette): Record<Exclude<ChipTone, 'neutral'>, string> => 
   positive: c.positive,
   negative: c.negative,
   waiting: c.waiting,
+  marketing: c.marketing,
 });
 
 export function Chip({

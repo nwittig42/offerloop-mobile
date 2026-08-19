@@ -73,6 +73,9 @@ export type Candidate = {
    * their obviously-fake names.
    */
   matchScore?: number;
+  /** The year they joined their current company, when the ranker sent it.
+   *  Real data only; the card derives "Joined this year" style copy from it. */
+  joinedYear?: number;
   /**
    * What their title is actually OF — "Investment Banking" next to a bare
    * "Vice President". From PDL's job_title_sub_role, humanized server-side.

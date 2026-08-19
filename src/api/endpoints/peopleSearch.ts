@@ -183,6 +183,14 @@ export async function searchPeople(
         'That was a little vague. Add a role, a company, or a city.',
       );
     }
+    if (status === 502) {
+      // The search provider itself is down, not the user's sentence. Saying
+      // so stops "try a different prompt" flailing during an outage.
+      throw new PeopleSearchFailure(
+        'failed',
+        'Our people source is having trouble right now. Your search is fine, try it again in a few minutes.',
+      );
+    }
     throw new PeopleSearchFailure('failed', 'Could not run that search. Try again.');
   }
 }
