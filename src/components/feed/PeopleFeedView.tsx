@@ -131,14 +131,16 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
   const [front, setFront] = useState<Candidate[]>([]);
 
   const queryClient = useQueryClient();
-  const [refreshingDeck, setRefreshingDeck] = useState(false);
 
-  /** Refresh = CONTINUE: fetch a fresh ranked batch excluding everyone this
-   *  session already showed, and swap it in (Rylan 2026-08-19: replaying the
-   *  same top-N read as a dead button). */
-  const refreshDeck = useCallback(async () => {
-    if (refreshingDeck) return;
-    setRefreshingDeck(true);
+  const [showingMore, setShowingMore] = useState(false);
+
+  /** Show more from the same well: fetch the next ranked batch past
+   *  everyone this session already saw. Reborn 2026-08-19 after the false-
+   *  bottom fix (the fetch window used to stop at the first slice, so this
+   *  button could never dig; it digs now). */
+  const showMoreRanked = useCallback(async () => {
+    if (showingMore) return;
+    setShowingMore(true);
     try {
       const current = queryClient.getQueryData<Deck>(['rankerDeck']);
       const seen = [
@@ -152,16 +154,17 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
         setConsumed([]);
         setPassed([]);
         setFront([]);
-        showToast(`${next.candidates.length} new people for you.`);
+        showToast(`${next.candidates.length} more people from your targets.`);
       } else {
-        showToast('No new people yet. Check back soon, or describe a search.');
+        showToast('That really is everyone we hold at your targets, for now.');
       }
     } catch {
-      showToast('Could not refresh right now. Try again in a moment.');
+      showToast('Could not load more right now. Try again in a moment.');
     } finally {
-      setRefreshingDeck(false);
+      setShowingMore(false);
     }
-  }, [refreshingDeck, queryClient, consumed, passed, showToast]);
+  }, [showingMore, queryClient, consumed, passed, showToast]);
+
 
   /**
    * The sentence this deck was built from, or null for the ranked default.
@@ -649,10 +652,10 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             }
             showToast('Building a fresh feed from your targets.');
           }}
-          secondaryLabel="Describe who to find"
-          onSecondary={() => router.push('/feed-filter?deck=people')}
-          tertiaryLabel={refreshingDeck ? 'Finding new people…' : 'Refresh this deck'}
-          onTertiary={() => void refreshDeck()}
+          secondaryLabel={showingMore ? 'Digging deeper…' : 'Show more from your targets'}
+          onSecondary={() => void showMoreRanked()}
+          tertiaryLabel="Describe who to find"
+          onTertiary={() => router.push('/feed-filter?deck=people')}
         />
         {/* Scout, under the empty state rather than over it: the answer to
             "that's everyone" is usually "because you only told me two firms",
