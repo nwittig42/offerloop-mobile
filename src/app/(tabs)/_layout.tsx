@@ -70,6 +70,9 @@ export default function TabsLayout() {
           every app open after sign-in until the user actually turns pushes on —
           "Not now" is per-launch only. Renders nothing once permission is granted. */}
       <Tabs
+      // Feed is the front door (Rylan 2026-08-19). Without this the router
+      // opens on the route literally named `index`, which is Scout.
+      initialRouteName="feed"
       screenOptions={{
         headerShown: false,
         // The scene container defaults to the navigation theme's white. Every
