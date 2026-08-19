@@ -80,6 +80,14 @@ export type SwipeStackProps<T> = {
   allowUp?: boolean;
   upStamp?: StampSpec;
   /**
+   * What an up-commit DOES. 'save' flies the card away (the classic save
+   * for later). 'expand' opens reading mode instead (Rylan 2026-08-18:
+   * pull-up-for-more is the intuition everyone already has), springing the
+   * card back under the enlarged view. The commit threshold + fling gate
+   * are unchanged, so a drifting thumb still just springs back.
+   */
+  upAction?: 'save' | 'expand';
+  /**
    * The instant win. Shown for about a second after a right swipe commits: a
    * springy check with a line saying what is happening and WHERE it went
    * ("Drafting your email" / "Lands in your Inbox"). The card flying off
@@ -286,6 +294,7 @@ function SwipeStackInner<T>(
     leftStamp,
     allowUp = true,
     upStamp,
+    upAction = 'save',
     rightWin,
     upWin,
     shouldCelebrate,
@@ -348,6 +357,25 @@ function SwipeStackInner<T>(
     });
   };
 
+  const settleBack = () => {
+    'worklet';
+    tx.value = withSpring(0, { damping: 14, stiffness: 220 });
+    ty.value = withSpring(0, { damping: 14, stiffness: 220 });
+    if (drag) drag.value = withSpring(0, { damping: 14, stiffness: 220 });
+  };
+
+  const commitUp = () => {
+    'worklet';
+    if (upAction === 'expand') {
+      // Reading mode, not a departure: the card springs home while the
+      // screen clears the stage around it.
+      settleBack();
+      runOnJS(onToggleExpand)(true);
+      return;
+    }
+    flyUp();
+  };
+
   const flyUp = () => {
     'worklet';
     if (drag) drag.value = withTiming(0, { duration: 180 });
@@ -365,7 +393,9 @@ function SwipeStackInner<T>(
       flyOut(direction);
     },
     save: () => {
-      if (allowUp) flyUp();
+      if (!allowUp) return;
+      if (upAction === 'expand') onToggleExpand(true);
+      else flyUp();
     },
   }));
 
@@ -399,7 +429,7 @@ function SwipeStackInner<T>(
         Math.abs(ty.value) > Math.abs(tx.value) &&
         (ty.value < -COMMIT_THRESHOLD || e.velocityY < -FLING_VELOCITY);
       if (upCommit) {
-        flyUp();
+        commitUp();
       } else if (tx.value > COMMIT_THRESHOLD || e.velocityX > FLING_VELOCITY) {
         if (blockRight) {
           tx.value = withSpring(0, { damping: 11, stiffness: 260 });
@@ -453,7 +483,7 @@ function SwipeStackInner<T>(
             const x = tx.value;
             const y = ty.value;
             if (allowUp && !expanded && Math.abs(y) > Math.abs(x) && y < -COMMIT_THRESHOLD) {
-              flyUp();
+              commitUp();
             } else if (x > COMMIT_THRESHOLD) {
               if (blockRight) {
                 tx.value = withSpring(0, { damping: 11, stiffness: 260 });
@@ -561,7 +591,9 @@ function SwipeStackInner<T>(
         flyOut('left');
         break;
       case 'up':
-        if (allowUp) flyUp();
+        if (!allowUp) break;
+        if (upAction === 'expand') onToggleExpand(true);
+        else flyUp();
         break;
       case 'activate':
         onToggleExpand(true);

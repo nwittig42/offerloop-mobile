@@ -11,7 +11,7 @@ import type { Job } from '@/types';
 /**
  * The jobs deck: the swipe physics live in SwipeStack, this only says what a
  * job card looks like and what the stamps read. Left = pass, right = apply or
- * draft, up = save for later.
+ * draft, up = open reading mode (2026-08-18; it saved for later before that).
  *
  * The public shape is unchanged from when this file held the gesture code, so
  * the feed, the onboarding demo, and the company page all keep working as-is.
@@ -23,7 +23,8 @@ type Props = {
   jobs: Job[];
   expanded: boolean;
   onToggleExpand: (expanded: boolean) => void;
-  /** 'up' = swiped up to save for later. */
+  /** 'up' never fires any more (an up-commit expands instead of leaving);
+   *  the union stays so the screen's handler keeps compiling unchanged. */
   onSwiped: (direction: 'left' | 'right' | 'up', job: Job) => void;
   /** Mirrors the live horizontal drag so the action buttons can react. */
   drag?: SharedValue<number>;
@@ -46,6 +47,9 @@ type Props = {
 
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };
 const SAVE_STAMP: StampSpec = { label: 'SAVE', tone: 'marketing' };
+// Swipe-up opens reading mode now (Rylan 2026-08-18), so the up stamp names
+// that, not a save.
+const READ_STAMP: StampSpec = { label: 'READ', tone: 'accent' };
 const APPLY_STAMP: StampSpec = { label: 'APPLY', tone: 'positive' };
 const DRAFT_STAMP: StampSpec = { label: 'DRAFT', tone: 'accent' };
 
@@ -103,16 +107,16 @@ export const SwipeDeck = memo(
                 ? { title: 'Saved', caption: 'Needs a manual application' }
                 : { title: 'Drafting your email', caption: 'Lands in your Inbox' }
           }
-          upWin={{ title: 'Saved for later', caption: 'Find it in Network' }}
           shouldCelebrate={shouldCelebrate}
           allowUp
-          upStamp={SAVE_STAMP}
+          upAction="expand"
+          upStamp={READ_STAMP}
           a11yLabel={(job) =>
             [job.title, job.company, job.location].filter(Boolean).join(', ')
           }
           rightActionLabel={rightStamp === 'apply' ? 'Apply to this job' : 'Save this job'}
           leftActionLabel="Pass on this job"
-          upActionLabel="Save for later"
+          upActionLabel="Read the full posting"
         />
       );
     },
