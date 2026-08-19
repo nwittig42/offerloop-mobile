@@ -36,6 +36,8 @@ import {
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
+import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
+import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { markNudgeShown, nextProfileNudge, type NudgeKey } from '@/lib/profileNudge';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -93,6 +95,23 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
   /** Live drag, mirrored into the floating verb circles so they grow with
    *  the gesture. */
   const dragX = useSharedValue(0);
+
+  // First-entry ghost swipe on the live deck; once per install, gone on the
+  // first real swipe or after the cycles run out.
+  const [ghostHint, setGhostHint] = useState(false);
+  useEffect(() => {
+    void hasSeenGhostHint('people').then((seen) => {
+      if (!seen) setGhostHint(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (!ghostHint) return;
+    const t = setTimeout(() => {
+      setGhostHint(false);
+      void markGhostHintSeen('people');
+    }, 9000);
+    return () => clearTimeout(t);
+  }, [ghostHint]);
   /** Cards already swiped, held locally so the deck advances instantly rather
    *  than waiting on a refetch. */
   const [consumed, setConsumed] = useState<string[]>([]);
@@ -304,8 +323,14 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
     else showToast(`Each swipe costs ${REVEAL_EMAIL_CREDITS} credits. Yours reset with your plan.`);
   }, [showToast, canDraft]);
 
+  const dismissGhost = useCallback(() => {
+    setGhostHint(false);
+    void markGhostHintSeen('people');
+  }, []);
+
   const handleSwiped = useCallback(
     (direction: 'left' | 'right' | 'up', person: Candidate) => {
+      dismissGhost();
       const currentDeckId = deckId;
       setConsumed((prev) => (prev.includes(person.id) ? prev : [...prev, person.id]));
       setFront((prev) => prev.filter((f) => f.id !== person.id));
@@ -658,6 +683,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           place when you flip between them: bar height (68) + float (26) + a
           16pt gap, instead of the card ending flush against the bar. */}
       <View style={{ flex: 1, marginTop: 10, zIndex: 2, paddingHorizontal: 0 }}>
+        <SwipeDemoHint active={ghostHint && active}>
         <PersonDeck
           ref={deckRef}
           people={people}
@@ -670,6 +696,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           appliedCompanies={appliedCompanies}
           undo={{ visible: passed.length > 0, onPress: undoLastPass, position: 'bottom-right' }}
         />
+        </SwipeDemoHint>
       </View>
 
 

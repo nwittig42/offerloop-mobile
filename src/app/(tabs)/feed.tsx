@@ -20,6 +20,8 @@ import NightSky from '@/components/NightSky';
 import Header from '@/components/Header';
 import ReferralCard from '@/components/ReferralCard';
 import { requestReviewIfDue } from '@/lib/appRating';
+import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
+import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
@@ -229,6 +231,23 @@ export default function FeedScreen() {
   // Live drag, mirrored into the floating verb circles.
   const dragX = useSharedValue(0);
 
+  // First-entry ghost swipe (Rylan 2026-08-19): the onboarding hand, once,
+  // on the live deck. Stops on the first real swipe and never returns.
+  const [ghostHint, setGhostHint] = useState(false);
+  useEffect(() => {
+    void hasSeenGhostHint('jobs').then((seen) => {
+      if (!seen) setGhostHint(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (!ghostHint) return;
+    const t = setTimeout(() => {
+      setGhostHint(false);
+      void markGhostHintSeen('jobs');
+    }, 9000);
+    return () => clearTimeout(t);
+  }, [ghostHint]);
+
   // Reading mode is pure flow now: the attached bar and the verb row
   // unmount on expand and the card takes the column (LinearTransition on the
   // deck container animates the grow). The old shrink/clearance shared-value
@@ -319,6 +338,8 @@ export default function FeedScreen() {
    * the swipe still does something true rather than failing silently.
    */
   const handleSwiped = useCallback((direction: 'left' | 'right' | 'up', job: Job) => {
+    setGhostHint(false);
+    void markGhostHintSeen('jobs');
     if (direction === 'up') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       saveJob(job.id);
@@ -399,7 +420,16 @@ export default function FeedScreen() {
           5: flipping tabs reset the deck and replayed every card he had
           already passed — the swipe memory lived in component state that
           unmounting threw away). display:none keeps state and skips work. */}
-      <View style={{ flex: 1, display: mode === 'people' ? 'flex' : 'none' }}>
+      <View
+        pointerEvents={mode === 'people' ? 'auto' : 'none'}
+        style={
+          mode === 'people'
+            ? { flex: 1 }
+            // height 0 + overflow hidden, not display none: display none let
+            // the People bar and verbs PAINT THROUGH onto Apply after some
+            // transitions (Rylan 2026-08-19, IMG_3057). Clipping cannot.
+            : { height: 0, overflow: 'hidden', opacity: 0 }
+        }>
         <PeopleFeedView active={isFocused && mode === 'people'} />
       </View>
       {mode !== 'jobs' ? null : feedState.loading ? (
@@ -495,6 +525,7 @@ export default function FeedScreen() {
           <Animated.View
             layout={LinearTransition.duration(280)}
             style={{ flex: 1, marginTop: 8, zIndex: 2 }}>
+            <SwipeDemoHint active={ghostHint && !expanded && mode === 'jobs'}>
             <SwipeDeck
               ref={deckRef}
               jobs={jobs}
@@ -509,6 +540,7 @@ export default function FeedScreen() {
               shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
               undo={{ visible: canUndo, onPress: undoLastPass, position: 'bottom-right' }}
             />
+            </SwipeDemoHint>
 
           </Animated.View>
 
