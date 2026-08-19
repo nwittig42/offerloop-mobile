@@ -456,16 +456,23 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
-          <Card padded={false} style={{ overflow: 'hidden' }}>
+          <Card
+            padded={false}
+            style={{
+              overflow: 'hidden',
+              borderWidth: 1.5,
+              borderColor: '#C4B5FD',
+              shadowColor: '#8B5CF6',
+              shadowOpacity: 0.18,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 5 },
+              elevation: 4,
+            }}>
           {/* The identity band wears the brand gradient (same ramp as the
               Network progress card, so the app's two "this is you" surfaces
               rhyme). The page below stays paper; this is the one vibrant
               thing on it (Rylan 2026-08-18: "so much white on this page"). */}
-          <LinearGradient
-            colors={['#1B1E2C', '#12141C'] as const}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={{ padding: 16 }}>
+          <View style={{ padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             {profile.photoUrl ? (
               <Image
@@ -476,7 +483,7 @@ export default function ProfileScreen() {
                   borderRadius: 26,
                   backgroundColor: colors.paper2,
                   borderWidth: 2,
-                  borderColor: 'rgba(255,255,255,0.75)',
+                  borderColor: '#C4B5FD',
                 }}
               />
             ) : (
@@ -485,13 +492,13 @@ export default function ProfileScreen() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  backgroundColor: '#8B5CF6' + '1A',
                   borderWidth: 2,
-                  borderColor: 'rgba(255,255,255,0.75)',
+                  borderColor: '#C4B5FD',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#7C3AED' }}>
                   {profile.name
                     .split(' ')
                     .map((p) => p.charAt(0))
@@ -503,12 +510,12 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
+                style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.heading }}>
                 {profile.name}
               </Text>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sans, fontSize: 13, color: '#C4B5FD' }}>
+                style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
                 {profile.school}
               </Text>
             </View>
@@ -534,16 +541,14 @@ export default function ProfileScreen() {
                       ? 1
                       : 0
                 }
-                color="#FBBF24"
-                trackColor="rgba(255,255,255,0.24)"
-                labelColor="#FFFFFF"
+                color="#F59E0B"
                 label={
                   profile.credits >= 1000
                     ? `${Math.round(profile.credits / 100) / 10}k`
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#C4B5FD' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#B45309' }}>
                 credits left
               </Text>
             </Pressable>
@@ -563,13 +568,13 @@ export default function ProfileScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: 'rgba(255,255,255,0.22)',
+                  backgroundColor: '#8B5CF6' + '16',
                   borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.55)',
+                  borderColor: '#C4B5FD',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="share-social" size={19} color="#FFFFFF" />
+                <Ionicons name="share-social" size={19} color="#7C3AED" />
               </View>
             </Pressable>
           </View>
@@ -600,13 +605,13 @@ export default function ProfileScreen() {
                   lineHeight: 28,
                   color:
                     profile.plan === 'Elite'
-                      ? '#A78BFA'
+                      ? '#7C3AED'
                       : profile.plan === 'Pro'
-                        ? '#93C5FD'
-                        : '#9BA3C7',
+                        ? colors.marketing
+                        : colors.inkTertiary,
                 }}>
                 {profile.plan}
-                <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: '#9BA3C7' }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
                   {'  '}plan
                 </Text>
               </Text>
@@ -619,7 +624,7 @@ export default function ProfileScreen() {
                     style={{
                       height: 8,
                       borderRadius: 4,
-                      backgroundColor: 'rgba(255,255,255,0.12)',
+                      backgroundColor: colors.surface,
                       overflow: 'hidden',
                     }}>
                     <View
@@ -631,13 +636,13 @@ export default function ProfileScreen() {
                       }}
                     />
                   </View>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: '#9BA3C7' }}>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
                     {profile.credits.toLocaleString()} of {profile.maxCredits.toLocaleString()} left
                     {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
                   </Text>
                 </View>
               ) : (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#9BA3C7' }}>
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
                   {profile.credits.toLocaleString()} left
                   {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
                 </Text>
@@ -684,7 +689,7 @@ export default function ProfileScreen() {
               </Pressable>
             )}
           </View>
-          </LinearGradient>
+          </View>
           </Card>
 
           {/* Resume, reachable from the top of the page at any time. It used
