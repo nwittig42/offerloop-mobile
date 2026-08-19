@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'staging v19';
-export const OTA_NOTES = 'Paywall presents as a full-height card (the 0.88 detent formSheet clipped content and left a white void); drag handle restored';
+export const OTA_VERSION = 'staging v20';
+export const OTA_NOTES = 'design pass: swipe win toasts, action row with blue Apply lead, People-first feed, word match grades, reading-mode expand, shop gloss, Scout typing examples';
 
 /** Store builds (production channel) hide the stamp entirely: it is a
  *  staging QA affordance, not something App Review or a real user should
