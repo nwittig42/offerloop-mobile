@@ -22,6 +22,7 @@ export function StateView({
   onSecondary,
   tertiaryLabel,
   onTertiary,
+  prominent = false,
   tone = 'neutral',
   card = false,
 }: {
@@ -36,6 +37,9 @@ export function StateView({
   onSecondary?: () => void;
   tertiaryLabel?: string;
   onTertiary?: () => void;
+  /** Render the primary action as a filled vibrant-blue button (Rylan
+   *  2026-08-19: the continuation action should look like THE move). */
+  prominent?: boolean;
   /** 'success' tints the icon green: a finished deck is a win, not an
    *  absence (Rylan 2026-08-18 round 4). */
   tone?: 'neutral' | 'error' | 'success';
@@ -82,7 +86,8 @@ export function StateView({
       {actionLabel && onAction ? (
         <Button
           label={actionLoading ? 'Loading…' : actionLabel}
-          variant="outline"
+          variant={prominent ? 'primary' : 'outline'}
+          size={prominent ? 'lg' : 'default'}
           disabled={actionLoading}
           onPress={onAction}
         />
