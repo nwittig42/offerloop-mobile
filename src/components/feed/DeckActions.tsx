@@ -73,8 +73,6 @@ function Circle({
 
 export default function DeckActions({
   drag,
-  canUndo = false,
-  onUndo,
   onPass,
   onCommit,
   commitIcon,
@@ -83,8 +81,6 @@ export default function DeckActions({
 }: {
   /** The deck's live horizontal drag, for the grow-with-the-gesture read. */
   drag?: SharedValue<number>;
-  canUndo?: boolean;
-  onUndo?: () => void;
   onPass: () => void;
   onCommit: () => void;
   /** Concrete verb per deck: checkmark = apply, pencil = draft,
@@ -123,26 +119,9 @@ export default function DeckActions({
         justifyContent: 'center',
         gap: 20,
       }}>
-      {onUndo ? (
-        <Circle
-          size={42}
-          onPress={onUndo}
-          disabled={!canUndo}
-          accessibilityLabel="Bring back the last card you passed">
-          <View
-            style={{
-              flex: 1,
-              borderRadius: 21,
-              backgroundColor: colors.paper,
-              borderWidth: 1,
-              borderColor: colors.hairline,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-            <Ionicons name="arrow-undo" size={18} color={colors.inkSecondary} />
-          </View>
-        </Circle>
-      ) : null}
+      {/* Undo left this row (Rylan 2026-08-18 round 3): it lives on the
+          card's top-left corner now, so the X and commit sit centered as a
+          true pair. */}
       <Circle
         size={60}
         onPress={onPass}

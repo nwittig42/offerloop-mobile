@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -65,6 +65,8 @@ const DECKS: Record<
       'Entry level finance roles in New York',
       'Software engineering internships, remote',
       'Product management new grad roles',
+      'Marketing internships in LA this summer',
+      'Data analyst roles at fintech companies',
     ],
     savedToast: 'Feed updated. These are your roles now.',
     clearedToast: 'Back to your default feed.',
@@ -78,6 +80,8 @@ const DECKS: Record<
       'Consultants at McKinsey who went to USC',
       'Product managers at fintech startups in SF',
       'Recruiters hiring software engineering interns',
+      'IB analysts at Goldman Sachs in New York',
+      'Engineers at Google who went to my school',
     ],
     savedToast: 'Finding people who match. Give it a moment.',
     clearedToast: 'Back to the people we ranked for you.',
@@ -92,11 +96,50 @@ const MAX_PROMPT = 500;
 export default function FeedFilterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // The examples type themselves into the empty box (same typewriter as the
+  // Scout composer; Rylan 2026-08-18 round 3). Real typing always wins, a
+  // placeholder only shows on an empty input.
+  const [hint, setHint] = useState('');
   const colors = useColors();
   const { swipeSettings, updateSwipeSettings, showToast } = useApp();
   const params = useLocalSearchParams<{ deck?: string }>();
   const deck: DeckKey = params.deck === 'people' ? 'people' : 'jobs';
   const copy = DECKS[deck];
+
+  useEffect(() => {
+    const pool = copy.examples;
+    let hi = 0;
+    let ci = 0;
+    let phase: 'type' | 'erase' = 'type';
+    let t: ReturnType<typeof setTimeout>;
+    const step = () => {
+      const full = pool[hi % pool.length];
+      if (phase === 'type') {
+        ci += 1;
+        setHint(full.slice(0, ci));
+        if (ci >= full.length) {
+          phase = 'erase';
+          t = setTimeout(step, 2100);
+        } else {
+          t = setTimeout(step, 42);
+        }
+      } else {
+        ci -= 3;
+        if (ci <= 0) {
+          ci = 0;
+          setHint('');
+          phase = 'type';
+          hi += 1;
+          t = setTimeout(step, 500);
+        } else {
+          setHint(full.slice(0, ci));
+          t = setTimeout(step, 22);
+        }
+      }
+    };
+    t = setTimeout(step, 600);
+    return () => clearTimeout(t);
+  }, [copy.examples]);
 
   const active = deck === 'jobs' ? swipeSettings.jobFilter : swipeSettings.peopleFilter;
   const recents =
@@ -208,7 +251,7 @@ export default function FeedFilterScreen() {
             value={draft}
             onChangeText={setDraft}
             maxLength={MAX_PROMPT}
-            placeholder={copy.placeholder}
+            placeholder={hint || copy.placeholder}
             autoCapitalize="sentences"
             accessibilityLabel={copy.label}
           />

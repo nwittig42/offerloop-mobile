@@ -555,25 +555,27 @@ export default function ProfileScreen() {
               onPress={() => router.push('/share')}
               accessibilityRole="button"
               accessibilityLabel="Share your progress">
-              {/* Solid white with a soft halo (Rylan 2026-08-18: "make it
-                  radiant"): the brightest object on the band, so sharing
-                  reads as a prize action rather than chrome. */}
-              <View
+              {/* Pink gradient (Rylan 2026-08-18 round 3: white "gives me
+                  weird vibes... make it a brighter pink"): the one warm-hot
+                  note on the band, unmistakably a share. */}
+              <LinearGradient
+                colors={['#F9A8D4', '#EC4899', '#DB2777'] as const}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={{
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: '#FFFFFF',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  shadowColor: '#FFFFFF',
-                  shadowOpacity: 0.65,
-                  shadowRadius: 9,
-                  shadowOffset: { width: 0, height: 0 },
+                  shadowColor: '#EC4899',
+                  shadowOpacity: 0.55,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 3 },
                   elevation: 5,
                 }}>
-                <Ionicons name="share-social" size={19} color="#2563EB" />
-              </View>
+                <Ionicons name="share-social" size={19} color="#FFFFFF" />
+              </LinearGradient>
             </Pressable>
           </View>
           </LinearGradient>
@@ -620,12 +622,38 @@ export default function ProfileScreen() {
                   plan
                 </Text>
               </View>
-              <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                {profile.credits > profile.maxCredits || !profile.maxCredits
-                  ? `${profile.credits.toLocaleString()} left`
-                  : `${profile.credits.toLocaleString()} of ${profile.maxCredits.toLocaleString()} left`}
-                {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
-              </Text>
+              {/* A bar, not a sentence (Rylan 2026-08-18 round 3): the fill
+                  is what is LEFT, so it drains as the month goes. Numbers
+                  ride underneath for anyone who wants the figures. */}
+              {profile.maxCredits && profile.credits <= profile.maxCredits ? (
+                <View style={{ marginTop: 6, gap: 4 }}>
+                  <View
+                    style={{
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: colors.surface,
+                      overflow: 'hidden',
+                    }}>
+                    <View
+                      style={{
+                        width: `${Math.round((profile.credits / profile.maxCredits) * 100)}%`,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: colors.marketing,
+                      }}
+                    />
+                  </View>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
+                    {profile.credits.toLocaleString()} of {profile.maxCredits.toLocaleString()} left
+                    {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
+                  {profile.credits.toLocaleString()} left
+                  {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
+                </Text>
+              )}
             </View>
             {iapAvailable() ? (
               <Pressable
@@ -749,66 +777,119 @@ export default function ProfileScreen() {
             </Text>
             <View style={{ width: 30, height: 3, borderRadius: 2, backgroundColor: colors.marketing }} />
           </View>
-          <Card padded={false} style={{ paddingHorizontal: 16 }}>
+          {/* Doors as TILES (Rylan 2026-08-18 round 3): big colored icons,
+              one tap each, instead of a list that reads like scrolling.
+              Feedback promoted to a first-class door: hearing from users is
+              the point of a staging build. */}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
             <Pressable
               onPress={() => router.push('/what-we-send')}
               accessibilityRole="button"
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13, minHeight: 48 }}>
+              style={{
+                flex: 1,
+                backgroundColor: colors.paper,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                borderRadius: 14,
+                paddingVertical: 16,
+                alignItems: 'center',
+                gap: 8,
+              }}>
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
                   backgroundColor: colors.accent,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="paper-plane-outline" size={16} color="#FFFFFF" />
+                <Ionicons name="paper-plane" size={20} color="#FFFFFF" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-                  What we send on applications
-                </Text>
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-                  The exact payload, 9 fields
-                </Text>
-              </View>
+              <Text
+                style={{
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 12.5,
+                  color: colors.ink,
+                  textAlign: 'center',
+                }}>
+                Auto apply kit
+              </Text>
               {blankAnswers > 0 ? (
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: colors.waiting }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, color: colors.waiting }}>
                   {blankAnswers} blank
                 </Text>
               ) : null}
-              <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
             </Pressable>
-            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairlineLight }} />
             <Pressable
               onPress={() => router.push('/settings')}
               accessibilityRole="button"
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 13, minHeight: 48 }}>
+              style={{
+                flex: 1,
+                backgroundColor: colors.paper,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                borderRadius: 14,
+                paddingVertical: 16,
+                alignItems: 'center',
+                gap: 8,
+              }}>
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  backgroundColor: colors.accent + '14',
-                  borderWidth: 1,
-                  borderColor: colors.accent + '2E',
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.navy,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="settings-outline" size={16} color={colors.accent} />
+                <Ionicons name="settings-sharp" size={20} color="#FFFFFF" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>
-                  Settings
-                </Text>
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
-                  Outreach, appearance, privacy, account
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+              <Text
+                style={{
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 12.5,
+                  color: colors.ink,
+                  textAlign: 'center',
+                }}>
+                Settings
+              </Text>
             </Pressable>
-          </Card>
+            <Pressable
+              onPress={() => router.push('/feedback')}
+              accessibilityRole="button"
+              style={{
+                flex: 1,
+                backgroundColor: colors.paper,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                borderRadius: 14,
+                paddingVertical: 16,
+                alignItems: 'center',
+                gap: 8,
+              }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.positive,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <Ionicons name="megaphone" size={20} color="#FFFFFF" />
+              </View>
+              <Text
+                style={{
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 12.5,
+                  color: colors.ink,
+                  textAlign: 'center',
+                }}>
+                Feedback
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
 

@@ -21,6 +21,7 @@ import ReferralCard from '@/components/ReferralCard';
 import { requestReviewIfDue } from '@/lib/appRating';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
+import CardUndo from '@/components/feed/CardUndo';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
@@ -99,10 +100,11 @@ export default function FeedScreen() {
   } = useApp();
   const colors = useColors();
   const { scheme } = useTheme();
-  // The navy stage (Rylan 2026-08-18, "wild change: make that gray background
-  // navy blue, I wanna see what it looks like"). Light mode gets the design
-  // system's deep navy behind the white cards; dark keeps its night sky.
-  const stageBg = scheme === 'dark' ? colors.feedBg : '#1B2A44';
+  // The navy stage (Rylan 2026-08-18, kept after seeing it; round 3 asked it
+  // ~50% lighter and closer to the theme's accent family). ONE constant on
+  // purpose: he flagged this color as a likely future redo.
+  const STAGE_NAVY = '#324576';
+  const stageBg = scheme === 'dark' ? colors.feedBg : STAGE_NAVY;
   const queryClient = useQueryClient();
 
   // Which deck is showing. People opens first (Rylan 2026-08-18): the person
@@ -531,6 +533,7 @@ export default function FeedScreen() {
               shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
               costLabel={`${rightSwipeCost} credits`}
             />
+            <CardUndo visible={canUndo && !expanded} onPress={undoLastPass} />
 
           </Animated.View>
 
@@ -543,8 +546,6 @@ export default function FeedScreen() {
               style={[{ position: 'absolute', left: 0, right: 0 }, deckActionsStyle]}>
               <DeckActions
                 drag={dragX}
-                canUndo={canUndo}
-                onUndo={undoLastPass}
                 onPass={() => deckRef.current?.swipe('left')}
                 onCommit={() => deckRef.current?.swipe('right')}
                 commitIcon={top?.autoApplyEligible ? 'checkmark' : 'bookmark'}
@@ -645,7 +646,11 @@ export default function FeedScreen() {
                     It sits in the bar rather than above the deck because
                     nothing goes between the switcher and the card. */}
                 {jobFilter ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable
+                    onPress={() => router.push('/feed-filter?deck=jobs')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit this job search"
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Ionicons name="funnel" size={13} color={colors.inkTertiary} />
                     <Text
                       numberOfLines={1}
@@ -664,7 +669,7 @@ export default function FeedScreen() {
                       hitSlop={10}>
                       <Ionicons name="close-circle" size={17} color={colors.inkTertiary} />
                     </Pressable>
-                  </View>
+                  </Pressable>
                 ) : null}
 
                 {/* The follow-up, and only when it means something: we are

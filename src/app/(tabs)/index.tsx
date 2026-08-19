@@ -2525,7 +2525,9 @@ function ScoutTabInner() {
         {/* Composer. Pinned under the conversation, never scrolls away.
             Suggestions ride above it on a fresh chat only: once there is a
             thread, the conversation is the prompt. */}
-        <View style={{ paddingHorizontal: 16, paddingBottom: 10, gap: 10 }}>
+        {/* Raised off the bottom lip (Rylan 2026-08-18 round 3), tightening
+            the dead zone between the orb block and the composer. */}
+        <View style={{ paddingHorizontal: 16, paddingBottom: 24, gap: 10 }}>
           {/* Fixed geometry: one chip centered on top, two below, inside a
               constant-height box (Rylan 2026-08-18). Free-wrapping chips
               reflowed to a different height every cycle and nudged the whole

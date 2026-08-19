@@ -9,6 +9,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { listAppliedJobs } from '@/api/endpoints/autoApply';
 import { appliedCompanyKeys } from '@/lib/appliedPeople';
 import GlassBar from '@/components/GlassBar';
+import CardUndo from '@/components/feed/CardUndo';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import PersonDeck, { type PersonDeckHandle } from '@/components/feed/PersonDeck';
@@ -579,6 +580,7 @@ export default function PeopleFeedView() {
           action={action}
           appliedCompanies={appliedCompanies}
         />
+        <CardUndo visible={passed.length > 0} onPress={undoLastPass} />
       </View>
 
       {/* The verbs, riding the card's bottom edge where Rylan circled
@@ -590,11 +592,9 @@ export default function PeopleFeedView() {
           style={{ position: 'absolute', left: 0, right: 0, bottom: 114 }}>
           <DeckActions
             drag={dragX}
-            canUndo={passed.length > 0}
-            onUndo={undoLastPass}
             onPass={() => deckRef.current?.swipe('left')}
             onCommit={() => deckRef.current?.swipe('right')}
-            commitIcon={action === 'send' ? 'paper-plane' : 'pencil'}
+            commitIcon={action === 'send' ? 'paper-plane' : 'checkmark'}
             passLabel="Pass on this person"
             commitLabel={
               action === 'send' ? 'Send an email to this person' : 'Draft an email to this person'
@@ -661,7 +661,14 @@ export default function PeopleFeedView() {
           {/* Same job as the Jobs bar's filter row: name the search this deck
               came from, and put the way out of it one tap from the confusion. */}
           {peopleFilter ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            /* The whole row opens the prompt editor now (Rylan 2026-08-18
+               round 3): the sentence IS the search, so tapping it should
+               reopen it for a rewrite, not just sit there. */
+            <Pressable
+              onPress={() => router.push('/feed-filter?deck=people')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit this people search"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="funnel" size={13} color={colors.inkTertiary} />
               <Text
                 numberOfLines={1}
@@ -673,6 +680,7 @@ export default function PeopleFeedView() {
                 }}>
                 {peopleFilter}
               </Text>
+              <Ionicons name="create-outline" size={15} color={colors.inkTertiary} />
               <Pressable
                 onPress={() => {
                   updateSwipeSettings({ peopleFilter: null });
@@ -683,7 +691,7 @@ export default function PeopleFeedView() {
                 hitSlop={10}>
                 <Ionicons name="close-circle" size={17} color={colors.inkTertiary} />
               </Pressable>
-            </View>
+            </Pressable>
           ) : null}
         </GlassBar>
       </View>

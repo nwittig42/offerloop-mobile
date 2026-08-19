@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, Share, Text, View } from 'react-native';
 
 import { fetchReferral } from '@/api/endpoints/referral';
+import { useApp } from '@/store/app';
 import { track } from '@/lib/analytics';
 import { fonts } from '@/theme/tokens';
 
@@ -18,9 +19,15 @@ const shareMessage = (url: string) =>
   `Join me on Offerloop, it finds real people at your target companies and writes your intro emails for you. Sign up with my link: ${url}`;
 
 export default function ReferralCard({ compact }: { compact?: boolean }) {
+  const { profile } = useApp();
   const q = useQuery({ queryKey: ['referral'], queryFn: fetchReferral, staleTime: 60_000 });
   const r = q.data;
   if (!r) return null;
+  // Pitching "unlock Elite free" at someone who already HAS Elite is
+  // nonsense (Rylan 2026-08-18, seeing it on his own Elite account). A
+  // referral-unlocked Elite still gets the celebratory unlocked state; a
+  // paid Elite gets nothing here.
+  if (profile.plan === 'Elite' && !r.unlocked) return null;
 
   const remaining = Math.max(0, r.goal - r.joined);
   const invite = () => {

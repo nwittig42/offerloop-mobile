@@ -234,16 +234,24 @@ export default function SettingsScreen() {
 
         <Pressable onPress={() => router.push('/outreach-template')}>
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {/* Filled mail identity (Rylan 2026-08-18 round 3: "email
+                template is a big thing people could take advantage of" and
+                needed color, not a gray glyph). */}
             <View
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: colors.accent + '14',
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                backgroundColor: colors.marketing,
                 alignItems: 'center',
                 justifyContent: 'center',
+                shadowColor: colors.marketing,
+                shadowOpacity: 0.3,
+                shadowRadius: 5,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 3,
               }}>
-              <Ionicons name="create-outline" size={18} color={colors.accent} />
+              <Ionicons name="mail" size={19} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
