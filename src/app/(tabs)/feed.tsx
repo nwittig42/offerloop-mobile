@@ -224,39 +224,13 @@ export default function FeedScreen() {
       easing: Easing.bezier(0.16, 1, 0.3, 1),
     });
   }, [expanded, barShrink]);
-  // The bar used to shrink 18% on expand; now it clears the stage entirely.
-  // An enlarged card is a reading mode, and the reader gets the whole column
-  // (Rylan 2026-08-18: "expand up until the bottom lip of the header").
-  const barStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: 1 - 0.1 * barShrink.value },
-      { translateY: 24 * barShrink.value },
-    ],
-    opacity: 1 - barShrink.value,
-  }));
-
-  // The deck's bar clearance, animated: full while the bar is on stage, a
-  // sliver while a card is enlarged and the bar is gone. Sized for the slim
-  // bar plus the floating circles' 30pt of overlap past the card edge.
-  const deckPadBase = swipeSettings.emailHiringManager ? 198 : 156;
-  const deckPadStyle = useAnimatedStyle(
-    () => ({
-      paddingBottom: deckPadBase - (deckPadBase - 14) * barShrink.value,
-    }),
-    [deckPadBase],
-  );
-
-  // The floating verbs track the card's bottom edge (which moves with the
-  // animated clearance) and clear the stage with the bar in reading mode.
+  // Live drag, mirrored into the floating verb circles.
   const dragX = useSharedValue(0);
-  const deckActionsStyle = useAnimatedStyle(
-    () => ({
-      bottom: deckPadBase - (deckPadBase - 14) * barShrink.value - 56,
-      opacity: 1 - barShrink.value,
-    }),
-    [deckPadBase],
-  );
 
+  // Reading mode is pure flow now: the attached bar and the verb row
+  // unmount on expand and the card takes the column (LinearTransition on the
+  // deck container animates the grow). The old shrink/clearance shared-value
+  // choreography went with the floating bar.
   // Leaving the Jobs deck always closes reading mode, so People never opens
   // under a hidden switcher.
   useEffect(() => {
@@ -518,13 +492,7 @@ export default function FeedScreen() {
               letting the card get run over. */}
           <Animated.View
             layout={LinearTransition.duration(280)}
-            style={[
-              { flex: 1, marginTop: 8 },
-              // Grew 2026-08-18 with the bar's new action row (54pt + 8 gap);
-              // collapses to a sliver while a card is enlarged so the card
-              // grows down to the tab bar's lip.
-              deckPadStyle,
-            ]}>
+            style={{ flex: 1, marginTop: 8, zIndex: 2 }}>
             <SwipeDeck
               ref={deckRef}
               jobs={jobs}
@@ -541,72 +509,25 @@ export default function FeedScreen() {
 
           </Animated.View>
 
-          {/* The verbs, riding the card's bottom edge where Rylan circled:
-              vibrant, oversized, growing with the drag. Redundant with the
-              swipe on purpose; that redundancy is what teaches it. */}
+          {/* The bar RIDES the card now (Rylan 2026-08-19): flat top tucked
+              under the card's rounded bottom, rounded bottom of its own,
+              static while the card swipes away. The verbs float below it. */}
           {!expanded ? (
-            <Animated.View
-              pointerEvents="box-none"
-              style={[{ position: 'absolute', left: 0, right: 0 }, deckActionsStyle]}>
-              <DeckActions
-                drag={dragX}
-                onPass={() => deckRef.current?.swipe('left')}
-                onCommit={() => deckRef.current?.swipe('right')}
-                commitIcon="checkmark"
-                passLabel="Pass on this job"
-                commitLabel={top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'}
-              />
-            </Animated.View>
-          ) : null}
-
-          {/* The bar used to disappear at zero credits, back when everything in
-              it cost money. Both survivors are free (one changes what the next
-              swipe means, one opens settings), and hiding the way to turn OFF
-              the thing pushing you over budget is exactly backwards. It stays. */}
-          <Animated.View
-            pointerEvents={expanded ? 'none' : 'box-none'}
-            style={[
-              {
-                position: 'absolute',
-                // 10 put the bar's shadow almost against the tab bar's top
-                // hairline, so the two chrome layers read as one stack. 26
-                // gives it clear water and lets it read as floating.
-                bottom: 26,
-                left: 0,
-                right: 0,
-                alignItems: 'center',
-              },
-              barStyle,
-            ]}>
-              {/* Two controls, not six (Nick 2026-08-14). The four that left:
-                  shuffle already exists as "Show me new roles" on the
-                  all-caught-up state, bookmark duplicated swipe-up, and the
-                  pass and apply circles duplicated the swipe the whole screen
-                  is built around. What survives is the pair that a swipe
-                  CANNOT do: change what the next swipe means, and open the
-                  settings behind it.
-
-                  The swipe is now the only pointing-device path to pass and
-                  apply, so SwipeStack carries accessibilityActions for both.
-                  That is what keeps this HIG-legal (rule 5.7: every custom
-                  gesture needs a tap or menu equivalent), since VoiceOver and
-                  Switch Control cannot perform a drag. */}
-              {/* Bar width is tied to the DECK, not to its own contents. It
-                  used to shrink-wrap its buttons, which left a short bar
-                  floating under a full-width card. Now that it sits BELOW the
-                  card instead of over it, it takes the card's exact 18pt
-                  margins: same column, own row. The 4pt that buys also goes to
-                  the label, which is the thing that was clamping. */}
+            <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)}>
               <GlassBar
                 style={{
                   alignSelf: 'stretch',
-                  marginHorizontal: 18,
-                  // A column, because the bar grows a second row when the
-                  // hiring-manager switch is on.
+                  marginTop: -14,
+                  paddingTop: 22,
                   flexDirection: 'column',
                   alignItems: 'stretch',
                   gap: 8,
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0,
+                  borderBottomLeftRadius: 22,
+                  borderBottomRightRadius: 22,
                 }}>
+
                 {/* The one add-on for this deck: also email the hiring manager
                     on an apply. Ask-first when turning ON, for the same reason
                     auto-apply used to be: it spends extra credits and it writes
@@ -681,8 +602,20 @@ export default function FeedScreen() {
                 {swipeSettings.emailHiringManager ? (
                   <DraftSendChoice value={draftOrSend} onChange={chooseDraftOrSend} />
                 ) : null}
+              
               </GlassBar>
-          </Animated.View>
+              <View style={{ marginTop: 14, marginBottom: 8 }}>
+                <DeckActions
+                  drag={dragX}
+                  onPass={() => deckRef.current?.swipe('left')}
+                  onCommit={() => deckRef.current?.swipe('right')}
+                  commitIcon="checkmark"
+                  passLabel="Pass on this job"
+                  commitLabel={top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'}
+                />
+              </View>
+            </Animated.View>
+          ) : null}
         </View>
       ) : (
         /* Two empty decks, two different truths. Running out of a filtered

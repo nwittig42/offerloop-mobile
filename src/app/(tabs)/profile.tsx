@@ -456,23 +456,16 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
-          <Card
-            padded={false}
-            style={{
-              overflow: 'hidden',
-              borderWidth: 1.5,
-              borderColor: '#C4B5FD',
-              shadowColor: '#8B5CF6',
-              shadowOpacity: 0.18,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 5 },
-              elevation: 4,
-            }}>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
           {/* The identity band wears the brand gradient (same ramp as the
               Network progress card, so the app's two "this is you" surfaces
               rhyme). The page below stays paper; this is the one vibrant
               thing on it (Rylan 2026-08-18: "so much white on this page"). */}
-          <View style={{ padding: 16 }}>
+          <LinearGradient
+            colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             {profile.photoUrl ? (
               <Image
@@ -483,7 +476,7 @@ export default function ProfileScreen() {
                   borderRadius: 26,
                   backgroundColor: colors.paper2,
                   borderWidth: 2,
-                  borderColor: '#C4B5FD',
+                  borderColor: 'rgba(255,255,255,0.75)',
                 }}
               />
             ) : (
@@ -492,13 +485,13 @@ export default function ProfileScreen() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: '#8B5CF6' + '1A',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
                   borderWidth: 2,
-                  borderColor: '#C4B5FD',
+                  borderColor: 'rgba(255,255,255,0.75)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#7C3AED' }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
                   {profile.name
                     .split(' ')
                     .map((p) => p.charAt(0))
@@ -510,13 +503,25 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.heading }}>
+                style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
                 {profile.name}
               </Text>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
+                style={{ fontFamily: fonts.sans, fontSize: 13, color: '#DDE3FB' }}>
                 {profile.school}
+              </Text>
+              {/* The tier, by the name (Rylan 2026-08-19): the website's
+                  serif lettering, worn like a title. */}
+              <Text
+                style={{
+                  fontFamily: fonts.display,
+                  fontSize: 21,
+                  lineHeight: 25,
+                  color: '#F3E8FF',
+                  marginTop: 3,
+                }}>
+                {profile.plan}
               </Text>
             </View>
             {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
@@ -541,14 +546,16 @@ export default function ProfileScreen() {
                       ? 1
                       : 0
                 }
-                color="#F59E0B"
+                color="#FBBF24"
+                trackColor="rgba(255,255,255,0.24)"
+                labelColor="#FFFFFF"
                 label={
                   profile.credits >= 1000
                     ? `${Math.round(profile.credits / 100) / 10}k`
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#B45309' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#FDE68A' }}>
                 credits left
               </Text>
             </Pressable>
@@ -568,86 +575,21 @@ export default function ProfileScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: '#8B5CF6' + '16',
+                  backgroundColor: 'rgba(255,255,255,0.22)',
                   borderWidth: 1,
-                  borderColor: '#C4B5FD',
+                  borderColor: 'rgba(255,255,255,0.55)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="share-social" size={19} color="#7C3AED" />
+                <Ionicons name="share-social" size={19} color="#FFFFFF" />
               </View>
             </Pressable>
           </View>
-          {/* The buying action, on the page people open when they wonder about
-              credits. Only rendered when purchases actually work: a dead
-              Upgrade button is worse than none, and a build with no working
-              purchase must show nothing buyable at all. Lives INSIDE the dark
-              hero now: one card, one story (Rylan 2026-08-19 overhaul, in the
-              website's Elite-card language). */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-              paddingBottom: 2,
-              paddingTop: 14,
-            }}>
-            <View style={{ flex: 1 }}>
-              {/* The tier wears its shop color (Rylan 2026-08-18): Elite in
-                  the purple its pack tiles use, Pro in the blue, Free plain.
-                  A badge, not a sentence. */}
-              {/* The plan as the website writes it: the tier name in serif,
-                  purple for Elite, blue for Pro, quiet for Free. */}
-              <Text
-                style={{
-                  fontFamily: fonts.display,
-                  fontSize: 24,
-                  lineHeight: 28,
-                  color:
-                    profile.plan === 'Elite'
-                      ? '#7C3AED'
-                      : profile.plan === 'Pro'
-                        ? colors.marketing
-                        : colors.inkTertiary,
-                }}>
-                {profile.plan}
-                <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary }}>
-                  {'  '}plan
-                </Text>
-              </Text>
-              {/* A bar, not a sentence (Rylan 2026-08-18 round 3): the fill
-                  is what is LEFT, so it drains as the month goes. Numbers
-                  ride underneath for anyone who wants the figures. */}
-              {profile.maxCredits && profile.credits <= profile.maxCredits ? (
-                <View style={{ marginTop: 6, gap: 4 }}>
-                  <View
-                    style={{
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: colors.surface,
-                      overflow: 'hidden',
-                    }}>
-                    <View
-                      style={{
-                        width: `${Math.round((profile.credits / profile.maxCredits) * 100)}%`,
-                        height: 8,
-                        borderRadius: 4,
-                        backgroundColor: '#8B5CF6',
-                      }}
-                    />
-                  </View>
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary }}>
-                    {profile.credits.toLocaleString()} of {profile.maxCredits.toLocaleString()} left
-                    {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                  {profile.credits.toLocaleString()} left
-                  {profile.resetLabel ? ` · ${profile.resetLabel}` : ''}
-                </Text>
-              )}
-            </View>
+          </LinearGradient>
+          {/* One line, one job (Rylan 2026-08-19): the centered action under
+              the band. The ring above already says the balance; the exact
+              count and the bar were restating it. */}
+          <View style={{ padding: 14 }}>
             {iapAvailable() ? (
               <Pressable
                 onPress={() =>
@@ -657,7 +599,7 @@ export default function ProfileScreen() {
                 style={{
                   borderRadius: 10,
                   shadowColor: '#3B82F6',
-                  shadowOpacity: 0.4,
+                  shadowOpacity: 0.35,
                   shadowRadius: 8,
                   shadowOffset: { width: 0, height: 3 },
                   elevation: 4,
@@ -667,28 +609,29 @@ export default function ProfileScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
-                    height: 36,
-                    paddingHorizontal: 14,
+                    height: 44,
                     borderRadius: 10,
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexDirection: 'row',
-                    gap: 5,
+                    gap: 6,
                   }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#FFFFFF' }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: '#FFFFFF' }}>
                     {profile.plan === 'Free' ? 'Upgrade' : 'Get more credits'}
                   </Text>
-                  <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+                  <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
                 </LinearGradient>
               </Pressable>
             ) : (
-              <Pressable onPress={() => router.push('/credits')} accessibilityRole="button">
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: '#A78BFA' }}>
+              <Pressable
+                onPress={() => router.push('/credits')}
+                accessibilityRole="button"
+                style={{ alignItems: 'center', paddingVertical: 6 }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
                   See credits
                 </Text>
               </Pressable>
             )}
-          </View>
           </View>
           </Card>
 

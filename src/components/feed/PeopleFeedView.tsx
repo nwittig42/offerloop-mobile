@@ -614,7 +614,7 @@ export default function PeopleFeedView() {
       {/* Same clearance as the jobs deck, so the card bottom lands in the same
           place when you flip between them: bar height (68) + float (26) + a
           16pt gap, instead of the card ending flush against the bar. */}
-      <View style={{ flex: 1, marginTop: 10, paddingBottom: peopleFilter ? 190 : 156 }}>
+      <View style={{ flex: 1, marginTop: 10, zIndex: 2, paddingHorizontal: 0 }}>
         <PersonDeck
           ref={deckRef}
           people={people}
@@ -628,25 +628,7 @@ export default function PeopleFeedView() {
         />
       </View>
 
-      {/* The verbs, riding the card's bottom edge where Rylan circled
-          (2026-08-18): vibrant red pass, vibrant blue draft/send, undo beside
-          them, growing with the drag. Redundant with the swipe on purpose. */}
-      {people.length ? (
-        <View
-          pointerEvents="box-none"
-          style={{ position: 'absolute', left: 0, right: 0, bottom: peopleFilter ? 134 : 100 }}>
-          <DeckActions
-            drag={dragX}
-            onPass={() => deckRef.current?.swipe('left')}
-            onCommit={() => deckRef.current?.swipe('right')}
-            commitIcon={action === 'send' ? 'paper-plane' : 'checkmark'}
-            passLabel="Pass on this person"
-            commitLabel={
-              action === 'send' ? 'Send an email to this person' : 'Draft an email to this person'
-            }
-          />
-        </View>
-      ) : null}
+
 
       {/* Same cut as the jobs bar (Nick 2026-08-14): pass and reveal circles
           only duplicated the swipe, and refresh already exists on the empty
@@ -656,20 +638,25 @@ export default function PeopleFeedView() {
 
           Pass and reveal remain reachable without a drag through the deck's
           accessibilityActions (HIG 5.7). */}
-      <View
-        pointerEvents="box-none"
-        style={{ position: 'absolute', bottom: 26, left: 0, right: 0, alignItems: 'center' }}>
-        {/* The undo pill moved into the floating verb row at the card's
-            bottom edge (Rylan 2026-08-18): anchored, not drifting. */}
-        <GlassBar
-          style={{
-            alignSelf: 'stretch',
-            marginHorizontal: 18,
-            // A column, because the bar grows a second row when a filter is on.
-            flexDirection: 'column',
-            alignItems: 'stretch',
-            gap: 8,
-          }}>
+      {/* The bar RIDES the card (Rylan 2026-08-19): flat top tucked under
+          the card's rounded bottom, static while cards swipe away, with the
+          verb circles floating below it. */}
+      {people.length ? (
+        <View style={{ paddingHorizontal: 18 }}>
+          <GlassBar
+            style={{
+              alignSelf: 'stretch',
+              marginTop: -14,
+              paddingTop: 22,
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 8,
+              borderTopLeftRadius: 0,
+              borderTopRightRadius: 0,
+              borderBottomLeftRadius: 22,
+              borderBottomRightRadius: 22,
+            }}>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {/* No on/off switch beside it, unlike the Jobs bar: writing to the
                 person is what a right swipe on this deck IS, not an add-on to
@@ -738,8 +725,24 @@ export default function PeopleFeedView() {
               </Pressable>
             </Pressable>
           ) : null}
-        </GlassBar>
-      </View>
+        
+          </GlassBar>
+          <View style={{ marginTop: 14, marginBottom: 8 }}>
+            <DeckActions
+              drag={dragX}
+              onPass={() => deckRef.current?.swipe('left')}
+              onCommit={() => deckRef.current?.swipe('right')}
+              commitIcon={action === 'send' ? 'paper-plane' : 'checkmark'}
+              passLabel="Pass on this person"
+              commitLabel={
+                action === 'send'
+                  ? 'Send an email to this person'
+                  : 'Draft an email to this person'
+              }
+            />
+          </View>
+        </View>
+      ) : null}
 
       {/* Gmail is missing, so the swipe cannot finish what it starts. Shown
           on the blocked gesture rather than as a permanent banner: it is the
