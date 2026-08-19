@@ -224,10 +224,18 @@ function mockDeck(): Deck {
  * branch. Any other error propagates, because a real 500 from a live ranker is
  * something the user should see as an error state, not as fake people.
  */
-export async function fetchCandidates(signal?: AbortSignal): Promise<Deck> {
+export async function fetchCandidates(
+  signal?: AbortSignal,
+  /** Candidate ids already shown this session: the server skips them, so a
+   *  refresh EXTENDS the feed with new people instead of replaying it. */
+  excludeIds?: string[],
+): Promise<Deck> {
   if (USE_MOCKS) return mockDeck();
   try {
-    const res = await apiFetch<any>('/api/ranker/candidates', {
+    const exclude = excludeIds?.length
+      ? `?exclude=${encodeURIComponent(excludeIds.slice(0, 500).join(','))}`
+      : '';
+    const res = await apiFetch<any>(`/api/ranker/candidates${exclude}`, {
       signal,
       timeoutMs: 20000,
     });

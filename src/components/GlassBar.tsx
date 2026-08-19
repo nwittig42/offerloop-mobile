@@ -14,15 +14,21 @@ import { shadows } from '@/theme/tokens';
 export function GlassBar({
   children,
   style,
+  solid = false,
 }: {
   children: ReactNode;
   style?: ViewStyle;
+  /** Skip the liquid glass and render the opaque fallback. The deck bars
+   *  use this: GlassView intermittently rendered fully transparent after
+   *  tab switches (Rylan 2026-08-19), and in-flow bars have nothing to
+   *  show through anyway. */
+  solid?: boolean;
 }) {
   const colors = useColors();
   const { scheme } = useTheme();
   const radius = 30;
 
-  if (isLiquidGlassAvailable()) {
+  if (!solid && isLiquidGlassAvailable()) {
     return (
       <GlassView
         glassEffectStyle={scheme === 'dark' ? 'clear' : 'regular'}

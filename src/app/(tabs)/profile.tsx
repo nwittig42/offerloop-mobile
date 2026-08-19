@@ -74,10 +74,15 @@ const splitList = (s: string) =>
 
 function ResumeDrop({
   hasResume,
+  resumeName,
   busy,
   onPress,
 }: {
   hasResume: boolean;
+  /** The attached file's name, so the card says WHICH resume rides along
+   *  (Rylan 2026-08-19: "I want to be able to see which resume I'm working
+   *  with"). */
+  resumeName?: string;
   busy: boolean;
   onPress: () => void;
 }) {
@@ -115,7 +120,7 @@ function ResumeDrop({
             {busy
               ? 'Uploading and reading it…'
               : hasResume
-                ? 'Replace it, or build a fresh one'
+                ? resumeName || 'Replace it, or build a fresh one'
                 : 'Upload one, or we build it with you'}
           </Text>
         </View>
@@ -511,18 +516,7 @@ export default function ProfileScreen() {
                 style={{ fontFamily: fonts.sans, fontSize: 13, color: '#DDE3FB' }}>
                 {profile.school}
               </Text>
-              {/* The tier, by the name (Rylan 2026-08-19): the website's
-                  serif lettering, worn like a title. */}
-              <Text
-                style={{
-                  fontFamily: fonts.display,
-                  fontSize: 21,
-                  lineHeight: 25,
-                  color: '#F3E8FF',
-                  marginTop: 3,
-                }}>
-                {profile.plan}
-              </Text>
+
             </View>
             {connection.usingSampleData ? <Chip label="Sample data" tone="waiting" dot /> : null}
 
@@ -536,6 +530,18 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${profile.credits} credits left of ${profile.maxCredits}. ${swipesLabel}`}
               style={{ alignItems: 'center', gap: 2 }}>
+              {/* The tier crowns the ring (Rylan 2026-08-19), serif like the
+                  website; the ring drops a touch beneath it. */}
+              <Text
+                style={{
+                  fontFamily: fonts.display,
+                  fontSize: 19,
+                  lineHeight: 22,
+                  color: '#F3E8FF',
+                  marginBottom: 4,
+                }}>
+                {profile.plan}
+              </Text>
               <CircleProgress
                 size={58}
                 strokeWidth={6}
@@ -546,7 +552,18 @@ export default function ProfileScreen() {
                       ? 1
                       : 0
                 }
-                color="#FBBF24"
+                // Health at a glance (Rylan 2026-08-19): green while the
+                // month is comfortable, gold in the middle, red on the last
+                // quarter. Real ratio only; no max means no judgment.
+                color={
+                  !profile.maxCredits
+                    ? '#FBBF24'
+                    : profile.credits / profile.maxCredits > 0.5
+                      ? '#34D399'
+                      : profile.credits / profile.maxCredits > 0.25
+                        ? '#FBBF24'
+                        : '#F87171'
+                }
                 trackColor="rgba(255,255,255,0.24)"
                 labelColor="#FFFFFF"
                 label={
@@ -555,7 +572,7 @@ export default function ProfileScreen() {
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#FDE68A' }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 10.5, color: '#DDE3FB' }}>
                 credits left
               </Text>
             </Pressable>
@@ -581,7 +598,7 @@ export default function ProfileScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name="share-social" size={19} color="#FFFFFF" />
+                <Ionicons name="share-outline" size={20} color="#FFFFFF" />
               </View>
             </Pressable>
           </View>
@@ -641,6 +658,7 @@ export default function ProfileScreen() {
               description) stay in the Application tab. */}
           <ResumeDrop
             hasResume={profile.hasResume}
+            resumeName={profile.resume?.name}
             busy={resumeBusy}
             onPress={() => setResumeDoorsOpen(true)}
           />

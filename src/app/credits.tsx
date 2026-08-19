@@ -132,6 +132,7 @@ export default function CreditsScreen() {
 
   // Store products for the inline tiles. null = still loading from Apple.
   const [packs, setPacks] = useState<PurchasesStoreProduct[] | null>(null);
+  const [planPrices, setPlanPrices] = useState<{ pro?: string; elite?: string }>({});
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   // Apple-managed subscription: shows the native manage sheet row. Web
@@ -144,7 +145,13 @@ export default function CreditsScreen() {
 
   const loadPacks = useCallback(() => {
     if (!iapAvailable()) return;
-    void fetchPaywallData().then((d) => setPacks(d.packs));
+    void fetchPaywallData().then((d) => {
+      setPacks(d.packs);
+      setPlanPrices({
+        pro: d.proPackage?.product.priceString,
+        elite: d.elitePackage?.product.priceString,
+      });
+    });
     void hasAppleSubscription().then(setAppleManaged);
   }, []);
 
@@ -536,39 +543,54 @@ export default function CreditsScreen() {
           </Pressable>
         )}
 
-        {/* The ladder, one quiet line (Rylan 2026-08-19): where you stand
-            and what else exists. Tapping a different tier opens the plans
-            sheet, which owns switching. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}>
+        {/* The ladder, three quiet squares (Rylan 2026-08-19): tier, price,
+            where you stand. Informational only; no popup. Prices render from
+            StoreKit or not at all. */}
+        <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8, paddingVertical: 2 }}>
           {(['Free', 'Pro', 'Elite'] as const).map((tier) => {
             const current = profile.plan === tier;
-            const tone = tier === 'Elite' ? '#7C3AED' : tier === 'Pro' ? colors.marketing : colors.inkTertiary;
+            const tone =
+              tier === 'Elite' ? '#7C3AED' : tier === 'Pro' ? colors.marketing : colors.inkTertiary;
+            const price =
+              tier === 'Free' ? '$0' : tier === 'Pro' ? planPrices.pro : planPrices.elite;
             return (
-              <Pressable
+              <View
                 key={tier}
-                disabled={current}
-                onPress={() => presentPaywall({ context: 'credits-screen' })}
-                accessibilityRole="button"
-                accessibilityLabel={current ? `You are on ${tier}` : `See ${tier} plan`}
+                accessible
+                accessibilityLabel={
+                  current ? `Your plan: ${tier}` : `${tier} plan${price ? `, ${price} a month` : ''}`
+                }
                 style={{
                   flex: 1,
-                  paddingVertical: 8,
-                  borderRadius: 10,
+                  paddingVertical: 10,
+                  borderRadius: 12,
                   alignItems: 'center',
-                  backgroundColor: current ? tone : 'transparent',
+                  gap: 1,
+                  backgroundColor: current ? tone : colors.paper,
                   borderWidth: 1,
                   borderColor: current ? tone : colors.hairline,
                 }}>
                 <Text
                   style={{
-                    fontFamily: current ? fonts.sansBold : fonts.sansMedium,
+                    fontFamily: fonts.sansBold,
                     fontSize: 12.5,
-                    color: current ? '#FFFFFF' : colors.inkSecondary,
+                    color: current ? '#FFFFFF' : colors.ink,
                   }}>
                   {tier}
                   {current ? ' · you' : ''}
                 </Text>
-              </Pressable>
+                {price ? (
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansMedium,
+                      fontSize: 11,
+                      color: current ? 'rgba(255,255,255,0.85)' : colors.inkTertiary,
+                    }}>
+                    {price}
+                    {tier === 'Free' ? '' : '/mo'}
+                  </Text>
+                ) : null}
+              </View>
             );
           })}
         </View>

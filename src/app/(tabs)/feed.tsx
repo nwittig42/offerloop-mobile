@@ -518,6 +518,7 @@ export default function FeedScreen() {
           {!expanded ? (
             <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)}>
               <GlassBar
+                solid
                 style={{
                   alignSelf: 'stretch',
                   marginTop: 12,

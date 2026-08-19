@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -70,6 +70,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
   // never disagree about whether mail leaves the account.
   const action: 'draft' | 'send' = swipeSettings.action === 'send' ? 'send' : 'draft';
   const [confirmSend, setConfirmSend] = useState(false);
+
   // Set when the survey is answered OR skipped, so a "Not now" does not bounce
   // straight back to the same screen on the refetch.
   const [surveyDismissed, setSurveyDismissed] = useState(false);
@@ -109,6 +110,39 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
    */
   const [passed, setPassed] = useState<Candidate[]>([]);
   const [front, setFront] = useState<Candidate[]>([]);
+
+  const queryClient = useQueryClient();
+  const [refreshingDeck, setRefreshingDeck] = useState(false);
+
+  /** Refresh = CONTINUE: fetch a fresh ranked batch excluding everyone this
+   *  session already showed, and swap it in (Rylan 2026-08-19: replaying the
+   *  same top-N read as a dead button). */
+  const refreshDeck = useCallback(async () => {
+    if (refreshingDeck) return;
+    setRefreshingDeck(true);
+    try {
+      const current = queryClient.getQueryData<Deck>(['rankerDeck']);
+      const seen = [
+        ...(current?.candidates?.map((c) => c.id) ?? []),
+        ...consumed,
+        ...passed.map((c) => c.id),
+      ];
+      const next = await fetchCandidates(undefined, [...new Set(seen)]);
+      if (next.candidates.length) {
+        queryClient.setQueryData(['rankerDeck'], next);
+        setConsumed([]);
+        setPassed([]);
+        setFront([]);
+        showToast(`${next.candidates.length} new people for you.`);
+      } else {
+        showToast('No new people yet. Check back soon, or describe a search.');
+      }
+    } catch {
+      showToast('Could not refresh right now. Try again in a moment.');
+    } finally {
+      setRefreshingDeck(false);
+    }
+  }, [refreshingDeck, queryClient, consumed, passed, showToast]);
 
   /**
    * The sentence this deck was built from, or null for the ranked default.
@@ -583,8 +617,8 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           }}
           secondaryLabel="Describe who to find"
           onSecondary={() => router.push('/feed-filter?deck=people')}
-          tertiaryLabel={deckQuery.isFetching ? 'Refreshing…' : 'Refresh this deck'}
-          onTertiary={() => deckQuery.refetch()}
+          tertiaryLabel={refreshingDeck ? 'Finding new people…' : 'Refresh this deck'}
+          onTertiary={() => void refreshDeck()}
         />
         {/* Scout, under the empty state rather than over it: the answer to
             "that's everyone" is usually "because you only told me two firms",
@@ -645,6 +679,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       {people.length ? (
         <View style={{ paddingHorizontal: 18 }}>
           <GlassBar
+            solid
             style={{
               alignSelf: 'stretch',
               marginTop: 12,
@@ -653,7 +688,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               gap: 8,
             }}>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 46 }}>
             {/* No on/off switch beside it, unlike the Jobs bar: writing to the
                 person is what a right swipe on this deck IS, not an add-on to
                 applying. The only open question is whether you read it first. */}
