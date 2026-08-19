@@ -555,27 +555,22 @@ export default function ProfileScreen() {
               onPress={() => router.push('/share')}
               accessibilityRole="button"
               accessibilityLabel="Share your progress">
-              {/* Pink gradient (Rylan 2026-08-18 round 3: white "gives me
-                  weird vibes... make it a brighter pink"): the one warm-hot
-                  note on the band, unmistakably a share. */}
-              <LinearGradient
-                colors={['#F9A8D4', '#EC4899', '#DB2777'] as const}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              {/* Frosted glass (round 4 color diet: pink + gold + purple +
+                  blue on one band was "a lot going on"; the gold credits ring
+                  is now the band's single accent). */}
+              <View
                 style={{
                   width: 40,
                   height: 40,
                   borderRadius: 20,
+                  backgroundColor: 'rgba(255,255,255,0.22)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.55)',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  shadowColor: '#EC4899',
-                  shadowOpacity: 0.55,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 3 },
-                  elevation: 5,
                 }}>
                 <Ionicons name="share-social" size={19} color="#FFFFFF" />
-              </LinearGradient>
+              </View>
             </Pressable>
           </View>
           </LinearGradient>
@@ -596,11 +591,13 @@ export default function ProfileScreen() {
               {/* The tier wears its shop color (Rylan 2026-08-18): Elite in
                   the purple its pack tiles use, Pro in the blue, Free plain.
                   A badge, not a sentence. */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* One unit (Rylan 2026-08-18 round 4): "Elite plan" whole,
+                  in the tier's shop color. */}
+              <View style={{ flexDirection: 'row' }}>
                 <View
                   style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
+                    paddingHorizontal: 9,
+                    paddingVertical: 3,
                     borderRadius: 6,
                     backgroundColor:
                       profile.plan === 'Elite'
@@ -615,12 +612,9 @@ export default function ProfileScreen() {
                       fontSize: 12,
                       color: profile.plan === 'Free' ? colors.inkSecondary : '#FFFFFF',
                     }}>
-                    {profile.plan}
+                    {profile.plan} plan
                   </Text>
                 </View>
-                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
-                  plan
-                </Text>
               </View>
               {/* A bar, not a sentence (Rylan 2026-08-18 round 3): the fill
                   is what is LEFT, so it drains as the month goes. Numbers

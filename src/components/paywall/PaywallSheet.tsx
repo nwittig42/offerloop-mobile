@@ -390,7 +390,13 @@ export default function PaywallSheet({
             <>
               {!isSubscriber && (
                 <>
-                  <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.display,
+                      fontSize: 30,
+                      color: colors.heading,
+                      textAlign: 'center',
+                    }}>
                     {hero.title}
                   </Text>
                   <Text
@@ -398,6 +404,7 @@ export default function PaywallSheet({
                       fontFamily: fonts.sans,
                       fontSize: 13.5,
                       color: colors.inkSecondary,
+                      textAlign: 'center',
                       marginTop: 4,
                       marginBottom: 16,
                     }}>
@@ -592,7 +599,28 @@ export default function PaywallSheet({
 
               {isSubscriber && (
                 <>
-                  <Text style={{ fontFamily: fonts.display, fontSize: 30, color: colors.heading }}>
+                  {/* Name the tier they are on (Rylan 2026-08-18: "do we
+                      label, oh you're on Elite?"). Centered, above the hero. */}
+                  <View style={{ alignItems: 'center' }}>
+                    <View
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 3,
+                        borderRadius: 999,
+                        backgroundColor: profile.plan === 'Elite' ? '#7C3AED' : colors.marketing,
+                      }}>
+                      <Text style={{ fontFamily: fonts.sansBold, fontSize: 11.5, color: '#FFFFFF' }}>
+                        You are on {profile.plan}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text
+                    style={{
+                      fontFamily: fonts.display,
+                      fontSize: 30,
+                      color: colors.heading,
+                      textAlign: 'center',
+                    }}>
                     {context && context !== 'credits-screen' ? hero.title : 'Top up your credits'}
                   </Text>
                   <Text
@@ -600,6 +628,7 @@ export default function PaywallSheet({
                       fontFamily: fonts.sans,
                       fontSize: 13.5,
                       color: colors.inkSecondary,
+                      textAlign: 'center',
                       marginTop: 4,
                       marginBottom: 12,
                     }}>

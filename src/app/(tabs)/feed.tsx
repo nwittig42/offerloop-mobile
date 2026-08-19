@@ -21,7 +21,6 @@ import ReferralCard from '@/components/ReferralCard';
 import { requestReviewIfDue } from '@/lib/appRating';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
-import CardUndo from '@/components/feed/CardUndo';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
@@ -426,6 +425,7 @@ export default function FeedScreen() {
         <FeedSkeleton />
       ) : feedState.error ? (
         <StateView
+          card
           icon="cloud-offline-outline"
           tone="error"
           title="Couldn’t load your feed"
@@ -532,8 +532,8 @@ export default function FeedScreen() {
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
               shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
               costLabel={`${rightSwipeCost} credits`}
+              undo={{ visible: canUndo, onPress: undoLastPass }}
             />
-            <CardUndo visible={canUndo && !expanded} onPress={undoLastPass} />
 
           </Animated.View>
 
@@ -687,6 +687,7 @@ export default function FeedScreen() {
            the sentence rather than pulling a deeper slice that does not exist. */
         jobFilter ? (
           <StateView
+            card
             icon="funnel-outline"
             title="That’s every match"
             body={`You’ve been through every role matching “${jobFilter}”. Widen it, or go back to the feed we rank for you.`}
@@ -697,7 +698,9 @@ export default function FeedScreen() {
           />
         ) : (
         <StateView
+          card
           icon="checkmark-done-circle-outline"
+          tone="success"
           title="You’re all caught up"
           body="You’ve been through the roles we ranked for you. Pull in a fresh set — including ones a little outside your usual field — or restart the deck to revisit the ones you passed."
           actionLabel="Show me new roles"

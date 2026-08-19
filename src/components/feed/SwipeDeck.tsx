@@ -43,6 +43,8 @@ type Props = {
   shouldCelebrate?: (direction: 'left' | 'right' | 'up', job: Job) => boolean;
   /** Worn by the collapsed card's bottom-right corner ("10 credits"). */
   costLabel?: string;
+  /** Undo on the card's top-right corner; travels with the swipe. */
+  undo?: { visible: boolean; onPress: () => void };
 };
 
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };
@@ -67,6 +69,7 @@ export const SwipeDeck = memo(
         onBlockedRight,
         shouldCelebrate,
         costLabel,
+        undo,
       },
       ref,
     ) => {
@@ -108,6 +111,7 @@ export const SwipeDeck = memo(
                 : { title: 'Drafting your email', caption: 'Lands in your Inbox' }
           }
           shouldCelebrate={shouldCelebrate}
+          undo={undo}
           allowUp
           upAction="expand"
           upStamp={READ_STAMP}

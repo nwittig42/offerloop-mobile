@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
-import { Dimensions, Platform, Text, View, type GestureResponderEvent } from 'react-native';
+import { Dimensions, Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -97,6 +97,10 @@ export type SwipeStackProps<T> = {
   rightWin?: { title: string; caption?: string };
   /** Same slot for swipe-up-to-save, when the deck allows up. */
   upWin?: { title: string; caption?: string };
+  /** Undo, worn by the card's top-right corner so it travels WITH the swipe
+   *  instead of floating (Rylan 2026-08-18 round 4). Hidden while expanded
+   *  (the collapse chevron owns that corner in reading mode). */
+  undo?: { visible: boolean; onPress: () => void };
   /** Veto for the win toast. The stack cannot know a swipe is about to be
    *  refused downstream (out of credits bounces the job back AFTER the
    *  fly-out), and celebrating an action that did not happen is worse than no
@@ -297,6 +301,7 @@ function SwipeStackInner<T>(
     upAction = 'save',
     rightWin,
     upWin,
+    undo,
     shouldCelebrate,
     a11yLabel,
     rightActionLabel,
@@ -305,6 +310,7 @@ function SwipeStackInner<T>(
   }: SwipeStackProps<T>,
   ref: React.Ref<SwipeStackHandle>,
 ) {
+  const colors = useColors();
   const { scheme } = useTheme();
   // Dark mode deck cards go rich navy instead of the app's dark paper
   // (Rylan 2026-08-18: the paper read as washed/opaque against the night
@@ -630,6 +636,34 @@ function SwipeStackInner<T>(
             style={[{ flex: 1, borderRadius: 22, overflow: 'hidden' }, cardBg]}>
             {renderCard(top, expanded, () => onToggleExpand(false))}
           </Card>
+          {undo?.visible && !expanded ? (
+            <Pressable
+              onPress={undo.onPress}
+              accessibilityRole="button"
+              accessibilityLabel="Bring back the last card you passed"
+              hitSlop={8}
+              style={{
+                position: 'absolute',
+                top: 22,
+                right: 14,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: colors.paper,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000000',
+                shadowOpacity: 0.16,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 5,
+                zIndex: 30,
+              }}>
+              <Ionicons name="arrow-undo" size={17} color={colors.ink} />
+            </Pressable>
+          ) : null}
           <Animated.View
             style={[{ position: 'absolute', top: 10, left: 0, right: 0 }, rightStampStyle]}
             pointerEvents="none">

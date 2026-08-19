@@ -140,14 +140,21 @@ export default function ContactScreen() {
                 flex: 1,
                 height: 44,
                 borderRadius: 8,
-                backgroundColor: colors.ink,
+                // Vibrant blue, not ink (Rylan 2026-08-18 round 4: "a lot of
+                // these black buttons... change to that vibrant blue").
+                backgroundColor: colors.marketing,
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexDirection: 'row',
                 gap: 6,
+                shadowColor: colors.marketing,
+                shadowOpacity: 0.32,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 3,
               }}>
-              <Ionicons name="mail-outline" size={16} color={colors.paper} />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+              <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: '#FFFFFF' }}>
                 Write
               </Text>
             </Pressable>

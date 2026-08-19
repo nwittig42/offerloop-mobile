@@ -237,7 +237,19 @@ export default function NetworkScreen() {
   }, [contacts, q]);
 
   const sortedContacts = useMemo(() => {
-    const out = [...filteredContacts];
+    // Render-side dedupe (Rylan 2026-08-18: the same person showed 2-3x).
+    // Multiple write paths on the server can each create a contact doc for
+    // one human (deck outreach, prompt-search saves, find-another); until
+    // the server-side guard lands, collapse them here by identity, keeping
+    // the row with the most recent activity.
+    const byKey = new Map<string, (typeof filteredContacts)[number]>();
+    for (const c of filteredContacts) {
+      const key = (c.linkedinUrl?.trim().toLowerCase() ||
+        `${c.name}::${c.company}`.toLowerCase());
+      const prev = byKey.get(key);
+      if (!prev || (c.lastActivity || '') > (prev.lastActivity || '')) byKey.set(key, c);
+    }
+    const out = [...byKey.values()];
     if (sortMode === 'newest') {
       out.sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
     } else if (sortMode === 'oldest') {

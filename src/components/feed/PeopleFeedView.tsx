@@ -9,7 +9,6 @@ import { useSharedValue } from 'react-native-reanimated';
 import { listAppliedJobs } from '@/api/endpoints/autoApply';
 import { appliedCompanyKeys } from '@/lib/appliedPeople';
 import GlassBar from '@/components/GlassBar';
-import CardUndo from '@/components/feed/CardUndo';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import PersonDeck, { type PersonDeckHandle } from '@/components/feed/PersonDeck';
@@ -453,6 +452,7 @@ export default function PeopleFeedView() {
     const reason = failure instanceof PeopleSearchFailure ? failure.reason : 'failed';
     return (
       <StateView
+        card
         icon={reason === 'vague' ? 'help-circle-outline' : 'cloud-offline-outline'}
         tone={reason === 'vague' ? 'neutral' : 'error'}
         title={reason === 'vague' ? 'Tell us a bit more' : 'Couldn’t run that search'}
@@ -472,6 +472,7 @@ export default function PeopleFeedView() {
   if (errored) {
     return (
       <StateView
+        card
         icon="cloud-offline-outline"
         tone="error"
         title="Couldn’t load people"
@@ -490,7 +491,9 @@ export default function PeopleFeedView() {
       const noneAtAll = !sourceCandidates.length;
       return (
         <StateView
+          card
           icon={noneAtAll ? 'search-outline' : 'checkmark-done-circle-outline'}
+          tone={noneAtAll ? 'neutral' : 'success'}
           title={noneAtAll ? 'Nobody matched that' : 'That’s all of them'}
           body={
             noneAtAll
@@ -534,12 +537,15 @@ export default function PeopleFeedView() {
     return (
       <View style={{ flex: 1 }}>
         <StateView
+          card
           icon="checkmark-done-circle-outline"
+          tone="success"
           title="That’s everyone for now"
-          body="You’ve been through the people we ranked for you. Check back later, or keep swiping jobs while we find more."
-          actionLabel="Refresh"
-          onAction={() => deckQuery.refetch()}
-          actionLoading={deckQuery.isFetching}
+          body="You’ve been through the people we ranked for you. Describe who else you want and we’ll go find them."
+          actionLabel="Describe who to find"
+          onAction={() => router.push('/feed-filter?deck=people')}
+          secondaryLabel={deckQuery.isFetching ? 'Refreshing…' : 'Refresh this deck'}
+          onSecondary={() => deckQuery.refetch()}
         />
         {/* Scout, under the empty state rather than over it: the answer to
             "that's everyone" is usually "because you only told me two firms",
@@ -579,8 +585,8 @@ export default function PeopleFeedView() {
           onBlockedRight={onBlockedRight}
           action={action}
           appliedCompanies={appliedCompanies}
+          undo={{ visible: passed.length > 0, onPress: undoLastPass }}
         />
-        <CardUndo visible={passed.length > 0} onPress={undoLastPass} />
       </View>
 
       {/* The verbs, riding the card's bottom edge where Rylan circled

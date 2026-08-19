@@ -21,6 +21,7 @@ export function StateView({
   secondaryLabel,
   onSecondary,
   tone = 'neutral',
+  card = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
@@ -31,12 +32,26 @@ export function StateView({
   actionLoading?: boolean;
   secondaryLabel?: string;
   onSecondary?: () => void;
-  tone?: 'neutral' | 'error';
+  /** 'success' tints the icon green: a finished deck is a win, not an
+   *  absence (Rylan 2026-08-18 round 4). */
+  tone?: 'neutral' | 'error' | 'success';
+  /** Render on a white card. For placements over the feed's navy stage,
+   *  where bare ink-on-navy text was unreadable (Rylan 2026-08-18 round 4,
+   *  "absolute dead end... really hard to read"). */
+  card?: boolean;
 }) {
   const colors = useColors();
-  const iconColor = tone === 'error' ? colors.negative : colors.inkTertiary;
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
+  const iconColor =
+    tone === 'error' ? colors.negative : tone === 'success' ? colors.positive : colors.inkTertiary;
+  const inner = (
+    <View
+      style={{
+        flex: card ? undefined : 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 32,
+        gap: 14,
+      }}>
       <Ionicons name={icon} size={42} color={iconColor} />
       <Text
         style={{
@@ -71,6 +86,25 @@ export function StateView({
       {secondaryLabel && onSecondary ? (
         <Button label={secondaryLabel} variant="ghost" onPress={onSecondary} />
       ) : null}
+    </View>
+  );
+  if (!card) return inner;
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <View
+        style={{
+          alignSelf: 'stretch',
+          backgroundColor: colors.paper,
+          borderRadius: 20,
+          paddingVertical: 14,
+          shadowColor: '#000000',
+          shadowOpacity: 0.14,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 5,
+        }}>
+        {inner}
+      </View>
     </View>
   );
 }

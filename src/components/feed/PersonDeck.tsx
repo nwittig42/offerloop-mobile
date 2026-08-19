@@ -36,6 +36,8 @@ type Props = {
    *  badge. A Set so a hundred-card deck is a hundred lookups, not a hundred
    *  scans of the applications list. */
   appliedCompanies?: Set<string>;
+  /** Undo on the card's top-right corner; travels with the swipe. */
+  undo?: { visible: boolean; onPress: () => void };
 };
 
 /**
@@ -63,6 +65,7 @@ export const PersonDeck = memo(
         onBlockedRight,
         action,
         appliedCompanies,
+        undo,
       },
       ref,
     ) => {
@@ -100,6 +103,7 @@ export const PersonDeck = memo(
           onBlockedRight={onBlockedRight}
           rightStamp={action === 'send' ? SEND_STAMP : DRAFT_STAMP}
           leftStamp={PASS_STAMP}
+          undo={undo}
           rightWin={
             action === 'send'
               ? { title: 'Sending it', caption: 'Track it in your Inbox' }
