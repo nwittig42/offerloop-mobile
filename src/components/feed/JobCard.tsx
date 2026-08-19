@@ -109,7 +109,18 @@ function DetailGroup({
   );
 }
 
-function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean }) {
+function CollapsedCard({
+  job,
+  descLoading,
+  costLabel,
+}: {
+  job: Job;
+  descLoading: boolean;
+  /** The price of a right swipe, worn by the card itself ("10 credits").
+   *  Moved here from a header line that squished the deck (Rylan 2026-08-18).
+   *  Label only, never a button: any tap on the card enlarges it. */
+  costLabel?: string;
+}) {
   const colors = useColors();
   const { accentTheme } = useTheme();
   const { profile } = useApp();
@@ -294,6 +305,27 @@ function CollapsedCard({ job, descLoading }: { job: Job; descLoading: boolean })
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
             Tap anywhere to enlarge
           </Text>
+          <View style={{ flex: 1 }} />
+          {costLabel ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 9,
+                paddingVertical: 4,
+                borderRadius: 999,
+                backgroundColor: colors.marketing + '14',
+                borderWidth: 1,
+                borderColor: colors.marketing + '2E',
+              }}>
+              <Ionicons name="flash" size={11} color={colors.marketing} />
+              <Text
+                style={{ fontFamily: fonts.sansSemibold, fontSize: 11.5, color: colors.marketing }}>
+                {costLabel}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
     </View>
@@ -517,10 +549,12 @@ function JobCardImpl({
   job,
   expanded = false,
   onCollapse,
+  costLabel,
 }: {
   job: Job;
   expanded?: boolean;
   onCollapse?: () => void;
+  costLabel?: string;
 }) {
   // The feed omits description (stripped server-side); fetch it lazily the
   // first time a card is shown, cached so re-renders/expand don't refetch.
@@ -537,7 +571,7 @@ function JobCardImpl({
   return expanded ? (
     <ExpandedCard job={effJob} descLoading={descLoading} onCollapse={onCollapse} />
   ) : (
-    <CollapsedCard job={effJob} descLoading={descLoading} />
+    <CollapsedCard job={effJob} descLoading={descLoading} costLabel={costLabel} />
   );
 }
 

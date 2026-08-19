@@ -1,16 +1,20 @@
-import { forwardRef, useImperativeHandle, useRef, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import { Dimensions, Platform, Text, View, type GestureResponderEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
+  FadeOut,
+  FadeOutDown,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
+  ZoomIn,
   type SharedValue,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 
 import Card from '@/components/ui/Card';
 import { useColors } from '@/theme/ThemeProvider';
@@ -76,6 +80,21 @@ export type SwipeStackProps<T> = {
   allowUp?: boolean;
   upStamp?: StampSpec;
   /**
+   * The instant win. Shown for about a second after a right swipe commits: a
+   * springy check with a line saying what is happening and WHERE it went
+   * ("Drafting your email" / "Lands in your Inbox"). The card flying off
+   * says "gone"; this says "working for you", which is the half a user
+   * cannot infer. Per deck so Jobs and People can name their own outcome.
+   */
+  rightWin?: { title: string; caption?: string };
+  /** Same slot for swipe-up-to-save, when the deck allows up. */
+  upWin?: { title: string; caption?: string };
+  /** Veto for the win toast. The stack cannot know a swipe is about to be
+   *  refused downstream (out of credits bounces the job back AFTER the
+   *  fly-out), and celebrating an action that did not happen is worse than no
+   *  toast. Defaults to celebrating every completed swipe. */
+  shouldCelebrate?: (direction: 'left' | 'right' | 'up', item: T) => boolean;
+  /**
    * Spoken description of the top card, and the names of its actions.
    *
    * Dragging a card is a CUSTOM gesture, and VoiceOver swallows drags, so
@@ -137,6 +156,121 @@ function Stamp({ spec }: { spec: StampSpec }) {
   );
 }
 
+/**
+ * The one-second payoff after a swipe commits. Right and up get the full
+ * treatment (springy check card, what is happening, where it landed); left
+ * gets a quiet wisp, because a pass is housekeeping, not a win.
+ */
+function WinToast({
+  direction,
+  title,
+  caption,
+}: {
+  direction: 'left' | 'right' | 'up';
+  title: string;
+  caption?: string;
+}) {
+  const colors = useColors();
+  if (direction === 'left') {
+    return (
+      <Animated.View
+        entering={ZoomIn.springify().damping(14)}
+        exiting={FadeOut.duration(200)}
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: colors.ink + 'B8',
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 999,
+          }}>
+          <Ionicons name="close" size={15} color="#FFFFFF" />
+          <Text style={{ fontFamily: fonts.sansBold, fontSize: 13.5, color: '#FFFFFF' }}>
+            {title}
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
+  const tone = direction === 'up' ? colors.marketing : colors.positive;
+  return (
+    <Animated.View
+      entering={ZoomIn.springify().damping(11).stiffness(240)}
+      exiting={FadeOutDown.duration(260)}
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: colors.paper,
+          paddingHorizontal: 26,
+          paddingVertical: 20,
+          borderRadius: 18,
+          shadowColor: tone,
+          shadowOpacity: 0.35,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+        }}>
+        <View
+          style={{
+            width: 54,
+            height: 54,
+            borderRadius: 27,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: tone,
+            marginBottom: 10,
+            shadowColor: tone,
+            shadowOpacity: 0.45,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+          }}>
+          <Ionicons
+            name={direction === 'up' ? 'bookmark' : 'checkmark'}
+            size={30}
+            color="#FFFFFF"
+          />
+        </View>
+        <Text style={{ fontFamily: fonts.sansBold, fontSize: 16.5, color: colors.heading }}>
+          {title}
+        </Text>
+        {caption ? (
+          <Text
+            style={{
+              fontFamily: fonts.sansMedium,
+              fontSize: 13,
+              color: colors.inkSecondary,
+              marginTop: 3,
+            }}>
+            {caption}
+          </Text>
+        ) : null}
+      </View>
+    </Animated.View>
+  );
+}
+
 function SwipeStackInner<T>(
   {
     items,
@@ -152,6 +286,9 @@ function SwipeStackInner<T>(
     leftStamp,
     allowUp = true,
     upStamp,
+    rightWin,
+    upWin,
+    shouldCelebrate,
     a11yLabel,
     rightActionLabel,
     leftActionLabel,
@@ -167,11 +304,32 @@ function SwipeStackInner<T>(
   const top = items[0];
   const next = items[1];
 
+  /** The post-swipe payoff, keyed so back-to-back swipes re-pop the spring. */
+  const [win, setWin] = useState<{ direction: 'left' | 'right' | 'up'; key: number } | null>(null);
+  const winTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (winTimer.current) clearTimeout(winTimer.current);
+    },
+    [],
+  );
+
+  const celebrate = (direction: 'left' | 'right' | 'up') => {
+    // No haptics here on purpose: the deck screens already buzz on commit and
+    // on server confirmation (see feed.tsx / PeopleFeedView handleSwiped), so
+    // a buzz in the shared stack would stack on top of theirs. This layer owns
+    // the VISUAL payoff only.
+    setWin({ direction, key: Date.now() });
+    if (winTimer.current) clearTimeout(winTimer.current);
+    winTimer.current = setTimeout(() => setWin(null), direction === 'left' ? 550 : 1050);
+  };
+
   const finish = (direction: 'left' | 'right' | 'up') => {
     const item = items[0];
     tx.value = 0;
     ty.value = 0;
     onToggleExpand(false);
+    if (item && (!shouldCelebrate || shouldCelebrate(direction, item))) celebrate(direction);
     if (item) onSwiped(direction, item);
   };
 
@@ -357,7 +515,24 @@ function SwipeStackInner<T>(
     };
   });
 
-  if (!top) return null;
+  const winToast = win ? (
+    <WinToast
+      key={win.key}
+      direction={win.direction}
+      title={
+        win.direction === 'left'
+          ? 'Passed'
+          : win.direction === 'up'
+            ? (upWin?.title ?? 'Saved')
+            : (rightWin?.title ?? 'On it')
+      }
+      caption={win.direction === 'right' ? rightWin?.caption : win.direction === 'up' ? upWin?.caption : undefined}
+    />
+  ) : null;
+
+  // The last card's win still needs a stage after the deck empties, so the
+  // overlay outlives the cards.
+  if (!top) return <View style={{ flex: 1 }}>{winToast}</View>;
 
   // The non-gesture path. Named actions surface in the VoiceOver rotor, in
   // Switch Control's action menu, and to Voice Control ("tap Apply"), so every
@@ -437,6 +612,7 @@ function SwipeStackInner<T>(
           ) : null}
         </Animated.View>
       </MaybeGestureDetector>
+      {winToast}
     </View>
   );
 }

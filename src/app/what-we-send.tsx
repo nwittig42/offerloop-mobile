@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,29 +64,41 @@ export default function WhatWeSendScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      {/* Centered title with the back arrow standing alone (Rylan 2026-08-18):
+          separating "go back to Profile" from "what this page is" reads
+          cleaner than stacking them. The label names the feature it explains
+          instead of the old ambiguous "What we send". */}
       <View
         style={{
           paddingTop: insets.top + 6,
           paddingHorizontal: 16,
-          paddingBottom: 10,
+          paddingBottom: 12,
           backgroundColor: colors.paper,
           borderBottomWidth: 1,
           borderBottomColor: colors.hairline,
-          gap: 2,
+          flexDirection: 'row',
+          alignItems: 'center',
         }}>
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
+          accessibilityLabel="Back to Profile"
           hitSlop={10}
-          style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="chevron-back" size={20} color={colors.accent} />
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.accent }}>
-            Profile
-          </Text>
+          style={{ width: 40, alignItems: 'flex-start' }}>
+          <Ionicons name="chevron-back" size={24} color={colors.accent} />
         </Pressable>
-        <Text style={{ fontFamily: fonts.display, fontSize: 32, color: colors.heading }}>
-          What we send
+        <Text
+          numberOfLines={1}
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: fonts.display,
+            fontSize: 26,
+            color: colors.heading,
+          }}>
+          What&rsquo;s in auto apply
         </Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
@@ -170,17 +183,29 @@ export default function WhatWeSendScreen() {
             onPress={openAnswers}
             accessibilityRole="button"
             style={{
-              height: 46,
               borderRadius: 8,
-              backgroundColor: colors.accent,
-              alignItems: 'center',
-              justifyContent: 'center',
+              shadowColor: '#3B82F6',
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 4,
             }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: '#FFFFFF' }}>
-              {missing > 0
-                ? `Fill in ${missing} missing ${missing === 1 ? 'answer' : 'answers'}`
-                : 'Edit these answers'}
-            </Text>
+            <LinearGradient
+              colors={['#4B8AF9', '#3B82F6', '#2563EB']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                height: 46,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: '#FFFFFF' }}>
+                {missing > 0
+                  ? `Fill in ${missing} missing ${missing === 1 ? 'answer' : 'answers'}`
+                  : 'Edit these answers'}
+              </Text>
+            </LinearGradient>
           </Pressable>
           <Text
             style={{

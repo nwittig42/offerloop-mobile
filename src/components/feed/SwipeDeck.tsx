@@ -37,6 +37,11 @@ type Props = {
    *  older outreach path. Honest per-card: an ineligible job never flashes a
    *  promise to apply. */
   rightStamp?: 'draft' | 'apply' | 'save';
+  /** Passed straight to SwipeStack: veto the win toast for a swipe the screen
+   *  is about to refuse (e.g. right swipe with an empty wallet). */
+  shouldCelebrate?: (direction: 'left' | 'right' | 'up', job: Job) => boolean;
+  /** Worn by the collapsed card's bottom-right corner ("10 credits"). */
+  costLabel?: string;
 };
 
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };
@@ -56,6 +61,8 @@ export const SwipeDeck = memo(
         rightStamp = 'draft',
         blockRight = false,
         onBlockedRight,
+        shouldCelebrate,
+        costLabel,
       },
       ref,
     ) => {
@@ -64,9 +71,9 @@ export const SwipeDeck = memo(
           isExpanded ? (
             <JobCard job={job} expanded onCollapse={onCollapse} />
           ) : (
-            <JobCard job={job} />
+            <JobCard job={job} costLabel={costLabel} />
           ),
-        [],
+        [costLabel],
       );
 
       return (
@@ -89,6 +96,15 @@ export const SwipeDeck = memo(
                 : DRAFT_STAMP
           }
           leftStamp={PASS_STAMP}
+          rightWin={
+            rightStamp === 'apply'
+              ? { title: 'Applying for you', caption: 'Track it in Network' }
+              : rightStamp === 'save'
+                ? { title: 'Saved', caption: 'Needs a manual application' }
+                : { title: 'Drafting your email', caption: 'Lands in your Inbox' }
+          }
+          upWin={{ title: 'Saved for later', caption: 'Find it in Network' }}
+          shouldCelebrate={shouldCelebrate}
           allowUp
           upStamp={SAVE_STAMP}
           a11yLabel={(job) =>

@@ -55,7 +55,9 @@ const DECKS: Record<
   }
 > = {
   jobs: {
-    title: 'Job feed',
+    // The title IS the pitch (Rylan 2026-08-18): hand the user the platter,
+    // "personalize" says what this page does without any reading-into.
+    title: 'Personalize your job feed',
     label: 'Describe the roles you want',
     placeholder: 'Internships in product management in San Francisco',
     note: 'We search every role we hold for the ones that match. Free, and it takes a second.',
@@ -68,7 +70,7 @@ const DECKS: Record<
     clearedToast: 'Back to your default feed.',
   },
   people: {
-    title: 'People feed',
+    title: 'Personalize your people feed',
     label: 'Describe who you want to reach',
     placeholder: 'Investment banking analysts at Goldman Sachs in New York',
     note: `We find ${PEOPLE_SEARCH_BATCH} people who match. Finding them is free. Swiping right is what costs credits, same as always.`,
@@ -175,7 +177,18 @@ export default function FeedFilterScreen() {
           flexDirection: 'row',
           alignItems: 'center',
         }}>
-        <Text style={{ flex: 1, fontFamily: fonts.display, fontSize: 26, color: colors.heading }}>
+        <View style={{ width: 34 }} />
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: fonts.display,
+            fontSize: 25,
+            color: colors.heading,
+          }}>
           {copy.title}
         </Text>
         <Pressable onPress={() => router.back()} accessibilityRole="button" style={{ padding: 6 }}>

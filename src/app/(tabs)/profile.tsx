@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,8 @@ import { getApplicationProfile } from '@/api/endpoints/autoApply';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
+import { ResumeDoors } from '@/components/resume/ResumeDoors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
 import Header from '@/components/Header';
@@ -112,8 +115,8 @@ function ResumeDrop({
             {busy
               ? 'Uploading and reading it…'
               : hasResume
-                ? 'Tap to replace it with a new PDF'
-                : 'We read it once and fill in the rest for you'}
+                ? 'Replace it, or build a fresh one'
+                : 'Upload one, or we build it with you'}
           </Text>
         </View>
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
@@ -284,6 +287,10 @@ export default function ProfileScreen() {
   }, [appProfile, profile.hasResume, profile.name, profile.gmailAddress, profile.linkedinUrl]);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const queryClient = useQueryClient();
+  // Replace/Add resume opens the three doors (upload / build from LinkedIn /
+  // describe) instead of jumping straight to the file picker. The build paths
+  // existed but were "a little rough to get into" from here (Rylan 2026-08-18).
+  const [resumeDoorsOpen, setResumeDoorsOpen] = useState(false);
 
   // The Resume tab used to only DISPLAY a parse and tell people to upload on
   // offerloop.ai — so the app could never actually take a resume, and every
@@ -449,12 +456,28 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 12 }}>
-          <Card style={{ gap: 12 }}>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+          {/* The identity band wears the brand gradient (same ramp as the
+              Network progress card, so the app's two "this is you" surfaces
+              rhyme). The page below stays paper; this is the one vibrant
+              thing on it (Rylan 2026-08-18: "so much white on this page"). */}
+          <LinearGradient
+            colors={['#2563EB', '#4F46E5', '#7C3AED'] as const}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             {profile.photoUrl ? (
               <Image
                 source={{ uri: profile.photoUrl }}
-                style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.paper2 }}
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: colors.paper2,
+                  borderWidth: 2,
+                  borderColor: 'rgba(255,255,255,0.75)',
+                }}
               />
             ) : (
               <View
@@ -462,11 +485,13 @@ export default function ProfileScreen() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: colors.navy,
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderWidth: 2,
+                  borderColor: 'rgba(255,255,255,0.75)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: colors.paper }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
                   {profile.name
                     .split(' ')
                     .map((p) => p.charAt(0))
@@ -478,12 +503,12 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.ink }}>
+                style={{ fontFamily: fonts.sansSemibold, fontSize: 18, color: '#FFFFFF' }}>
                 {profile.name}
               </Text>
               <Text
                 numberOfLines={2}
-                style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
+                style={{ fontFamily: fonts.sans, fontSize: 13, color: '#DDE3FB' }}>
                 {profile.school}
               </Text>
             </View>
@@ -509,14 +534,16 @@ export default function ProfileScreen() {
                       ? 1
                       : 0
                 }
-                color={colors.accent}
+                color="#FFFFFF"
+                trackColor="rgba(255,255,255,0.28)"
+                labelColor="#FFFFFF"
                 label={
                   profile.credits >= 1000
                     ? `${Math.round(profile.credits / 100) / 10}k`
                     : String(profile.credits)
                 }
               />
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: colors.inkTertiary }}>
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 10.5, color: '#DDE3FB' }}>
                 credits left
               </Text>
             </Pressable>
@@ -528,31 +555,37 @@ export default function ProfileScreen() {
               onPress={() => router.push('/share')}
               accessibilityRole="button"
               accessibilityLabel="Share your progress">
-              {/* Filled gradient chip — the color lives inside now, white glyph on
-                  a blue→violet wash, so it reads as a bright action beside the name. */}
-              <LinearGradient
-                colors={['#5B9BF4', '#2563EB', '#7C4DFF'] as const}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              {/* White glass on the gradient: the old gradient-filled chip
+                  vanished into the band it now sits on. */}
+              <View
                 style={{
                   width: 38,
                   height: 38,
                   borderRadius: 19,
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.5)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
                 <Ionicons name="share-social" size={18} color="#FFFFFF" />
-              </LinearGradient>
+              </View>
             </Pressable>
           </View>
-
-          <View style={{ height: 1, backgroundColor: colors.hairlineLight }} />
+          </LinearGradient>
 
           {/* The buying action, on the page people open when they wonder about
               credits. Only rendered when purchases actually work: a dead
               Upgrade button is worse than none, and a build with no working
               purchase must show nothing buyable at all. */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+            }}>
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink }}>
                 {profile.plan} plan
@@ -598,7 +631,53 @@ export default function ProfileScreen() {
               every auto-apply depends on this one file. The full tools (edit
               the parse, build one from LinkedIn, write one from a
               description) stay in the Application tab. */}
-          <ResumeDrop hasResume={profile.hasResume} busy={resumeBusy} onPress={onPickResume} />
+          <ResumeDrop
+            hasResume={profile.hasResume}
+            busy={resumeBusy}
+            onPress={() => setResumeDoorsOpen(true)}
+          />
+
+          <Modal
+            visible={resumeDoorsOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setResumeDoorsOpen(false)}>
+            <Pressable
+              onPress={() => setResumeDoorsOpen(false)}
+              style={{ flex: 1, backgroundColor: 'rgba(10,14,25,0.5)', justifyContent: 'flex-end' }}>
+              <Pressable
+                onPress={(e) => e.stopPropagation()}
+                style={{
+                  backgroundColor: colors.paper,
+                  borderTopLeftRadius: 22,
+                  borderTopRightRadius: 22,
+                  padding: 20,
+                  paddingBottom: 36,
+                }}>
+                <ResumeDoors
+                  hasResume={profile.hasResume}
+                  hasLinkedin={!!profile.linkedinUrl?.trim()}
+                  onUpload={() => {
+                    setResumeDoorsOpen(false);
+                    void onPickResume();
+                  }}
+                  onBuildFromLinkedin={() => {
+                    setResumeDoorsOpen(false);
+                    if (!RESUME_BUILDER_LIVE) {
+                      showToast('Building from LinkedIn arrives this week. Upload works today.');
+                      return;
+                    }
+                    router.push('/resume-preview');
+                  }}
+                  onDescribe={() => {
+                    setResumeDoorsOpen(false);
+                    router.push('/resume-from-text');
+                  }}
+                  onNotNow={() => setResumeDoorsOpen(false)}
+                />
+              </Pressable>
+            </Pressable>
+          </Modal>
 
           {/* Checklist reads the LIVE typed values, not just the saved
               profile: Rylan typed his grad year and the list still nagged him

@@ -6,10 +6,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import Animated, {
   Easing,
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+
+import { LinearGradient } from 'expo-linear-gradient';
 
 import GlassBar from '@/components/GlassBar';
 import NightSky from '@/components/NightSky';
@@ -71,6 +76,57 @@ import type { Job } from '@/types';
  * run full-width and uncropped. Delete it if that never happens.
  */
 
+/**
+ * The leading action: a filled marketing-blue circle that does what a right
+ * swipe does. The deck's other controls are quiet outlines; this is the one
+ * thing on the screen that visibly asks to be pressed (Rylan 2026-08-18,
+ * "there's no leading action button"). Static styles + pressed state, never
+ * function-form Pressable styles (release builds strip those).
+ */
+function ApplyCircle({
+  icon,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: 'checkmark' | 'bookmark';
+  onPress?: () => void;
+  accessibilityLabel: string;
+}) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={{
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        shadowColor: '#3B82F6',
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+        transform: [{ scale: pressed ? 0.92 : 1 }],
+      }}>
+      <LinearGradient
+        colors={['#4B8AF9', '#3B82F6', '#2563EB']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          flex: 1,
+          borderRadius: 29,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <Ionicons name={icon} size={27} color="#FFFFFF" />
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
 export default function FeedScreen() {
   const router = useRouter();
   const {
@@ -96,11 +152,11 @@ export default function FeedScreen() {
   const colors = useColors();
   const queryClient = useQueryClient();
 
-  // Which deck is showing. Jobs opens first: it is the familiar surface, and
-  // applying is the lower-commitment action of the two. ?deck=people opens on
-  // the other one, which is how the first-run tour lands on it.
+  // Which deck is showing. People opens first (Rylan 2026-08-18): the person
+  // deck is the differentiated surface, the one with names on it, and leading
+  // with it teaches what the app IS. ?deck=jobs still opens Jobs directly.
   const { deck: deckParam } = useLocalSearchParams<{ deck?: string }>();
-  const [mode, setMode] = useState<FeedMode>(deckParam === 'people' ? 'people' : 'jobs');
+  const [mode, setMode] = useState<FeedMode>(deckParam === 'jobs' ? 'jobs' : 'people');
   // The tab is already mounted when a deep link arrives (the first-run tour
   // sends ?deck=people at someone who is looking at Jobs), so the initial
   // state above is not enough: follow the param when it CHANGES. It never
@@ -214,13 +270,32 @@ export default function FeedScreen() {
       easing: Easing.bezier(0.16, 1, 0.3, 1),
     });
   }, [expanded, barShrink]);
+  // The bar used to shrink 18% on expand; now it clears the stage entirely.
+  // An enlarged card is a reading mode, and the reader gets the whole column
+  // (Rylan 2026-08-18: "expand up until the bottom lip of the header").
   const barStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: 1 - 0.18 * barShrink.value },
-      { translateY: 10 * barShrink.value },
+      { scale: 1 - 0.1 * barShrink.value },
+      { translateY: 24 * barShrink.value },
     ],
-    opacity: 1 - 0.15 * barShrink.value,
+    opacity: 1 - barShrink.value,
   }));
+
+  // The deck's bar clearance, animated: full while the bar is on stage, a
+  // sliver while a card is enlarged and the bar is gone.
+  const deckPadBase = swipeSettings.emailHiringManager ? 214 : 172;
+  const deckPadStyle = useAnimatedStyle(
+    () => ({
+      paddingBottom: deckPadBase - (deckPadBase - 14) * barShrink.value,
+    }),
+    [deckPadBase],
+  );
+
+  // Leaving the Jobs deck always closes reading mode, so People never opens
+  // under a hidden switcher.
+  useEffect(() => {
+    if (mode !== 'jobs') setExpanded(false);
+  }, [mode]);
 
   // The pass and draft circles used to grow with the drag, so the gesture and
   // the button felt like one motion. Both circles are gone, so no drag value is
@@ -370,7 +445,13 @@ export default function FeedScreen() {
         onBellPress={() => router.push('/notifications')}
       />
 
-      <FeedSwitcher mode={mode} onChange={setMode} />
+      {/* The switcher steps aside while a card is enlarged: reading mode gets
+          the full column, and the exit is on the card itself. */}
+      {!(mode === 'jobs' && expanded) ? (
+        <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)}>
+          <FeedSwitcher mode={mode} onChange={setMode} />
+        </Animated.View>
+      ) : null}
 
       {mode === 'people' ? (
         <PeopleFeedView />
@@ -387,52 +468,39 @@ export default function FeedScreen() {
         />
       ) : top ? (
         <View style={{ flex: 1, paddingHorizontal: 18 }}>
-          {/* One number, and it's true: what the wallet can still pay for. The
-              cost quoted is the cost of the swipe the user is about to make,
-              so it moves when the hiring-manager toggle does. */}
-          <Pressable onPress={() => router.push('/credits')}>
-            <Text
-              style={{
-                fontFamily: fonts.sansMedium,
-                fontSize: 13,
-                color: colors.inkSecondary,
-                textAlign: 'center',
-                paddingTop: 6,
-              }}>
-              {profile.credits} credits
-              <Text style={{ color: colors.inkTertiary }}>
-                {'  ·  '}{rightSwipeCost} per swipe
-                {!swipeSettings.emailHiringManager
-                  ? ' (apply)'
-                  : draftOrSend === 'send'
-                    ? ' (apply + send)'
-                    : ' (apply + draft)'}
-              </Text>
-            </Text>
-          </Pressable>
-
+          {/* The credits line that sat here is gone (Rylan 2026-08-18: it
+              squished the deck, and the People tab already proved the clean
+              version). The balance lives in the header pill; the per-swipe
+              price now rides the card's own bottom corner. */}
           {/* A right swipe submits a real application to a real employer. The
               student should be able to see exactly what goes out BEFORE they
               send one, from the screen they send it from — not by hunting
-              through Profile hoping to find it. */}
-          <Pressable
-            onPress={() => router.push('/what-we-send')}
-            accessibilityRole="button"
-            style={{ alignSelf: 'center', paddingTop: 4, paddingBottom: 2 }}>
-            <Text
-              style={{
-                fontFamily: fonts.sansMedium,
-                fontSize: 12.5,
-                color: colors.accent,
-                textAlign: 'center',
-              }}>
-              What gets submitted?
-            </Text>
-          </Pressable>
+              through Profile hoping to find it. Hidden while a card is
+              enlarged, same as the switcher: reading mode owns the column. */}
+          {!expanded ? (
+            <Animated.View
+              entering={FadeInDown.duration(220)}
+              exiting={FadeOutUp.duration(160)}>
+              <Pressable
+                onPress={() => router.push('/what-we-send')}
+                accessibilityRole="button"
+                style={{ alignSelf: 'center', paddingTop: 4, paddingBottom: 2 }}>
+                <Text
+                  style={{
+                    fontFamily: fonts.sansMedium,
+                    fontSize: 12.5,
+                    color: colors.accent,
+                    textAlign: 'center',
+                  }}>
+                  What gets submitted?
+                </Text>
+              </Pressable>
+            </Animated.View>
+          ) : null}
 
           {/* Auto-apply is on but the application profile isn't set up, so a
               right swipe can't actually apply yet — point them to finish it. */}
-          {needsApplyProfile ? (
+          {needsApplyProfile && !expanded ? (
             <Pressable
               onPress={() => router.push('/application-profile')}
               style={{
@@ -475,12 +543,15 @@ export default function FeedScreen() {
               gap. The bar grows a second row when the hiring-manager switch is
               on (34 tall + 8 gap), so the clearance grows with it rather than
               letting the card get run over. */}
-          <View
-            style={{
-              flex: 1,
-              marginTop: 8,
-              paddingBottom: swipeSettings.emailHiringManager ? 152 : 110,
-            }}>
+          <Animated.View
+            layout={LinearTransition.duration(280)}
+            style={[
+              { flex: 1, marginTop: 8 },
+              // Grew 2026-08-18 with the bar's new action row (54pt + 8 gap);
+              // collapses to a sliver while a card is enlarged so the card
+              // grows down to the tab bar's lip.
+              deckPadStyle,
+            ]}>
             <SwipeDeck
               ref={deckRef}
               jobs={jobs}
@@ -490,16 +561,18 @@ export default function FeedScreen() {
               blockRight={needsApplyProfile && !!top?.autoApplyEligible}
               onBlockedRight={onApplyProfileBlocked}
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
+              shouldCelebrate={(direction) => direction !== 'right' || canRightSwipe}
+              costLabel={`${rightSwipeCost} credits`}
             />
 
-          </View>
+          </Animated.View>
 
           {/* The bar used to disappear at zero credits, back when everything in
               it cost money. Both survivors are free (one changes what the next
               swipe means, one opens settings), and hiding the way to turn OFF
               the thing pushing you over budget is exactly backwards. It stays. */}
           <Animated.View
-            pointerEvents="box-none"
+            pointerEvents={expanded ? 'none' : 'box-none'}
             style={[
               {
                 position: 'absolute',
@@ -526,39 +599,6 @@ export default function FeedScreen() {
                   That is what keeps this HIG-legal (rule 5.7: every custom
                   gesture needs a tap or menu equivalent), since VoiceOver and
                   Switch Control cannot perform a drag. */}
-              {/* Undo, labelled and in the same spot as the People deck's.
-                  It used to be a 34pt unlabelled circle in the card's top
-                  corner, which is a poor answer to the moment it exists for:
-                  a student passes a job by thumb-twitch, realises instantly,
-                  and needs the way back to be the obvious thing on screen
-                  rather than a glyph they have to go find. Passes only —
-                  applying spends credits and cannot be taken back. */}
-              {canUndo && !expanded ? (
-                <Pressable
-                  onPress={undoLastPass}
-                  accessibilityRole="button"
-                  accessibilityLabel="Bring back the last job you passed"
-                  style={{
-                    alignSelf: 'flex-start',
-                    marginLeft: 18,
-                    marginBottom: 10,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingHorizontal: 12,
-                    height: 34,
-                    borderRadius: 17,
-                    backgroundColor: colors.paper,
-                    borderWidth: 1,
-                    borderColor: colors.hairline,
-                  }}>
-                  <Ionicons name="arrow-undo" size={15} color={colors.inkSecondary} />
-                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.inkSecondary }}>
-                    Undo
-                  </Text>
-                </Pressable>
-              ) : null}
-
               {/* Bar width is tied to the DECK, not to its own contents. It
                   used to shrink-wrap its buttons, which left a short bar
                   floating under a full-width card. Now that it sits BELOW the
@@ -590,22 +630,55 @@ export default function FeedScreen() {
                     behaves, which the bar itself now answers. What it opens now
                     is the one question the bar cannot: which roles this deck is
                     made of. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <HiringManagerToggle
-                      on={swipeSettings.emailHiringManager}
-                      onPress={toggleHiringManager}
-                    />
-                  </View>
+                {/* The action row (back by Rylan's call, 2026-08-18). The
+                    swipe still exists and still feels best; these are the
+                    visible verbs for everyone who has not learned it yet, and
+                    the filled blue circle is the screen's one leading action.
+                    Undo lives here now too, anchored instead of floating.
+                    All four route through the same handlers as the gesture,
+                    so the wallet guard and the a11y story hold. */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 16,
+                  }}>
+                  <ActionCircle
+                    icon="arrow-undo"
+                    size={44}
+                    disabled={!canUndo}
+                    onPress={undoLastPass}
+                    accessibilityLabel="Bring back the last job you passed"
+                  />
+                  <ActionCircle
+                    icon="close"
+                    size={54}
+                    tone="negative"
+                    onPress={() => deckRef.current?.swipe('left')}
+                    accessibilityLabel="Pass on this job"
+                  />
+                  <ApplyCircle
+                    icon={top?.autoApplyEligible ? 'checkmark' : 'bookmark'}
+                    onPress={() => deckRef.current?.swipe('right')}
+                    accessibilityLabel={
+                      top?.autoApplyEligible ? 'Apply to this job' : 'Save this job'
+                    }
+                  />
                   <ActionCircle
                     icon="options-outline"
-                    size={46}
+                    size={44}
                     onPress={() => router.push('/feed-filter?deck=jobs')}
                     accessibilityLabel={
                       jobFilter ? `Job feed filter: ${jobFilter}` : 'Filter the job feed'
                     }
                   />
                 </View>
+
+                <HiringManagerToggle
+                  on={swipeSettings.emailHiringManager}
+                  onPress={toggleHiringManager}
+                />
 
                 {/* The active filter, named. A deck that quietly stopped being
                     the general feed is the one thing here a user could not
@@ -686,7 +759,7 @@ export default function FeedScreen() {
           from what the swipe actually charges. */}
       <ConfirmDialog
         visible={hmConfirm === 'enable'}
-        body={`When you swipe right, it doesn't just apply to the job for you. It also finds the exact hiring manager for that position and their contact info, then drafts an email to them introducing yourself and expressing interest in the role, an action known to 10x your chances of landing an interview. Costs an extra ${costPerSwipe} credits per swipe.`}
+        body={`Every apply also finds that job's hiring manager and drafts them an intro email from you. Applicants who email the hiring manager land 10x more interviews. Adds ${costPerSwipe} credits per swipe.`}
         confirmLabel="Turn on"
         onConfirm={enableHiringManagerEmail}
         onClose={() => setHmConfirm(null)}

@@ -1851,33 +1851,9 @@ function ScoutTabInner() {
           <Ionicons name="information-circle-outline" size={22} color={room.ink2} />
         </Pressable>
 
-        {/* Scout's face, same circular button as every other screen's header.
-            Here it is the way into voice: on other tabs it summons the chat,
-            and you are already in the chat. */}
-        <Pressable
-          onPress={openVoice}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Talk to Scout"
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
-            borderWidth: 1,
-            borderColor: room.lineSoft,
-            backgroundColor: room.card,
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            marginHorizontal: 5,
-          }}>
-          <Image
-            source={require('../../../assets/images/scout-yeti-head.png')}
-            style={{ width: 25, height: 25, marginTop: 3 }}
-            resizeMode="contain"
-          />
-        </Pressable>
-
+        {/* The yeti header button is gone on THIS tab (Rylan 2026-08-18): you
+            are already looking at Scout, so a second Scout face in the corner
+            is furniture. Voice still has two doors, the orb and the mic. */}
         {hasThread ? (
           <Pressable
             onPress={newChat}
@@ -2593,6 +2569,9 @@ function ScoutTabInner() {
               setTyped(t);
             }}
             placeholder={awaitingAnswer ? 'Answer Scout' : 'Ask Scout'}
+            // The examples type themselves into the box, but never over a
+            // question Scout is waiting on, and never mid-conversation.
+            typingHints={awaitingAnswer || hasThread ? undefined : suggestionPool}
             listening={phase === 'listening'}
             busy={phase === 'thinking'}
             onSubmit={() => {

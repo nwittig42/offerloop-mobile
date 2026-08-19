@@ -100,6 +100,11 @@ export const PersonDeck = memo(
           onBlockedRight={onBlockedRight}
           rightStamp={action === 'send' ? SEND_STAMP : DRAFT_STAMP}
           leftStamp={PASS_STAMP}
+          rightWin={
+            action === 'send'
+              ? { title: 'Sending it', caption: 'Track it in your Inbox' }
+              : { title: 'Drafting your email', caption: 'Lands in your Inbox' }
+          }
           allowUp={false}
           a11yLabel={(person) =>
             [person.name, person.title, person.company].filter(Boolean).join(', ')

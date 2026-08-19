@@ -22,9 +22,11 @@ import { fonts } from '@/theme/tokens';
 
 export type FeedMode = 'jobs' | 'people';
 
+// People leads (Rylan 2026-08-18): it is the default deck now, and the
+// leftmost segment should be the one the screen opens on.
 const SEGMENTS: { mode: FeedMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { mode: 'jobs', label: 'Jobs', icon: 'briefcase-outline' },
   { mode: 'people', label: 'People', icon: 'people-outline' },
+  { mode: 'jobs', label: 'Jobs', icon: 'briefcase-outline' },
 ];
 
 /** Fixed track geometry, so the pill can land exactly on a segment. */

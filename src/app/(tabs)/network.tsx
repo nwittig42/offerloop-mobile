@@ -67,10 +67,13 @@ const IN_FLIGHT = (j: AppliedJob) => !AUTO_APPLY_TERMINAL.includes(j.status);
 const NEEDS_YOU = (j: AppliedJob) =>
   j.status === 'needs_attention' || j.status === 'needs_verification';
 
+// Newest leads and is the default (Rylan 2026-08-18): "I just did that" is a
+// small win every visit, and an A-Z list reads identical day after day until
+// the network is big enough to need looking things up.
 const SORTS = [
+  { key: 'newest', label: 'Newest' },
   { key: 'az', label: 'A-Z' },
   { key: 'company', label: 'Company' },
-  { key: 'newest', label: 'Newest' },
   { key: 'oldest', label: 'Oldest' },
 ] as const;
 type SortMode = (typeof SORTS)[number]['key'];
@@ -201,7 +204,7 @@ export default function NetworkScreen() {
   // being taught anything. The other three answer different questions, so they
   // are one tap away rather than the only view. "Company" is not a sort at all
   // — it swaps the list for the company grid.
-  const [sortMode, setSortMode] = useState<SortMode>('az');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const contactsQuery = useQuery({ queryKey: ['contacts'], queryFn: () => fetchContacts() });
   const contacts = useMemo(() => contactsQuery.data ?? [], [contactsQuery.data]);
@@ -374,15 +377,27 @@ export default function NetworkScreen() {
                 }}>
                 YOUR PROGRESS
               </Text>
+              {/* Gold, deliberately (Rylan 2026-08-18): the one warm note on a
+                  cool gradient, so the trophy reads as a prize and not chrome. */}
               <Pressable
                 onPress={() => router.push('/milestones')}
                 accessibilityRole="button"
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Ionicons name="trophy" size={12} color={ON_GRADIENT} />
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: ON_GRADIENT }}>
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                  backgroundColor: 'rgba(251,191,36,0.18)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(251,191,36,0.45)',
+                  borderRadius: 999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                }}>
+                <Ionicons name="trophy" size={13} color="#FBBF24" />
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12, color: '#FDE68A' }}>
                   Milestones
                 </Text>
-                <Ionicons name="chevron-forward" size={14} color={ON_GRADIENT} />
+                <Ionicons name="chevron-forward" size={13} color="#FDE68A" />
               </Pressable>
             </View>
 
@@ -397,6 +412,9 @@ export default function NetworkScreen() {
             {/* The one live piece of the dashboard: work that is owed. Sits
                 inside the card so it inherits the weight, and goes straight to
                 the pinned group rather than the tab in general. */}
+            {/* The page's real call to action, so it dresses like one: solid
+                white on the gradient with a red count, not a translucent row
+                that washes into the card (Rylan 2026-08-18). */}
             {needsYou > 0 ? (
               <Pressable
                 onPress={() => switchTab('Applications')}
@@ -404,18 +422,36 @@ export default function NetworkScreen() {
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 8,
-                  backgroundColor: 'rgba(255,255,255,0.16)',
+                  gap: 10,
+                  backgroundColor: '#FFFFFF',
                   borderRadius: 12,
                   paddingHorizontal: 12,
-                  paddingVertical: 10,
+                  paddingVertical: 11,
+                  shadowColor: '#000000',
+                  shadowOpacity: 0.18,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 4,
                 }}>
-                <Ionicons name="alert-circle" size={17} color={ON_GRADIENT} />
-                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: ON_GRADIENT }}>
-                  {needsYou} application{needsYou === 1 ? '' : 's'} need
-                  {needsYou === 1 ? 's' : ''} your answers
+                <View
+                  style={{
+                    minWidth: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    paddingHorizontal: 6,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#DC2626',
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansBold, fontSize: 13, color: '#FFFFFF' }}>
+                    {needsYou}
+                  </Text>
+                </View>
+                <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 13.5, color: '#1B2A44' }}>
+                  application{needsYou === 1 ? '' : 's'} need{needsYou === 1 ? 's' : ''} your
+                  answers
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={ON_GRADIENT} />
+                <Ionicons name="chevron-forward" size={16} color="#1B2A44" />
               </Pressable>
             ) : null}
           </LinearGradient>

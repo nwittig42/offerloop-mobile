@@ -21,11 +21,15 @@ type Capability = {
   body: string;
   example: string;
   cost: string;
+  /** Each capability wears its own hue (Rylan 2026-08-18: the sheet needed
+   *  color); the row scans by icon color before anyone reads a word. */
+  color: string;
 };
 
 const CAPABILITIES: Capability[] = [
   {
     icon: 'people-outline',
+    color: '#3B82F6',
     title: 'Find people',
     body: 'Who works at a company, and what they actually do there.',
     example: 'show me analysts at Evercore',
@@ -33,6 +37,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     icon: 'mail-outline',
+    color: '#7C3AED',
     title: 'Draft outreach',
     body: 'Writes the email in your voice, with your resume attached.',
     example: 'draft 3 analysts at Goldman Sachs',
@@ -40,6 +45,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     icon: 'briefcase-outline',
+    color: '#16A34A',
     title: 'Apply to jobs',
     body: 'Fills out the application and submits it for real.',
     example: 'apply to my saved jobs',
@@ -47,6 +53,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     icon: 'cafe-outline',
+    color: '#CA8A04',
     title: 'Meeting prep',
     body: 'A brief and talking points before a coffee chat.',
     example: 'prep me for my next coffee chat',
@@ -54,6 +61,7 @@ const CAPABILITIES: Capability[] = [
   },
   {
     icon: 'chatbubble-ellipses-outline',
+    color: '#0EA5E9',
     title: 'Ask anything',
     body: 'Firms, timelines, and what to actually say.',
     example: 'what should I say in a coffee chat',
@@ -124,8 +132,7 @@ export default function WhatScoutDoes({
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20, gap: 16 }}>
           <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: room.ink2 }}>
-            Say it or type it. Scout does the work inside the app, and nothing that costs credits
-            happens without you approving it first.
+            Say it or type it. Nothing that spends credits happens without your OK.
           </Text>
 
           {CAPABILITIES.map((c) => (
@@ -135,11 +142,11 @@ export default function WhatScoutDoes({
                   width: 34,
                   height: 34,
                   borderRadius: 17,
-                  backgroundColor: room.tint,
+                  backgroundColor: c.color + '1C',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                <Ionicons name={c.icon} size={17} color={room.accent} />
+                <Ionicons name={c.icon} size={17} color={c.color} />
               </View>
               <View style={{ flex: 1, gap: 5 }}>
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: room.ink }}>

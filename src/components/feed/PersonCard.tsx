@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 
 import CompanyLogo from '@/components/CompanyLogo';
@@ -56,64 +57,46 @@ function PersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
 }
 
 /**
- * How close a match this person is to you, 1.0 to 10.0.
+ * The fit read, as a word, never a number (Rylan 2026-08-18, matching the
+ * website audit that retired the visible match score there too). "5.2 MATCH"
+ * on a card sells against the person: a mid number reads as "we are not sure
+ * about this one", especially for a user with a thin profile whose scores are
+ * structurally low. Words carry the same glance-value without the grade-anxiety.
  *
- * Color is the fast read and the number is the precise one, so the badge does
- * both: a glance says strong/decent/weak, a second look says 9.2. Four bands
- * rather than a gradient, because a continuous ramp makes 7.9 and 8.1 look
- * meaningfully different when they are not.
- *
- * Renders only when the server sent a score (see Candidate.matchScore). It is
- * the one number on this card that a user would act on, so it is never
- * computed, defaulted, or filled in locally.
+ * Below the top two bands nothing renders at all: a lukewarm label is still a
+ * lukewarm label. Renders only when the server sent a score, same as before.
  */
-function MatchScore({ score }: { score: number }) {
+function MatchGrade({ score }: { score: number }) {
   const colors = useColors();
-  const tone =
-    score >= 8.5
-      ? colors.positive
-      : score >= 7
-        ? colors.accent
-        : score >= 5.5
-          ? colors.waiting
-          : colors.inkTertiary;
-
+  if (score < 7) return null;
+  const top = score >= 8.5;
+  const tone = top ? colors.positive : colors.marketing;
   return (
     <View
       accessible
-      accessibilityLabel={`Match score ${score.toFixed(1)} out of 10`}
+      accessibilityLabel={top ? 'Top match for you' : 'Strong fit for you'}
       style={{
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        // Tightened: every point this badge takes comes straight out of the
-        // person's name and title beside it.
-        paddingHorizontal: 8,
+        gap: 4,
+        paddingHorizontal: 9,
         paddingVertical: 5,
         borderRadius: 11,
         backgroundColor: tone + '16',
         borderWidth: 1,
         borderColor: tone + '3D',
       }}>
+      {/* Words only, no glyph (Rylan 2026-08-18: no generic symbols as
+          icons). The color band IS the fast read; a sparkle would just say
+          "an AI wrote this". */}
       <Text
         maxFontSizeMultiplier={1.1}
         style={{
-          fontFamily: fonts.display,
-          fontSize: 20,
-          lineHeight: 23,
-          color: tone,
-        }}>
-        {score.toFixed(1)}
-      </Text>
-      <Text
-        maxFontSizeMultiplier={1}
-        style={{
           fontFamily: fonts.sansBold,
-          fontSize: 8.5,
-          letterSpacing: 0.5,
+          fontSize: 11.5,
           color: tone,
-          opacity: 0.85,
         }}>
-        MATCH
+        {top ? 'Top match' : 'Strong fit'}
       </Text>
     </View>
   );
@@ -121,6 +104,7 @@ function MatchScore({ score }: { score: number }) {
 
 function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolean }) {
   const colors = useColors();
+  const router = useRouter();
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -172,12 +156,14 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
         </View>
         {/* Beside the name, not floating in a corner: it is a property of this
             person, so it reads as part of the introduction. */}
-        <View style={{ alignItems: 'center', gap: 6 }}>
-          {person.matchScore !== undefined ? <MatchScore score={person.matchScore} /> : null}
-          {/* Their LinkedIn, when the ranker sent one. Rendered as the mark
-              alone: everybody knows the glyph, and a labelled button would
-              out-shout the name it sits beside. Stops the card's tap-to-expand
-              from firing so opening a profile never also opens the sheet. */}
+        <View style={{ alignItems: 'center', gap: 7 }}>
+          {person.matchScore !== undefined ? <MatchGrade score={person.matchScore} /> : null}
+          {/* Their LinkedIn, when the ranker sent one. LinkedIn's own blue at
+              full size: the one place on the card a borrowed brand color is
+              correct, because it is a doorway to LinkedIn, and the fill makes
+              it the card's most tappable-looking object after the name. Stops
+              the card's tap from firing so opening a profile never also
+              triggers anything underneath. */}
           {person.linkedinUrl ? (
             <Pressable
               onPress={(e) => {
@@ -186,25 +172,37 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
               }}
               accessibilityRole="link"
               accessibilityLabel={`Open ${person.name}'s LinkedIn`}
-              hitSlop={10}
+              hitSlop={8}
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 9,
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: colors.accent + '12',
-                borderWidth: 1,
-                borderColor: colors.accent + '2E',
+                backgroundColor: '#0A66C2',
+                shadowColor: '#0A66C2',
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 3 },
               }}>
-              <Ionicons name="logo-linkedin" size={16} color={colors.accent} />
+              <Ionicons name="logo-linkedin" size={24} color="#FFFFFF" />
             </Pressable>
           ) : null}
         </View>
       </View>
 
       {person.company ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 18 }}>
+        /* The company row is a doorway (Rylan 2026-08-18): the company page
+           already exists, so the logo+name go there. stopPropagation keeps the
+           deck's own gestures out of it, same as the LinkedIn button. */
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            router.push(`/company/${encodeURIComponent(person.company!)}`);
+          }}
+          accessibilityRole="link"
+          accessibilityLabel={`Open the ${person.company} page`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 18 }}>
           <CompanyLogo name={person.company} size={44} radius={12} />
           <View style={{ flex: 1 }}>
             <Text
@@ -228,7 +226,8 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
               </View>
             ) : null}
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
+        </Pressable>
       ) : null}
 
       <View style={{ gap: 15, marginTop: 20 }}>

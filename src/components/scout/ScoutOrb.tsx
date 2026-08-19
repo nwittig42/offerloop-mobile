@@ -13,7 +13,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 /**
  * The Scout circle. Plasma, not a ball (Rylan 2026-08-17, picked from three
@@ -285,6 +285,23 @@ export default function ScoutOrb({
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Grounding shadow: a soft dark-blue ellipse under the light, so the
+          orb sits IN the room instead of floating flat on it. First child so
+          everything else draws over it. */}
+      <Svg
+        pointerEvents="none"
+        width={size * 0.8}
+        height={size * 0.22}
+        style={{ position: 'absolute', top: size * 0.92 }}>
+        <Defs>
+          <RadialGradient id="scout-ground" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor="#1E3A8A" stopOpacity="0.22" />
+            <Stop offset="70%" stopColor="#1E3A8A" stopOpacity="0.08" />
+            <Stop offset="100%" stopColor="#1E3A8A" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#scout-ground)" />
+      </Svg>
       {/* The body: a hot core through violet into a cyan corona, fading to
           nothing well inside its own box so there is never an edge. */}
       <Animated.View
@@ -334,6 +351,23 @@ export default function ScoutOrb({
       <VoiceRing size={size * 1.05} delay={0} active={listening} level={level} />
       <VoiceRing size={size * 1.05} delay={1000} active={listening} level={level} />
 
+      {/* Specular sheen, upper-left: the one cue that says sphere instead of
+          disc. Off-centre on purpose; light in this app comes from the top. */}
+      <Svg
+        pointerEvents="none"
+        width={size}
+        height={size}
+        style={{ position: 'absolute' }}>
+        <Defs>
+          <RadialGradient id="scout-sheen" cx="36%" cy="26%" r="30%">
+            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.5" />
+            <Stop offset="55%" stopColor="#FFFFFF" stopOpacity="0.14" />
+            <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx="50%" cy="50%" r="50%" fill="url(#scout-sheen)" />
+      </Svg>
+
       {/* Last child, so it sits over the light and the whole circle stays
           tappable even when the face has faded out. */}
       <Pressable
@@ -347,6 +381,23 @@ export default function ScoutOrb({
             style={{ width: size * 0.46, height: size * 0.46, marginTop: size * 0.05 }}
             resizeMode="contain"
           />
+          {/* The asset ends in a hard crop across the torso, which read as
+              "the Scout is cut off" (Rylan 2026-08-18). A short blue ramp over
+              the last fifth melts that edge into the glow behind it. */}
+          <Svg
+            pointerEvents="none"
+            width={size * 0.46}
+            height={size * 0.14}
+            style={{ position: 'absolute', bottom: -1, left: 0 }}>
+            <Defs>
+              <RadialGradient id="scout-hemline" cx="50%" cy="100%" r="90%">
+                <Stop offset="0%" stopColor="#2E6BE8" stopOpacity="0.75" />
+                <Stop offset="60%" stopColor="#2E6BE8" stopOpacity="0.35" />
+                <Stop offset="100%" stopColor="#2E6BE8" stopOpacity="0" />
+              </RadialGradient>
+            </Defs>
+            <Ellipse cx="50%" cy="100%" rx="60%" ry="100%" fill="url(#scout-hemline)" />
+          </Svg>
         </Animated.View>
       </Pressable>
     </View>

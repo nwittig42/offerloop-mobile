@@ -5,7 +5,15 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  Easing as ReEasing,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PurchasesStoreProduct } from 'react-native-purchases';
 
@@ -72,6 +80,40 @@ const PACK_STYLES: {
     badge: 'BEST VALUE',
   },
 ];
+
+/**
+ * The moving gloss on a price button (Rylan 2026-08-18: "a cool moving
+ * gradient on the actual price part"). A soft white band sweeps across every
+ * few seconds, game-shop style: enough motion to say "this is the buy spot",
+ * long enough a hold between sweeps that it never reads as strobing.
+ */
+function GlossSweep({ delay = 0 }: { delay?: number }) {
+  const x = useSharedValue(-70);
+  useEffect(() => {
+    x.value = withRepeat(
+      withSequence(
+        withTiming(-70, { duration: delay }),
+        withTiming(160, { duration: 1050, easing: ReEasing.inOut(ReEasing.quad) }),
+        withTiming(160, { duration: 2200 }),
+        withTiming(-70, { duration: 0 }),
+      ),
+      -1,
+    );
+  }, [delay, x]);
+  const sweep = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { rotate: '16deg' }] }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', top: -24, bottom: -24, left: 0, width: 42 }, sweep]}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)'] as const}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ flex: 1 }}
+      />
+    </Animated.View>
+  );
+}
 
 /** Plan chip gradients matched to PlanBorder's tier colors. */
 const PLAN_CHIP: Record<string, readonly [string, string] | null> = {
@@ -334,8 +376,10 @@ export default function CreditsScreen() {
                           end={style.end}
                           style={{
                             borderRadius: 19,
-                            paddingVertical: 22,
-                            paddingHorizontal: 18,
+                            // Bigger boxes (Rylan 2026-08-18): the shop is the
+                            // page's whole job, so the tiles fill it.
+                            paddingVertical: 30,
+                            paddingHorizontal: 20,
                             flexDirection: 'row',
                             alignItems: 'center',
                             gap: 14,
@@ -423,17 +467,20 @@ export default function CreditsScreen() {
                                 </Text>
                               </View>
                             )}
-                            {/* Chunky gold price button, Clash-style. */}
+                            {/* Chunky gold price button, Clash-style, with a
+                                looping gloss sweep. Staggered per tile so the
+                                three don't flash in unison. */}
                             <LinearGradient
                               colors={['#FDE047', '#F59E0B'] as const}
                               start={{ x: 0, y: 0 }}
                               end={{ x: 0, y: 1 }}
                               style={{
                                 borderRadius: 12,
-                                paddingHorizontal: 16,
-                                paddingVertical: 9,
-                                minWidth: 76,
+                                paddingHorizontal: 18,
+                                paddingVertical: 11,
+                                minWidth: 84,
                                 alignItems: 'center',
+                                overflow: 'hidden',
                               }}>
                               {busyThis || !p ? (
                                 <ActivityIndicator size="small" color="#7C3AED" />
@@ -441,12 +488,13 @@ export default function CreditsScreen() {
                                 <Text
                                   style={{
                                     fontFamily: fonts.sansSemibold,
-                                    fontSize: 16,
+                                    fontSize: 17,
                                     color: '#111318',
                                   }}>
                                   {p.priceString}
                                 </Text>
                               )}
+                              <GlossSweep delay={600 + i * 1100} />
                             </LinearGradient>
                           </View>
                         </LinearGradient>

@@ -15,12 +15,18 @@ export function CircleProgress({
   progress,
   color,
   label,
+  trackColor,
+  labelColor,
 }: {
   size?: number;
   strokeWidth?: number;
   progress: number;
   color: string;
   label?: string;
+  /** Track + label default to the theme (hairline / ink); pass explicit
+   *  colors when the ring sits on a gradient instead of paper. */
+  trackColor?: string;
+  labelColor?: string;
 }) {
   const colors = useColors();
   const clamped = Math.max(0, Math.min(1, progress));
@@ -38,7 +44,7 @@ export function CircleProgress({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={colors.hairline}
+          stroke={trackColor ?? colors.hairline}
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -55,7 +61,7 @@ export function CircleProgress({
         />
       </Svg>
       {label != null ? (
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: size * 0.27, color: colors.ink }}>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: size * 0.27, color: labelColor ?? colors.ink }}>
           {label}
         </Text>
       ) : null}

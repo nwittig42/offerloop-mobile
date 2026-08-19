@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { forwardRef, useState } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
 
 import type { ScoutRoom } from '@/theme/scoutRoom';
@@ -30,13 +30,58 @@ type Props = {
   busy: boolean;
   onPlus: () => void;
   placeholder?: string;
+  /** Example asks that TYPE THEMSELVES into the empty box, one character at a
+   *  time, cycling (Rylan 2026-08-18: the examples should feel like someone
+   *  typing, "because now it's a chat"). Overrides `placeholder` while the
+   *  box is empty; real typing always wins because a placeholder only shows
+   *  on an empty input. */
+  typingHints?: string[];
 };
 
 const ChatComposer = forwardRef<TextInput, Props>(function ChatComposer(
-  { room, value, onChangeText, onSubmit, onMic, onStop, listening, busy, onPlus, placeholder },
+  { room, value, onChangeText, onSubmit, onMic, onStop, listening, busy, onPlus, placeholder, typingHints },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+
+  // The typewriter: type a hint, hold it readable, erase fast, next hint.
+  const [hint, setHint] = useState('');
+  useEffect(() => {
+    if (!typingHints?.length) return;
+    let hi = 0;
+    let ci = 0;
+    let phase: 'type' | 'erase' = 'type';
+    let t: ReturnType<typeof setTimeout>;
+    const step = () => {
+      const full = typingHints[hi % typingHints.length];
+      if (phase === 'type') {
+        ci += 1;
+        setHint(full.slice(0, ci));
+        if (ci >= full.length) {
+          phase = 'erase';
+          t = setTimeout(step, 2100);
+        } else {
+          t = setTimeout(step, 42);
+        }
+      } else {
+        ci -= 3;
+        if (ci <= 0) {
+          ci = 0;
+          setHint('');
+          phase = 'type';
+          hi += 1;
+          t = setTimeout(step, 500);
+        } else {
+          setHint(full.slice(0, ci));
+          t = setTimeout(step, 22);
+        }
+      }
+    };
+    t = setTimeout(step, 700);
+    return () => clearTimeout(t);
+  }, [typingHints]);
+
+  const idlePlaceholder = typingHints?.length ? hint || 'Ask Scout' : placeholder || 'Ask Scout';
   const stopping = listening || busy;
   const sending = !stopping && value.trim().length > 0;
 
@@ -76,7 +121,7 @@ const ChatComposer = forwardRef<TextInput, Props>(function ChatComposer(
         ref={ref}
         value={value}
         onChangeText={onChangeText}
-        placeholder={listening ? 'Listening…' : placeholder || 'Ask Scout'}
+        placeholder={listening ? 'Listening…' : idlePlaceholder}
         placeholderTextColor={room.ink3}
         returnKeyType="send"
         onSubmitEditing={onSubmit}

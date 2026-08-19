@@ -38,10 +38,9 @@ import type { OutreachItem } from '@/types';
 
 // Named by what state a conversation is IN (the way a user would say it),
 // not by whose turn it is: "Waiting" never made clear whether it was waiting
-// on you or on them. "Your turn" leads because it is the reason to open the
-// tab at all, and All is last because it is the browse case, not the default
-// question.
-const FILTERS = ['Your turn', 'Drafts', 'Sent', 'Replied', 'All'] as const;
+// on you or on them. All leads (Rylan 2026-08-18): it is the default chip, and
+// the selected state belongs at the reading edge instead of docked far right.
+const FILTERS = ['All', 'Your turn', 'Drafts', 'Sent', 'Replied'] as const;
 type Filter = (typeof FILTERS)[number];
 
 // Filter-specific empty copy, so a filter with no matches doesn't read as
@@ -509,6 +508,13 @@ export default function InboxScreen() {
   // Needs you to the top, so it answers the same question without the risk.
   const [filter, setFilter] = useState<Filter>('All');
   const [query, setQuery] = useState('');
+  // Rotating placeholder: teach what search can actually reach (names,
+  // companies, roles, words inside the emails) instead of one static hint.
+  const [hintIdx, setHintIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setHintIdx((i) => i + 1), 3500);
+    return () => clearInterval(t);
+  }, []);
   // Which groups the user has shut, and which have been opened past the cap.
   // Session state on purpose: reopening the tab gives you the full picture
   // again rather than whatever you happened to collapse an hour ago.
@@ -626,9 +632,13 @@ export default function InboxScreen() {
           value={query}
           onChangeText={setQuery}
           placeholder={
-            outreach.length > 12
-              ? `Search all ${outreach.length} conversations`
-              : 'Search name, company, title'
+            [
+              outreach.length > 12
+                ? `Search all ${outreach.length} conversations`
+                : 'Search a name or company',
+              'Search a role, like recruiter',
+              'Search any words inside an email',
+            ][hintIdx % 3]
           }
         />
       </View>
