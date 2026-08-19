@@ -5,7 +5,11 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getApplicationProfile, type ApplicationProfile } from '@/api/endpoints/autoApply';
+import {
+  getApplicationProfile,
+  listSavedAnswers,
+  type ApplicationProfile,
+} from '@/api/endpoints/autoApply';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -56,6 +60,12 @@ export default function WhatWeSendScreen() {
   const locations = profile.preferredLocations ?? [];
 
   const openAnswers = () => router.push('/application-profile');
+
+  // The custom-question answers auto-apply has LEARNED (Rylan 2026-08-18:
+  // "there's not a lot of transparency in how we're training it"). Rendered
+  // only when at least one exists.
+  const answersQuery = useQuery({ queryKey: ['savedAnswers'], queryFn: listSavedAnswers });
+  const savedAnswers = answersQuery.data ?? [];
 
   const resumeRoutes: { label: string; href: string }[] = [
     { label: 'Build one from LinkedIn', href: '/resume-preview' },
@@ -248,6 +258,80 @@ export default function WhatWeSendScreen() {
             <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />
           </Card>
         </Pressable>
+
+        {/* What auto-apply has LEARNED: the custom questions you answered
+            once and it now answers for you. Read-only receipt; sensitive
+            fields never enter this library by design. Hidden until the
+            first learned answer exists. */}
+        {savedAnswers.length > 0 ? (
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: colors.positive + '12',
+                borderBottomWidth: 1,
+                borderBottomColor: colors.positive + '2E',
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+              }}>
+              <Text
+                style={{
+                  flex: 1,
+                  fontFamily: fonts.sansSemibold,
+                  fontSize: 11,
+                  letterSpacing: 0.9,
+                  color: colors.positive,
+                }}>
+                ANSWERS IT LEARNED FROM YOU
+              </Text>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 11, color: colors.positive }}>
+                {savedAnswers.length}
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                color: colors.inkTertiary,
+                lineHeight: 17,
+                paddingHorizontal: 16,
+                paddingTop: 10,
+              }}>
+              When an application asks something new, you answer once and we reuse it
+              next time. Exactly as written here.
+            </Text>
+            {savedAnswers.map((a, i) => (
+              <View
+                key={a.question_id}
+                style={{
+                  gap: 3,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
+                  borderTopColor: colors.hairlineLight,
+                }}>
+                <Text
+                  style={{
+                    fontFamily: fonts.sans,
+                    fontSize: 12.5,
+                    color: colors.inkTertiary,
+                    lineHeight: 18,
+                  }}>
+                  {a.question_text_original}
+                </Text>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
+                  {typeof a.answer === 'boolean' ? (a.answer ? 'Yes' : 'No') : String(a.answer)}
+                </Text>
+                {a.usage_count && a.usage_count > 1 ? (
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: colors.positive }}>
+                    Reused on {a.usage_count} applications
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </Card>
+        ) : null}
 
         <Text
           style={{

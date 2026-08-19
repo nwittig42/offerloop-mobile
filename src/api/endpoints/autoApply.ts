@@ -374,3 +374,24 @@ export function needsUserCount(jobs: AppliedJob[] | undefined): number {
     (j) => j.status === 'needs_attention' || j.status === 'needs_verification',
   ).length;
 }
+
+export type SavedAnswer = {
+  question_id: string;
+  question_text_original: string;
+  answer: string | number | boolean;
+  usage_count?: number;
+};
+
+/** The custom-question answers auto-apply has learned and reuses. Empty on
+ *  error: the transparency section simply doesn't render rather than
+ *  breaking the page it rides on. */
+export async function listSavedAnswers(): Promise<SavedAnswer[]> {
+  try {
+    const res = await apiFetch<{ answers?: SavedAnswer[] }>('/api/users/application-answers', {
+      timeoutMs: 8000,
+    });
+    return Array.isArray(res?.answers) ? res.answers : [];
+  } catch {
+    return [];
+  }
+}

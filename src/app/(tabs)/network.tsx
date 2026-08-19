@@ -207,7 +207,22 @@ export default function NetworkScreen() {
   const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const contactsQuery = useQuery({ queryKey: ['contacts'], queryFn: () => fetchContacts() });
-  const contacts = useMemo(() => contactsQuery.data ?? [], [contactsQuery.data]);
+  const contacts = useMemo(() => {
+    // Dedupe at the source (Rylan 2026-08-18: the same person showed 2-3x;
+    // several server write paths can each mint a doc for one human). Keyed
+    // by linkedin, else name+company; keeps the row with the latest
+    // activity. The server-side guard shipped the same day, this covers the
+    // docs that already exist.
+    const raw = contactsQuery.data ?? [];
+    const byKey = new Map<string, (typeof raw)[number]>();
+    for (const c of raw) {
+      const key =
+        c.linkedinUrl?.trim().toLowerCase() || `${c.name}::${c.company}`.toLowerCase();
+      const prev = byKey.get(key);
+      if (!prev || (c.lastActivity || '') > (prev.lastActivity || '')) byKey.set(key, c);
+    }
+    return [...byKey.values()];
+  }, [contactsQuery.data]);
 
   const appliedQuery = useQuery({
     queryKey: ['applied-jobs'],
@@ -237,19 +252,7 @@ export default function NetworkScreen() {
   }, [contacts, q]);
 
   const sortedContacts = useMemo(() => {
-    // Render-side dedupe (Rylan 2026-08-18: the same person showed 2-3x).
-    // Multiple write paths on the server can each create a contact doc for
-    // one human (deck outreach, prompt-search saves, find-another); until
-    // the server-side guard lands, collapse them here by identity, keeping
-    // the row with the most recent activity.
-    const byKey = new Map<string, (typeof filteredContacts)[number]>();
-    for (const c of filteredContacts) {
-      const key = (c.linkedinUrl?.trim().toLowerCase() ||
-        `${c.name}::${c.company}`.toLowerCase());
-      const prev = byKey.get(key);
-      if (!prev || (c.lastActivity || '') > (prev.lastActivity || '')) byKey.set(key, c);
-    }
-    const out = [...byKey.values()];
+    const out = [...filteredContacts];
     if (sortMode === 'newest') {
       out.sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
     } else if (sortMode === 'oldest') {
