@@ -637,13 +637,87 @@ export default function PaywallSheet({
                       : 'Purchased credits never expire and sit on top of your monthly allowance.'}
                   </Text>
 
-                  {/* Plan switching, Apple-managed subscriptions only (both
-                      plans share one subscription group, so Apple handles
-                      proration on upgrade and next-renewal timing on
-                      downgrade). Web subscribers never see these. */}
-                  {appleManaged && profile.plan === 'Pro' && elite && (
+                  {/* ALL PLANS — visible to every subscriber (Rylan
+                      2026-08-19: "shouldn't I see the options at all
+                      times?"). The tiles always INFORM; they only SELL when
+                      the subscription is Apple-managed (both plans share one
+                      subscription group, Apple prorates upgrades and times
+                      downgrades to renewal). A web- or grant-managed
+                      subscriber sees the ladder and is told where switching
+                      actually happens. */}
+                  <Text
+                    style={{
+                      fontFamily: fonts.sansSemibold,
+                      fontSize: 11,
+                      letterSpacing: 0.9,
+                      color: colors.inkTertiary,
+                      marginTop: 6,
+                    }}>
+                    ALL PLANS
+                  </Text>
+                  <Rim
+                    rim={profile.plan === 'Elite' ? ELITE_STYLE.rim : PRO_STYLE.rim}
+                    marginTop={2}>
+                    <LinearGradient
+                      colors={
+                        profile.plan === 'Elite' ? ELITE_STYLE.gradient : PRO_STYLE.gradient
+                      }
+                      start={profile.plan === 'Elite' ? ELITE_STYLE.start : PRO_STYLE.start}
+                      end={profile.plan === 'Elite' ? ELITE_STYLE.end : PRO_STYLE.end}
+                      style={{
+                        borderRadius: 19,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        overflow: 'hidden',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontFamily: fonts.sansSemibold,
+                            fontSize: 12,
+                            letterSpacing: 1.1,
+                            color: 'rgba(255,255,255,0.9)',
+                          }}>
+                          OFFERLOOP {profile.plan.toUpperCase()}
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: fonts.sans,
+                            fontSize: 12.5,
+                            color: 'rgba(255,255,255,0.85)',
+                            marginTop: 3,
+                          }}>
+                          {profile.plan === 'Elite' ? '5,000' : '2,000'} credits a month.
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 999,
+                          backgroundColor: 'rgba(255,255,255,0.24)',
+                        }}>
+                        <Text style={{ fontFamily: fonts.sansBold, fontSize: 11, color: '#FFFFFF' }}>
+                          YOUR PLAN
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Rim>
+                  {profile.plan === 'Pro' && elite && (
                     <Rim rim={ELITE_STYLE.rim} marginTop={2}>
-                      <Pressable onPress={() => void buyElite()} disabled={busy}>
+                      <Pressable
+                        onPress={
+                          appleManaged
+                            ? () => void buyElite()
+                            : () =>
+                                showToast(
+                                  'Your plan is managed where you subscribed. Switch it there.',
+                                )
+                        }
+                        disabled={busy}>
                         <LinearGradient
                           colors={ELITE_STYLE.gradient}
                           start={ELITE_STYLE.start}
@@ -689,8 +763,9 @@ export default function PaywallSheet({
                                 color: 'rgba(255,255,255,0.85)',
                                 marginTop: 3,
                               }}>
-                              5,000 credits a month. Applies right away, Apple prorates the
-                              difference.
+                              {appleManaged
+                                ? '5,000 credits a month. Applies right away, Apple prorates the difference.'
+                                : '5,000 credits a month. Managed where you subscribed.'}
                             </Text>
                           </View>
                           <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
@@ -708,9 +783,18 @@ export default function PaywallSheet({
                       </Pressable>
                     </Rim>
                   )}
-                  {appleManaged && profile.plan === 'Elite' && pro && (
+                  {profile.plan === 'Elite' && pro && (
                     <Rim rim={PRO_STYLE.rim} marginTop={2}>
-                      <Pressable onPress={() => void buyPro()} disabled={busy}>
+                      <Pressable
+                        onPress={
+                          appleManaged
+                            ? () => void buyPro()
+                            : () =>
+                                showToast(
+                                  'Your plan is managed where you subscribed. Switch it there.',
+                                )
+                        }
+                        disabled={busy}>
                         <LinearGradient
                           colors={PRO_STYLE.gradient}
                           start={PRO_STYLE.start}
@@ -756,8 +840,9 @@ export default function PaywallSheet({
                                 color: 'rgba(255,255,255,0.85)',
                                 marginTop: 3,
                               }}>
-                              2,000 credits a month. Starts at your next renewal, Elite runs
-                              until then.
+                              {appleManaged
+                                ? '2,000 credits a month. Starts at your next renewal, Elite runs until then.'
+                                : '2,000 credits a month. Managed where you subscribed.'}
                             </Text>
                           </View>
                           <Text style={{ fontFamily: fonts.display, fontSize: 20, color: '#FFFFFF' }}>
@@ -775,9 +860,7 @@ export default function PaywallSheet({
                       </Pressable>
                     </Rim>
                   )}
-                  {appleManaged && (
-                    <View style={{ height: 10 }} />
-                  )}
+                  <View style={{ height: 10 }} />
                 </>
               )}
 
