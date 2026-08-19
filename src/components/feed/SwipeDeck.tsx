@@ -45,6 +45,7 @@ type Props = {
   costLabel?: string;
   /** Undo on the card's top-right corner; travels with the swipe. */
   undo?: { visible: boolean; onPress: () => void; position?: 'top-right' | 'bottom-right' };
+  gesturesEnabled?: boolean;
 };
 
 const PASS_STAMP: StampSpec = { label: 'PASS', tone: 'negative' };
@@ -70,6 +71,7 @@ export const SwipeDeck = memo(
         shouldCelebrate,
         costLabel,
         undo,
+        gesturesEnabled,
       },
       ref,
     ) => {
@@ -112,6 +114,7 @@ export const SwipeDeck = memo(
           }
           shouldCelebrate={shouldCelebrate}
           undo={undo}
+          gesturesEnabled={gesturesEnabled}
           allowUp
           upAction="expand"
           upStamp={READ_STAMP}

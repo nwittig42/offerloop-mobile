@@ -592,9 +592,7 @@ export default function ProfileScreen() {
           <View style={{ padding: 14 }}>
             {iapAvailable() ? (
               <Pressable
-                onPress={() =>
-                  presentPaywall({ context: profile.plan === 'Free' ? 'credits-screen' : 'draft' })
-                }
+                onPress={() => router.push('/credits')}
                 accessibilityRole="button"
                 style={{
                   borderRadius: 10,
@@ -747,7 +745,7 @@ export default function ProfileScreen() {
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: '#7C3AED',
+                  backgroundColor: colors.accent,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>

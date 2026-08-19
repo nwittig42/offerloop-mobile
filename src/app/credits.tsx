@@ -536,6 +536,43 @@ export default function CreditsScreen() {
           </Pressable>
         )}
 
+        {/* The ladder, one quiet line (Rylan 2026-08-19): where you stand
+            and what else exists. Tapping a different tier opens the plans
+            sheet, which owns switching. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}>
+          {(['Free', 'Pro', 'Elite'] as const).map((tier) => {
+            const current = profile.plan === tier;
+            const tone = tier === 'Elite' ? '#7C3AED' : tier === 'Pro' ? colors.marketing : colors.inkTertiary;
+            return (
+              <Pressable
+                key={tier}
+                disabled={current}
+                onPress={() => presentPaywall({ context: 'credits-screen' })}
+                accessibilityRole="button"
+                accessibilityLabel={current ? `You are on ${tier}` : `See ${tier} plan`}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: current ? tone : 'transparent',
+                  borderWidth: 1,
+                  borderColor: current ? tone : colors.hairline,
+                }}>
+                <Text
+                  style={{
+                    fontFamily: current ? fonts.sansBold : fonts.sansMedium,
+                    fontSize: 12.5,
+                    color: current ? '#FFFFFF' : colors.inkSecondary,
+                  }}>
+                  {tier}
+                  {current ? ' · you' : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {/* How credits work, demoted to a quiet expandable row. */}
         <Pressable
           onPress={() => setHowOpen((v) => !v)}

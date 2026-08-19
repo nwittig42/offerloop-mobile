@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
@@ -98,6 +99,7 @@ export default function FeedScreen() {
     feedState,
   } = useApp();
   const colors = useColors();
+  const isFocused = useIsFocused();
   const { scheme } = useTheme();
   // The navy stage (Rylan 2026-08-18, kept after seeing it; round 3 asked it
   // ~50% lighter and closer to the theme's accent family). ONE constant on
@@ -398,7 +400,7 @@ export default function FeedScreen() {
           already passed — the swipe memory lived in component state that
           unmounting threw away). display:none keeps state and skips work. */}
       <View style={{ flex: 1, display: mode === 'people' ? 'flex' : 'none' }}>
-        <PeopleFeedView />
+        <PeopleFeedView active={isFocused && mode === 'people'} />
       </View>
       {mode !== 'jobs' ? null : feedState.loading ? (
         <FeedSkeleton />
@@ -500,6 +502,7 @@ export default function FeedScreen() {
               onToggleExpand={setExpanded}
               onSwiped={handleSwiped}
               drag={dragX}
+              gesturesEnabled={isFocused && mode === 'jobs'}
               blockRight={needsApplyProfile && !!top?.autoApplyEligible}
               onBlockedRight={onApplyProfileBlocked}
               rightStamp={top?.autoApplyEligible ? 'apply' : 'save'}
@@ -517,15 +520,10 @@ export default function FeedScreen() {
               <GlassBar
                 style={{
                   alignSelf: 'stretch',
-                  marginTop: -14,
-                  paddingTop: 22,
+                  marginTop: 12,
                   flexDirection: 'column',
                   alignItems: 'stretch',
                   gap: 8,
-                  borderTopLeftRadius: 0,
-                  borderTopRightRadius: 0,
-                  borderBottomLeftRadius: 22,
-                  borderBottomRightRadius: 22,
                 }}>
 
                 {/* The one add-on for this deck: also email the hiring manager

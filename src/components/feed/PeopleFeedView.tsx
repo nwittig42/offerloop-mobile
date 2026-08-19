@@ -61,7 +61,7 @@ import type { Candidate } from '@/types';
  * toast says. The deck never waits on the network: the card leaves on the
  * gesture and the work reports back by toast, so swipes can stack.
  */
-export default function PeopleFeedView() {
+export default function PeopleFeedView({ active = true }: { active?: boolean }) {
   const router = useRouter();
   const { profile, showToast, swipeSettings, updateSwipeSettings } = useApp();
   const { connect: connectGmail } = useGmailConnect();
@@ -620,6 +620,7 @@ export default function PeopleFeedView() {
           people={people}
           onSwiped={handleSwiped}
           drag={dragX}
+          gesturesEnabled={active}
           blockRight={!canReveal || !canDraft}
           onBlockedRight={onBlockedRight}
           action={action}
@@ -646,15 +647,10 @@ export default function PeopleFeedView() {
           <GlassBar
             style={{
               alignSelf: 'stretch',
-              marginTop: -14,
-              paddingTop: 22,
+              marginTop: 12,
               flexDirection: 'column',
               alignItems: 'stretch',
               gap: 8,
-              borderTopLeftRadius: 0,
-              borderTopRightRadius: 0,
-              borderBottomLeftRadius: 22,
-              borderBottomRightRadius: 22,
             }}>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

@@ -97,6 +97,11 @@ export type SwipeStackProps<T> = {
   rightWin?: { title: string; caption?: string };
   /** Same slot for swipe-up-to-save, when the deck allows up. */
   upWin?: { title: string; caption?: string };
+  /** Re-arm switch for the recognizers. Toggling enabled forces RNGH to
+   *  reconfigure, which unsticks the dead-swipe state after tab switches
+   *  (Rylan 2026-08-19: "nothing is being detected, I have to click a few
+   *  things"). Wire it to focus/mode at the screen. */
+  gesturesEnabled?: boolean;
   /** Undo, worn by the card's top-right corner so it travels WITH the swipe
    *  instead of floating (Rylan 2026-08-18 round 4). Hidden while expanded
    *  (the collapse chevron owns that corner in reading mode). */
@@ -302,6 +307,7 @@ function SwipeStackInner<T>(
     rightWin,
     upWin,
     undo,
+    gesturesEnabled = true,
     shouldCelebrate,
     a11yLabel,
     rightActionLabel,
@@ -408,7 +414,7 @@ function SwipeStackInner<T>(
   // Pan handles horizontal always, and (on a COLLAPSED card, when the deck
   // allows it) vertical up too, so swipe-up-to-save gets the same physics as
   // left/right. On an EXPANDED card, failOffsetY lets the description scroll.
-  let pan = Gesture.Pan().activeOffsetX([-14, 14]);
+  let pan = Gesture.Pan().enabled(gesturesEnabled).activeOffsetX([-14, 14]);
   pan =
     expanded || !allowUp
       ? pan.failOffsetY([-16, 16])
@@ -517,6 +523,7 @@ function SwipeStackInner<T>(
       : {};
 
   const tap = Gesture.Tap()
+    .enabled(gesturesEnabled)
     .maxDistance(10)
     .onEnd(() => {
       if (!expanded) runOnJS(onToggleExpand)(true);

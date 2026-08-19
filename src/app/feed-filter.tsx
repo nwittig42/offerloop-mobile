@@ -391,7 +391,24 @@ export default function FeedFilterScreen() {
             accessibilityRole="button"
             accessibilityLabel="Email template">
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Ionicons name="mail-outline" size={20} color={colors.ink} />
+              {/* Same identity as the Settings row (Rylan 2026-08-19: two
+                  doors to one screen were dressed differently). */}
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: colors.marketing,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: colors.marketing,
+                  shadowOpacity: 0.3,
+                  shadowRadius: 5,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 3,
+                }}>
+                <Ionicons name="mail" size={19} color="#FFFFFF" />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.ink }}>
                   Email template

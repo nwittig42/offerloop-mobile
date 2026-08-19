@@ -255,10 +255,10 @@ export default function SettingsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
-                Outreach template
+                Email template
               </Text>
               <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary }}>
-                How your drafted emails are written and signed
+                What every draft asks for, and how it signs off
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.inkTertiary} />

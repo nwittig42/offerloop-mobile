@@ -38,6 +38,7 @@ type Props = {
   appliedCompanies?: Set<string>;
   /** Undo on the card's top-right corner; travels with the swipe. */
   undo?: { visible: boolean; onPress: () => void; position?: 'top-right' | 'bottom-right' };
+  gesturesEnabled?: boolean;
 };
 
 /**
@@ -66,6 +67,7 @@ export const PersonDeck = memo(
         action,
         appliedCompanies,
         undo,
+        gesturesEnabled,
       },
       ref,
     ) => {
@@ -104,6 +106,7 @@ export const PersonDeck = memo(
           rightStamp={action === 'send' ? SEND_STAMP : DRAFT_STAMP}
           leftStamp={PASS_STAMP}
           undo={undo}
+          gesturesEnabled={gesturesEnabled}
           rightWin={
             action === 'send'
               ? { title: 'Sending it', caption: 'Track it in your Inbox' }
