@@ -5,6 +5,7 @@ import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -60,7 +61,8 @@ function OfferloopMark() {
 export default function Onboarding() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, jobs, setNotificationsEnabled, completeOnboarding } = useApp();
+  const { profile, jobs, setNotificationsEnabled, completeOnboarding, showToast } = useApp();
+  const { user } = useAuth();
 
   const [step, setStep] = useState(0);
   const [trackChoice] = useState<string | null>(null);
@@ -243,38 +245,79 @@ export default function Onboarding() {
     // give for them is a reply or a draft landing there), so declining Gmail
     // ends onboarding here rather than asking a question with nothing behind it.
     const skipNotifications = () => finish();
-    const doConnect = async () => {
+
+    // How they signed in decides how we ask (POST-BUILD19-ONBOARDING-EMAIL.md,
+    // direction set by Rylan 2026-08-19). Sign-in grants identity only; the
+    // mail scopes the product runs on come from THIS step, so the step never
+    // disappears, it adapts:
+    //   .edu Google sign-in    -> one tap, that same inbox, preselected
+    //   personal-gmail sign-in -> school email first, their Gmail as the
+    //                             quiet second path (the .edu opportunity)
+    //   anything else          -> the original step, unchanged
+    const signInEmail = (user?.email || '').trim().toLowerCase();
+    const googleSignIn = !!user?.providerData?.some((p) => p.providerId === 'google.com');
+    const eduSignIn = googleSignIn && signInEmail.endsWith('.edu');
+    const personalGmailSignIn = googleSignIn && signInEmail.endsWith('@gmail.com');
+
+    const doConnect = async (account?: 'other') => {
       setGmailError(null);
-      const res = await connectGmail();
+      const res = await connectGmail(account ? { account } : undefined);
       if (res === 'connected') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (account === 'other') {
+          showToast('Nice. Your outreach now comes from your school address.');
+        }
         next();
       } else if (res === 'failed') {
-        setGmailError("That didn't go through. You can connect Gmail anytime from Profile.");
+        setGmailError(
+          account === 'other'
+            ? "That inbox didn't connect. If your school runs Outlook, use the Gmail you signed in with below. Your outreach still comes from you."
+            : "That didn't go through. You can connect Gmail anytime from Profile.",
+        );
       }
     };
+
+    const title = already
+      ? 'Gmail is connected'
+      : eduSignIn
+        ? 'Connect the inbox you signed in with'
+        : personalGmailSignIn
+          ? 'Send from your school email'
+          : 'Send from your own Email';
+    const subtitle = already
+      ? 'Drafts land in your Gmail and replies come back here. You are all set.'
+      : eduSignIn
+        ? `We draft and send from ${signInEmail}, and track every reply here. Your school address already says current student. One tap and you are set.`
+        : personalGmailSignIn
+          ? 'You signed in with your personal Gmail, which works fine. But recruiters take a message from a school address more seriously, it says current student before they read a word. If your school email runs on Gmail (most do), connect that one instead. It takes the same one tap.'
+          : 'We draft and send personalized emails for you, directly from your own email address. When someone replies, we track it so you never miss a follow-up.';
+
+    // The big ink primary this step has always used; label and target adapt.
+    const primaryLabel = eduSignIn
+      ? 'Connect this inbox'
+      : personalGmailSignIn
+        ? 'Connect my school email'
+        : 'Connect Gmail';
+    const primaryAccount = personalGmailSignIn ? ('other' as const) : undefined;
+
     return (
       <OnboardingScaffold
         step={stepNumber(STEP_NAMES[step])}
         total={ONBOARDING_TOTAL}
       headerRight={<OfferloopMark />}
         onBack={back}
-        title={already ? 'Gmail is connected' : 'Send from your own Email'}
-        subtitle={
-          already
-            ? 'Drafts land in your Gmail and replies come back here. You are all set.'
-            : 'We draft and send personalized emails for you, directly from your own email address. When someone replies, we track it so you never miss a follow-up.'
-        }
+        title={title}
+        subtitle={subtitle}
         footer={
           already ? (
             <Button label="Continue" variant="brand" size="lg" fullWidth icon="arrow-forward" onPress={next} />
           ) : (
             <>
               <Pressable
-                onPress={doConnect}
+                onPress={() => void doConnect(primaryAccount)}
                 disabled={gmailConnecting}
                 accessibilityRole="button"
-                accessibilityLabel="Connect Gmail"
+                accessibilityLabel={primaryLabel}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -292,14 +335,25 @@ export default function Onboarding() {
                 })}>
                 {gmailConnecting ? (
                   <ActivityIndicator size="small" color={colors.paper} />
+                ) : personalGmailSignIn ? (
+                  <Ionicons name="school" size={22} color={colors.paper} />
                 ) : (
                   <GmailLogo size={24} />
                 )}
                 <Text
                   style={{ fontFamily: fonts.sansSemibold, fontSize: 17.5, color: colors.paper }}>
-                  {gmailConnecting ? 'Opening Google...' : 'Connect Gmail'}
+                  {gmailConnecting ? 'Opening Google...' : primaryLabel}
                 </Text>
               </Pressable>
+              {personalGmailSignIn ? (
+                <Button
+                  label="Use this Gmail instead"
+                  variant="ghost"
+                  fullWidth
+                  disabled={gmailConnecting}
+                  onPress={() => void doConnect()}
+                />
+              ) : null}
               <Button label="Not now" variant="ghost" fullWidth onPress={skipNotifications} />
             </>
           )

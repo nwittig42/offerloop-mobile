@@ -24,11 +24,11 @@ export function useGmailConnect() {
   const queryClient = useQueryClient();
   const [connecting, setConnecting] = useState(false);
 
-  const connect = useCallback(async (): Promise<GmailConnectResult> => {
+  const connect = useCallback(async (opts?: { account?: 'other' }): Promise<GmailConnectResult> => {
     if (connecting) return 'cancelled';
     setConnecting(true);
     try {
-      const authUrl = await startGmailOAuth();
+      const authUrl = await startGmailOAuth(opts?.account);
 
       // Browser preview only. openAuthSessionAsync has no real web equivalent,
       // so Google's consent page loaded INSIDE the preview iframe with no way

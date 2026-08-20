@@ -1,5 +1,16 @@
 # Stash: onboarding Gmail step after Google sign-in ships (post build 19)
 
+STATUS 2026-08-19: IMPLEMENTED. Build 19 released, locks updated, and Rylan
+reframed the step as a general email connect step: the connected inbox is
+whichever email powers outreach, independent of how they signed up. Cases 1
+and 2 below shipped in src/app/(onboarding)/index.tsx with the wording from
+this doc; the school-first path opens Google's account picker (backend
+account=other on /api/google/oauth/start drops the login_hint), the
+one-tap .edu path keeps the preselect. Case 3 unchanged. Known limit,
+unchanged from the analysis: Apple/iCloud-only and Outlook-only inboxes
+cannot power outreach yet, that is a backend mail-integration project, not
+an app change; the graceful fallback below covers them.
+
 Rylan, 2026-08-11 (night of the build-19 submission). Do NOT implement until
 build 19 is released and the OTA runtime locks are updated.
 
