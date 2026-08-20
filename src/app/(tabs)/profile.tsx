@@ -708,7 +708,14 @@ export default function ProfileScreen() {
           {/* Checklist reads the LIVE typed values, not just the saved
               profile: Rylan typed his grad year and the list still nagged him
               because he had not hit Save yet. Saving still persists; the
-              checkmark just should not wait for the round trip. */}
+              checkmark just should not wait for the round trip.
+
+              Hidden entirely while the profile on screen is still the mock
+              stand-in: on a cold open this card counted MOCK_PROFILE's empty
+              fields and flashed "5 to go" at a fully filled-out user until
+              /me arrived. No card beats a wrong card for the second it
+              takes. */}
+          {connection.usingSampleData ? null : (
           <ProfileCompletion
             profile={{
               ...profile,
@@ -722,6 +729,7 @@ export default function ProfileScreen() {
             }}
             onAction={onCompletionAction}
           />
+          )}
 
         </View>
 
