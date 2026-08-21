@@ -107,7 +107,11 @@ EOF
   git add src/lib/buildInfo.ts
   git commit -q -m "chore: OTA ${STAMP}: ${MESSAGE}"
 else
-  STAMP="${CHANNEL} ci-$(git rev-parse --short HEAD)"
+  # Keep the human version number in CI stamps (Rylan 2026-08-20: a bare
+  # ci-hash in Settings reads as "the version number disappeared"). CI still
+  # never commits a bump; it borrows the committed number and marks the ship.
+  V=$(grep -o "OTA_VERSION = '[a-z]* v[0-9]*'" src/lib/buildInfo.ts | grep -o "v[0-9]*")
+  STAMP="${CHANNEL} ${V:-v?}+ci-$(git rev-parse --short HEAD)"
   # Make the stamp visible in Profile > Settings: patch the working copy
   # only (CI discards it; nothing is committed back to main).
   python3 - "$STAMP" "$MESSAGE" <<'EOF'
