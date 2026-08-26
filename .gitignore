@@ -52,4 +52,3 @@ phone-preview-survey.html
 # `git add -A` along with whatever it holds.
 .env.local.*
 .env*.bak*
-.claude/worktrees/
