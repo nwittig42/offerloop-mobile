@@ -375,6 +375,13 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
         }
         revealAndWrite(currentDeckId, person.id, intent)
           .then((out) => {
+            // The swipe out-ran the email hunt: the server finishes in the
+            // background and the draft-ready bell rings when it lands. Keep
+            // swiping; nothing was charged yet.
+            if (out.pending) {
+              showToast(`Locking down ${person.name}'s email. Your draft will land in your Inbox.`);
+              return;
+            }
             if (!out.email) {
               showToast(`No email found for ${person.name}. You were not charged.`);
               return;

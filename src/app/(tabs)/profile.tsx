@@ -27,6 +27,7 @@ import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
+import { OTA_NOTES, otaStamp, SHOW_BUILD_STAMP } from '@/lib/buildInfo';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -366,7 +367,10 @@ export default function ProfileScreen() {
   // on the Settings screen now, so that one pushes and connects on arrival.
   const onCompletionAction = (action: StepAction) => {
     if (action === 'resume') {
-      void onPickResume();
+      // The three doors (upload / LinkedIn / describe), not the bare file
+      // picker: a first-year with no resume file was dead-ended by the
+      // picker when the builder exists for exactly them (Rylan 2026-08-26).
+      setResumeDoorsOpen(true);
     } else if (action === 'gmail') {
       if (!profile.gmailConnected && !gmailConnecting) void connectGmail();
       router.push('/settings');
@@ -1009,6 +1013,32 @@ export default function ProfileScreen() {
                 Deeper personalization, templates, and tone live on offerloop.ai
               </Text>
             </>
+          {/* The OTA stamp, back on the root (Rylan 2026-08-24: it moved to
+              Settings in the profile rebuild and stopped being seeable at a
+              glance). Same recipe as Settings keeps: staging QA only, store
+              builds never render it. */}
+          {SHOW_BUILD_STAMP && (
+            <View style={{ gap: 2, paddingTop: 10 }}>
+              <Text
+                style={{
+                  fontFamily: fonts.sansMedium,
+                  fontSize: 11.5,
+                  color: colors.inkTertiary,
+                  textAlign: 'center',
+                }}>
+                {otaStamp()}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 11,
+                  color: colors.inkTertiary,
+                  textAlign: 'center',
+                }}>
+                {OTA_NOTES}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 

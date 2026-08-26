@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -128,7 +128,7 @@ export default function ApplicationProfileScreen() {
   const qc = useQueryClient();
   const { showToast, profile } = useApp();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['applicationProfile'],
     queryFn: getApplicationProfile,
   });
@@ -222,6 +222,34 @@ export default function ApplicationProfileScreen() {
         </Pressable>
       </View>
 
+      {/* Never render the form before the saved values arrive: an empty form
+          over saved data reads as "my saves vanished" and gets refilled from
+          scratch (Rylan 2026-08-26, new account: the data WAS saved, the
+          screen just drew blank fields ahead of the fetch). */}
+      {isLoading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary }}>
+            Loading your saved answers…
+          </Text>
+        </View>
+      ) : isError ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
+          <Ionicons name="cloud-offline-outline" size={32} color={colors.inkTertiary} />
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 13.5,
+              color: colors.inkSecondary,
+              textAlign: 'center',
+              lineHeight: 20,
+            }}>
+            Couldn’t load your saved answers. Editing now could overwrite them, so fix the
+            connection first.
+          </Text>
+          <Button label="Try again" onPress={() => void refetch()} />
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: insets.bottom + 32 }}>
         <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, color: colors.inkSecondary, lineHeight: 20 }}>
           Auto-apply reuses these on every application. Only work authorization is required, but the
@@ -323,6 +351,7 @@ export default function ApplicationProfileScreen() {
           disabled={!canSave || isLoading}
         />
       </ScrollView>
+      )}
     </View>
   );
 }

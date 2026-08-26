@@ -146,6 +146,12 @@ function useAuthGate() {
     // users are never force-trapped. Exit to /(tabs) explicitly — bare '/' is
     // ambiguous with the onboarding group index and caused the earlier loop.
     if (needsOnboarding && !inOnboarding) {
+      // Screens OUTSIDE the group that onboarding itself opens. Without this
+      // list the guard bounces them straight back to intake, which made the
+      // "I don't have either, build me one" button look dead (it pushed
+      // /resume-from-text and was returned before the screen drew).
+      const ONBOARDING_OK = ['resume-from-text'];
+      if (ONBOARDING_OK.includes(segments[0] as string)) return;
       // Enter at /intake (resume, then feed preview); its last step hands off
       // to /(onboarding) for the remaining steps.
       router.replace('/(onboarding)/intake');

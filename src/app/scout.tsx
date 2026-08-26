@@ -49,7 +49,7 @@ const SUGGESTIONS = [
 export default function ScoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { jobId } = useLocalSearchParams<{ jobId?: string }>();
+  const { jobId, ask } = useLocalSearchParams<{ jobId?: string; ask?: string }>();
   const { jobs, profile } = useApp();
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
@@ -66,9 +66,17 @@ export default function ScoutScreen() {
 
   const job = jobId ? jobs.find((j) => j.id === jobId) : undefined;
 
-  const greeting = job
-    ? `You're looking at ${job.title} at ${job.company}. Ask me how to position yourself, who to reach, or what to say — I've got your resume and pipeline.`
-    : "Hey, I'm Scout. Ask me anything about your search — who to reach at a company, what to say in a coffee chat, or which jobs fit your resume.";
+  // A question handed in by another screen (the application form's "Ask
+  // Scout"), pre-filled in the composer rather than auto-sent: the student
+  // gets to edit or add to it first (Rylan 2026-08-24), and seeing it spelled
+  // out teaches what Scout can be asked.
+  const askPrefill = typeof ask === 'string' && ask.trim() ? ask.trim() : null;
+
+  const greeting = askPrefill
+    ? "I pulled that question in below. Add anything else you want to know, then send it and I'll walk you through answering it."
+    : job
+      ? `You're looking at ${job.title} at ${job.company}. Ask me how to position yourself, who to reach, or what to say — I've got your resume and pipeline.`
+      : "Hey, I'm Scout. Ask me anything about your search — who to reach at a company, what to say in a coffee chat, or which jobs fit your resume.";
 
   // Seed from the shared thread: the sheet continues whatever conversation
   // the Scout tab already has going (and vice versa).
@@ -76,7 +84,7 @@ export default function ScoutScreen() {
     { from: 'scout', text: greeting },
     ...scoutThread.entries().map((e) => ({ from: e.from, text: e.text })),
   ]);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(askPrefill ?? '');
   const [thinking, setThinking] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -89,7 +97,8 @@ export default function ScoutScreen() {
   // would be worse than none.
   const openerDone = useRef(false);
   useEffect(() => {
-    if (openerDone.current || job || scoutThread.entries().length) return;
+    // A prefilled ask counts as a subject too: don't talk over it.
+    if (openerDone.current || job || askPrefill || scoutThread.entries().length) return;
     openerDone.current = true;
     let alive = true;
     void (async () => {
@@ -122,7 +131,7 @@ export default function ScoutScreen() {
     return () => {
       alive = false;
     };
-  }, [job]);
+  }, [job, askPrefill]);
   const [savedChats, setSavedChats] = useState<ScoutChatMeta[] | 'loading' | 'error'>('loading');
 
   const userInfo = {
@@ -382,7 +391,7 @@ export default function ScoutScreen() {
       </ScrollView>
 
       <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 14, gap: 10 }}>
-        {messages.length <= 1 ? (
+        {messages.length <= 1 && !askPrefill ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {SUGGESTIONS.map((s) => (
               <Pressable
@@ -405,12 +414,18 @@ export default function ScoutScreen() {
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}>
+            {/* A prefilled question is a paragraph, not a line: open the
+                composer tall so the student can read what they're about to
+                send. Return stops meaning "send" in multiline; the arrow
+                button carries that. */}
             <Input
               value={draft}
               onChangeText={setDraft}
               placeholder="Ask Scout anything"
-              onSubmitEditing={() => send(draft)}
-              returnKeyType="send"
+              multiline={!!askPrefill}
+              onSubmitEditing={askPrefill ? undefined : () => send(draft)}
+              returnKeyType={askPrefill ? 'default' : 'send'}
+              style={askPrefill ? { minHeight: 76, maxHeight: 150 } : undefined}
             />
           </View>
           <Pressable

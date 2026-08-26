@@ -205,6 +205,10 @@ export type RevealPersonResult = {
   /** True when it actually left the account. Never assumed from the request:
    *  the server downgrades a send it cannot make (no Gmail, quiet hours). */
   sent: boolean;
+  /** True when the swipe out-ran the email hunt: the server finishes it in
+   *  the background and rings the draft-ready bell, charging only on a
+   *  verified find. Not a miss, not a charge, a promise. */
+  pending: boolean;
 };
 
 /**
@@ -232,6 +236,7 @@ export async function revealAndWrite(
       charged: false,
       drafted: action === 'draft',
       sent: action === 'send',
+      pending: false,
     };
   }
   const res = await apiFetch<{
@@ -240,6 +245,7 @@ export async function revealAndWrite(
     charged?: boolean;
     drafted?: boolean;
     sent?: boolean;
+    pending?: boolean;
   }>('/api/mobile/people-search/reveal', {
     method: 'POST',
     body: { deck_id: deckId, person_id: personId, action },
@@ -251,5 +257,6 @@ export async function revealAndWrite(
     charged: !!res.charged,
     drafted: !!res.drafted,
     sent: !!res.sent,
+    pending: !!res.pending,
   };
 }

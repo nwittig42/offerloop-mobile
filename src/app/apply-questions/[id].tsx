@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Keyboard,
   Linking,
   Pressable,
@@ -46,13 +47,41 @@ function profileDefault(q: PendingQuestion, profile: { school?: string } | null 
   return '';
 }
 
+/**
+ * The tapped question, rewritten as something Scout can actually answer: which
+ * job, what the form asked, the employer's own help text, and the choices on
+ * offer. Handed to the Scout sheet as a prefill, not auto-sent, so the student
+ * can edit or add to it first (Rylan 2026-08-24: seeing it spelled out inspires
+ * the next question). Options are capped so a 300-school dropdown does not
+ * become the message.
+ */
+function scoutAskFor(q: PendingQuestion, jobTitle?: string, company?: string): string {
+  const label = (q.label || '').replace(/[\s*✱]+$/u, '').trim() || 'this question';
+  const where =
+    jobTitle && company
+      ? `the ${jobTitle} application at ${company}`
+      : company
+        ? `my application at ${company}`
+        : 'a job application';
+  const desc = (q.description || '').trim();
+  const options = (q.options ?? []).map(optionLabel).filter(Boolean);
+  const shown = options.slice(0, 6);
+  const optionsPart = shown.length
+    ? ` The choices are: ${shown.join('; ')}${
+        options.length > shown.length ? `; and ${options.length - shown.length} more` : ''
+      }.`
+    : '';
+  const descPart = desc ? ` The form explains: "${desc}"` : '';
+  return `I'm filling out ${where}. It asks "${label}".${descPart}${optionsPart} What is this really asking, and how should I answer it?`;
+}
+
 /** Above this many options a chip wall is unusable — switch to a searchable,
  *  typeable combobox (the SpaceX "School" field ships ~hundreds of options). */
 const SEARCHABLE_THRESHOLD = 10;
 /** How many matches to show under the search box at once. */
 const MAX_VISIBLE_MATCHES = 30;
 
-function FieldLabel({ q }: { q: PendingQuestion }) {
+function FieldLabel({ q, onAskScout }: { q: PendingQuestion; onAskScout?: () => void }) {
   const colors = useColors();
   // Strip any required marker the employer baked into the label text (a trailing
   // '*' / '✱', sometimes on its own line) so we don't render it PLUS our own red
@@ -60,10 +89,49 @@ function FieldLabel({ q }: { q: PendingQuestion }) {
   const label = (q.label || '').replace(/[\s*✱]+$/u, '').trim();
   return (
     <View style={{ gap: 4 }}>
-      <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
-        {label}
-        {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+        <Text
+          style={{
+            flex: 1,
+            fontFamily: fonts.sansSemibold,
+            fontSize: 13.5,
+            color: colors.ink,
+            lineHeight: 19,
+          }}>
+          {label}
+          {q.required ? <Text style={{ color: colors.negative }}> *</Text> : null}
+        </Text>
+        {/* Scout, at the question. Employer forms ask things students freeze on
+            ("Active Security Clearance(s)" with no None option); this opens the
+            Scout sheet with the question already composed. */}
+        {onAskScout ? (
+          <Pressable
+            onPress={onAskScout}
+            accessibilityRole="button"
+            accessibilityLabel={`Ask Scout about ${label || 'this question'}`}
+            hitSlop={8}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingVertical: 3,
+              paddingHorizontal: 8,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.accent + '40',
+              backgroundColor: colors.accent + '0D',
+            }}>
+            <Image
+              source={require('../../../assets/images/scout-yeti-head.png')}
+              style={{ width: 16, height: 16, marginTop: 1 }}
+              resizeMode="contain"
+            />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.accent }}>
+              Ask Scout
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
       {/* The employer's own help text. Without it, a bare "Additional Information"
           is unanswerable — all the meaning lives in the paragraph the form prints
           under the question, and we were dropping it before asking the user to
@@ -92,11 +160,13 @@ function SearchableSelect({
   options,
   value,
   onChange,
+  onAskScout,
 }: {
   q: PendingQuestion;
   options: string[];
   value: string;
   onChange: (v: string) => void;
+  onAskScout?: () => void;
 }) {
   const colors = useColors();
   const [open, setOpen] = useState(false);
@@ -110,7 +180,7 @@ function SearchableSelect({
 
   return (
     <Card style={{ gap: 10 }}>
-      <FieldLabel q={q} />
+      <FieldLabel q={q} onAskScout={onAskScout} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Ionicons name="search-outline" size={16} color={colors.inkTertiary} />
@@ -190,11 +260,13 @@ function QuestionField({
   value,
   onChange,
   applyUrl,
+  onAskScout,
 }: {
   q: PendingQuestion;
   value: string;
   onChange: (v: string) => void;
   applyUrl?: string;
+  onAskScout?: () => void;
 }) {
   const colors = useColors();
   const options = (q.options ?? []).map(optionLabel).filter(Boolean);
@@ -205,12 +277,20 @@ function QuestionField({
   const hiddenList = !isSelect && HIDDEN_LIST_RE.test(q.label || '') && !!applyUrl;
 
   if (isSelect && options.length > SEARCHABLE_THRESHOLD) {
-    return <SearchableSelect q={q} options={options} value={value} onChange={onChange} />;
+    return (
+      <SearchableSelect
+        q={q}
+        options={options}
+        value={value}
+        onChange={onChange}
+        onAskScout={onAskScout}
+      />
+    );
   }
 
   return (
     <Card style={{ gap: 10 }}>
-      <FieldLabel q={q} />
+      <FieldLabel q={q} onAskScout={onAskScout} />
 
       {isSelect ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -426,6 +506,31 @@ export default function ApplyQuestionsScreen() {
             </Text>
           ) : null}
         </View>
+        {/* This screen builds its own header, so the shared Header's Scout
+            button never reaches it. Same Yeti, same recipe, so Scout is one
+            tap away on the screen where employer questions get confusing. */}
+        <Pressable
+          onPress={() => router.push('/scout')}
+          accessibilityRole="button"
+          accessibilityLabel="Ask Scout"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.hairline,
+            backgroundColor: colors.paper2,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            marginRight: 6,
+          }}>
+          <Image
+            source={require('../../../assets/images/scout-yeti-head.png')}
+            style={{ width: 27, height: 27, marginTop: 3 }}
+            resizeMode="contain"
+          />
+        </Pressable>
         <Pressable onPress={() => router.back()} accessibilityRole="button" style={{ padding: 6 }}>
           <Ionicons name="close" size={22} color={colors.ink} />
         </Pressable>
@@ -475,6 +580,12 @@ export default function ApplyQuestionsScreen() {
                 value={answers[qid] ?? ''}
                 onChange={(v) => setAnswers((prev) => ({ ...prev, [qid]: v }))}
                 applyUrl={typeof data?.apply_url === 'string' ? data.apply_url : undefined}
+                onAskScout={() =>
+                  router.push({
+                    pathname: '/scout',
+                    params: { ask: scoutAskFor(q, data?.job_title, data?.company) },
+                  })
+                }
               />
             );
           })}
