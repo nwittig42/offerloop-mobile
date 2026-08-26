@@ -33,6 +33,9 @@ export async function saveTargetTrack(opts: {
    *  user can deliberately clear it. */
   about?: string;
   gradYear?: string;
+  /** The People ranker's most important input, now editable from the
+   *  Personal card as well as the nudge and gap survey. */
+  school?: string;
   linkedinUrl?: string;
 }): Promise<void> {
   if (USE_MOCKS) return;
@@ -43,6 +46,7 @@ export async function saveTargetTrack(opts: {
       ...(opts.industries ? { industries: opts.industries } : {}),
       ...(opts.about !== undefined ? { about: opts.about } : {}),
       ...(opts.gradYear ? { gradYear: opts.gradYear } : {}),
+      ...(opts.school ? { school: opts.school } : {}),
       ...(opts.linkedinUrl ? { linkedinUrl: opts.linkedinUrl } : {}),
     },
   });

@@ -331,6 +331,10 @@ export default function ProfileScreen() {
   const [rolesText, setRolesText] = useState(profile.targetRoles.join(', '));
   const [industriesText, setIndustriesText] = useState(profile.industries.join(', '));
   const [gradYear, setGradYear] = useState(profile.gradYear);
+  // School lives on the Personal card too (Rylan 2026-08-26): the nudge and
+  // gap survey only appear at empty-deck moments, and a "Not now" left no
+  // other door to the single field the People ranker cannot run without.
+  const [school, setSchool] = useState(profile.school);
   const [about, setAbout] = useState(profile.about);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -384,10 +388,11 @@ export default function ProfileScreen() {
   useEffect(() => {
     setLinkedinUrl((cur) => cur || profile.linkedinUrl);
     setGradYear((cur) => cur || profile.gradYear);
+    setSchool((cur) => cur || profile.school);
     setAbout((cur) => cur || profile.about);
     setRolesText((cur) => cur || profile.targetRoles.join(', '));
     setIndustriesText((cur) => cur || profile.industries.join(', '));
-  }, [profile.linkedinUrl, profile.gradYear, profile.about, profile.targetRoles, profile.industries]);
+  }, [profile.linkedinUrl, profile.gradYear, profile.school, profile.about, profile.targetRoles, profile.industries]);
 
   const handleEnrich = async () => {
     if (!linkedinUrl.trim() || enriching) return;
@@ -415,6 +420,7 @@ export default function ProfileScreen() {
     linkedinUrl !== profile.linkedinUrl ||
     splitList(industriesText).join('|') !== profile.industries.join('|') ||
     gradYear !== profile.gradYear ||
+    school !== profile.school ||
     about !== profile.about ||
     splitList(rolesText).join('|') !== profile.targetRoles.join('|');
 
@@ -426,6 +432,7 @@ export default function ProfileScreen() {
       targetRoles,
       industries,
       gradYear,
+      school,
       about,
     });
     // updateProfile only patches the LOCAL cache — without this the edit never
@@ -440,6 +447,7 @@ export default function ProfileScreen() {
       industries,
       about,
       gradYear,
+      school,
       linkedinUrl,
     }).catch(() => {});
     showToast('Saved');
@@ -945,15 +953,55 @@ export default function ProfileScreen() {
                     placeholder="Add a few, separated by commas"
                   />
                 </SoftRow>
-                <SoftRow label="Grad year">
-                  <TextInput
-                    ref={fieldRefs.gradYear}
-                    value={gradYear}
-                    onChangeText={setGradYear}
-                    placeholderTextColor={colors.inkTertiary}
-                    style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.ink, paddingVertical: 2 }}
-                  />
-                </SoftRow>
+                {/* School + grad year share a line (Rylan 2026-08-26): they are
+                    one fact ("USC '27"), and school is the field the People
+                    ranker cannot run without, so it deserves a permanent home
+                    beyond the dismissible nudge. */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    gap: 16,
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.hairlineLight,
+                  }}>
+                  <View style={{ flex: 2 }}>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sansMedium,
+                        fontSize: 11.5,
+                        color: colors.inkTertiary,
+                        marginBottom: 3,
+                      }}>
+                      School
+                    </Text>
+                    <TextInput
+                      value={school}
+                      onChangeText={setSchool}
+                      placeholder="e.g. USC"
+                      placeholderTextColor={colors.inkTertiary}
+                      style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.ink, paddingVertical: 2 }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sansMedium,
+                        fontSize: 11.5,
+                        color: colors.inkTertiary,
+                        marginBottom: 3,
+                      }}>
+                      Grad year
+                    </Text>
+                    <TextInput
+                      ref={fieldRefs.gradYear}
+                      value={gradYear}
+                      onChangeText={setGradYear}
+                      placeholderTextColor={colors.inkTertiary}
+                      style={{ fontFamily: fonts.sans, fontSize: 15, color: colors.ink, paddingVertical: 2 }}
+                    />
+                  </View>
+                </View>
                 <SoftRow label="About you" last>
                   <TextInput
                     ref={fieldRefs.about}

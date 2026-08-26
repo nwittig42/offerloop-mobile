@@ -109,7 +109,11 @@ export default function SwipeDemoHint({
   }));
 
   return (
-    <View style={{ flex: 1 }}>
+    // zIndex + elevation on the whole hint: the teaching hand must paint over
+    // the action bars that render as LATER siblings, or it slides behind them
+    // and reads as a glitch instead of a lesson (Rylan 2026-08-26, the hand
+    // half-hidden behind the bottom bar).
+    <View style={{ flex: 1, zIndex: 100, elevation: 100 }}>
       <Animated.View style={[{ flex: 1 }, cardStyle]}>{children}</Animated.View>
 
       <Animated.View
@@ -117,10 +121,13 @@ export default function SwipeDemoHint({
         style={[
           {
             position: 'absolute',
-            // Sits over the middle of the card, left of centre, so the drift
-            // crosses the card face rather than skimming its bottom edge.
-            bottom: 132,
+            // Sits over the middle of the card, left of centre and well above
+            // the bar region, so the drift crosses the card face rather than
+            // dipping behind the bars below.
+            bottom: 200,
             left: '26%',
+            zIndex: 101,
+            elevation: 101,
           },
           handStyle,
         ]}>

@@ -37,6 +37,7 @@ import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
 import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
+import { hasSeenPendingHint, markPendingHintSeen } from '@/lib/pendingHint';
 import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { markNudgeShown, nextProfileNudge, type NudgeKey } from '@/lib/profileNudge';
 import { useApp } from '@/store/app';
@@ -377,9 +378,19 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           .then((out) => {
             // The swipe out-ran the email hunt: the server finishes in the
             // background and the draft-ready bell rings when it lands. Keep
-            // swiping; nothing was charged yet.
+            // swiping; nothing was charged yet. First time ever, explain the
+            // mechanic in full; after that, the short line.
             if (out.pending) {
-              showToast(`Locking down ${person.name}'s email. Your draft will land in your Inbox.`);
+              void hasSeenPendingHint().then((seen) => {
+                if (seen) {
+                  showToast(`Locking down ${person.name}'s email. Your draft will land in your Inbox.`);
+                } else {
+                  void markPendingHintSeen();
+                  showToast(
+                    `Hard-to-find addresses take a minute or two. We keep hunting ${person.name}'s in the background and the bell rings when the draft lands. You are only charged if we find one.`,
+                  );
+                }
+              });
               return;
             }
             if (!out.email) {
@@ -642,11 +653,15 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               router.push('/feed-filter?deck=people');
               return;
             }
-            const prompt = role && industry
-              ? `${role}s at ${industry} companies`
-              : role
-                ? `${role}s at top companies`
-                : `People at ${industry} companies`;
+            // Never compose "ROLE at INDUSTRY companies": the intersection can
+            // be a near-empty set ("Investment Banking Analysts at Technology
+            // companies"), and an empty strict search degrades into anyone-
+            // anywhere results (Rylan 2026-08-26, the Missouri city government
+            // finance manager). A clean role-only search finds the role where
+            // it actually lives.
+            const prompt = role
+              ? `${role}s`
+              : `People at ${industry} companies`;
             // The 30-minute query cache replayed the identical sentence
             // instantly with the same people (Rylan 2026-08-19: "it doesn't
             // take the 20-30 seconds, it goes to the same ones"). Drop the
