@@ -1,21 +1,40 @@
+import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text } from 'react-native';
+import { Image, Text } from 'react-native';
 
 import { fonts } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 
 /**
- * An iMessage-style avatar: a soft blue gradient circle with white initials.
- * Keeps the contact list familiar to anyone who uses Messages.
+ * An iMessage-style avatar: the person's photo when we hold a live URL, a
+ * soft blue gradient circle with white initials otherwise.
+ *
+ * Photo URLs are LinkedIn-CDN hotlinks with expiry tokens (weeks to months of
+ * life), so the fallback is not an edge case, it is the planned second act:
+ * the moment a link dies, the row quietly returns to initials. People stay
+ * people either way — company logos never stand in for a face (Rylan
+ * 2026-08-27).
  */
-export function Avatar({ name, size = 48 }: { name: string; size?: number }) {
+export function Avatar({ name, photoUrl, size = 48 }: { name: string; photoUrl?: string; size?: number }) {
   const colors = useColors();
+  const [broken, setBroken] = useState(false);
   const initials = name
     .split(' ')
     .map((p) => p.charAt(0))
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  if (photoUrl && !broken) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        onError={() => setBroken(true)}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface }}
+        accessibilityLabel={name}
+      />
+    );
+  }
 
   return (
     <LinearGradient

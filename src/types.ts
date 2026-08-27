@@ -35,6 +35,9 @@ export type Contact = {
   company: string;
   relation?: ContactRelation;
   linkedinUrl?: string;
+  /** LinkedIn-CDN hotlink with an expiry token; Avatar falls back to
+   *  initials the moment it dies. Never required. */
+  photoUrl?: string;
 };
 
 /**

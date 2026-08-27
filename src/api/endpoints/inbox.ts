@@ -44,6 +44,7 @@ function mapThread(t: Thread): OutreachItem {
     attended,
     contact: {
       name: t.name || t.contactName || 'Contact',
+      photoUrl: (t as { photoUrl?: string }).photoUrl || undefined,
       title,
       // Inferred from the title so the Inbox can badge hiring managers and
       // recruiters. Same helper the People deck uses, so the two agree.
