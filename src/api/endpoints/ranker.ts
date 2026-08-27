@@ -159,6 +159,8 @@ export function mapCandidate(raw: RawCandidate, index: number): Candidate | null
     relation: relationFor(title),
     joinedYear:
       typeof p.joinedYear === 'number' && p.joinedYear > 1900 ? p.joinedYear : undefined,
+    briefing: str(raw.briefing) || str(p.briefing),
+    prevCompany: titleCase(str(p.prevCompany)),
     // Score sits on the ITEM, not the person, so read the item first.
     matchScore: matchScoreFrom(raw) ?? matchScoreFrom(p),
     // Trust the server's rank when it sends one; the feedback call echoes it back.

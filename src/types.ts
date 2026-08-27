@@ -76,6 +76,12 @@ export type Candidate = {
   /** The year they joined their current company, when the ranker sent it.
    *  Real data only; the card derives "Joined this year" style copy from it. */
   joinedYear?: number;
+  /** One-line why-this-person, written server-side from real warmth signals
+   *  ("Went to USC like you. Recently joined."). Never invented. */
+  briefing?: string;
+  /** Where they were BEFORE this job, when the data knows and it differs.
+   *  Renders as an "ex-Company" chip — a settle-worthy fact. */
+  prevCompany?: string;
   /**
    * What their title is actually OF — "Investment Banking" next to a bare
    * "Vice President". From PDL's job_title_sub_role, humanized server-side.
@@ -187,6 +193,13 @@ export type OutreachItem = {
   /** Live stage from the server draft job ("Researching their background…") —
    *  shown on the drafting row instead of the canned rotating phrases. */
   stageLabel?: string;
+  /** People-deck pending reveal: the person's name is known from the swipe,
+   *  so the drafting row shows WHO is being hunted, not just the company. */
+  personName?: string;
+  /** Which pipeline owns this placeholder. 'people' rows resolve via the
+   *  background fulfiller + bell, not the job-draft queue, so retry and
+   *  staleness treat them differently. */
+  source?: 'people';
 };
 
 export type NotificationItem = {

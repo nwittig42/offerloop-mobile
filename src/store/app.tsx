@@ -307,6 +307,7 @@ type AppStore = {
   draftAnotherContact: (opts: { company: string; jobTitle?: string }) => void;
   /** Re-run the draft for a failed Inbox row (tap-to-retry). */
   retryDraft: (id: string) => void;
+  beginPersonPending: (person: { name: string; company: string; title?: string }) => void;
   /** Remember a job as the swiped card for its company (per-company Roles deck). */
   rememberSwipedCard: (job: Job) => void;
   /** Deduped auto-apply for any job — blocks a second application to the same one. */
@@ -835,7 +836,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // "Moelis" while PDL returns the legal "Moelis & Company" — field-tested
     // 2026-07-09: both rows rendered and the ghost had no LinkedIn/prep).
     // Shared normalizer in lib/company.ts; the company screen filters with it too.
-    const normName = (o: OutreachItem) => (o.contact?.name || '').toLowerCase().trim();
+    const normName = (o: OutreachItem) => (o.contact?.name || o.personName || '').toLowerCase().trim();
     const keyOf = (o: OutreachItem) => `${normName(o)}|${normCompanyName(o.company || '')}`;
     setOutreach((prev) => {
       const serverByKey = new Map(server.map((s) => [keyOf(s), s] as const));
@@ -951,12 +952,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       refetchInbox();
-      const cutoff = Date.now() - 5 * 60_000;
+      const now = Date.now();
       setOutreach((prev) =>
         prev.map((o) =>
           (o.status === 'drafting' || o.status === 'queued') &&
           typeof o.createdAtMs === 'number' &&
-          o.createdAtMs < cutoff
+          // People-deck hunts legitimately run up to ~6 minutes in the
+          // background fulfiller; job drafts that quiet are dead.
+          o.createdAtMs < now - (o.source === 'people' ? 8 : 5) * 60_000
             ? { ...o, status: 'failed', snippet: 'Could not draft, tap to retry' }
             : o,
         ),
@@ -1480,10 +1483,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * fresh optimistic credit spend — the server charges per contact found and
    * we reconcile from its authoritative count.
    */
+  /**
+   * A People-deck swipe that out-ran the email hunt becomes a live Inbox row
+   * (Rylan 2026-08-27: fast swiping is the product's rhythm, so every fast
+   * swipe should materialize as the "researching" row instead of vanishing
+   * into a toast). The server's fulfiller writes the real draft and rings
+   * the bell; the inbox reconcile then swaps this ghost for the real row.
+   */
+  const beginPersonPending = useCallback(
+    (person: { name: string; company: string; title?: string }) => {
+      idCounter.current += 1;
+      const outreachId = `out-new-${idCounter.current}`;
+      setOutreach((prev) => [
+        {
+          id: outreachId,
+          jobTitle: person.title || '',
+          company: person.company,
+          personName: person.name,
+          source: 'people' as const,
+          status: 'drafting' as const,
+          timeLabel: 'Just now',
+          createdAtMs: Date.now(),
+        },
+        ...prev,
+      ]);
+    },
+    [],
+  );
+
   const retryDraft = useCallback(
     (id: string) => {
       const row = outreach.find((o) => o.id === id);
       if (!row || row.status !== 'failed') return;
+      // A people-deck hunt has no client-side retry: the server-side
+      // fulfiller resumes on the next touch of that deck, and re-running it
+      // through the JOB pipeline would draft to the company, not the person.
+      // Clear the row; the bell delivers if the hunt lands later.
+      if (row.source === 'people') {
+        setOutreach((prev) => prev.filter((o) => o.id !== id));
+        showToast('Still hunting that address in the background. The bell rings if it lands, and a miss never charges.');
+        return;
+      }
       const saved = failedDraftArgs.current.get(id);
       const priority = saved?.priority ?? 'employee';
       let action: 'draft' | 'send' = saved?.action ?? 'draft';
@@ -1850,6 +1890,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftJob,
       draftAnotherContact,
       retryDraft,
+      beginPersonPending,
       rememberSwipedCard,
       autoApplyJob,
       undoLastPass,
@@ -1907,6 +1948,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftJob,
       draftAnotherContact,
       retryDraft,
+      beginPersonPending,
       rememberSwipedCard,
       autoApplyJob,
       updateSwipeSettings,

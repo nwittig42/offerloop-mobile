@@ -66,7 +66,7 @@ import type { Candidate } from '@/types';
  */
 export default function PeopleFeedView({ active = true }: { active?: boolean }) {
   const router = useRouter();
-  const { profile, showToast, swipeSettings, updateSwipeSettings } = useApp();
+  const { profile, showToast, swipeSettings, updateSwipeSettings, beginPersonPending } = useApp();
   const { connect: connectGmail } = useGmailConnect();
   const colors = useColors();
   // The same global draft-or-send rule the Jobs bar edits, so the two decks can
@@ -381,13 +381,22 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             // swiping; nothing was charged yet. First time ever, explain the
             // mechanic in full; after that, the short line.
             if (out.pending) {
+              // The swipe materializes as a live "researching" row in the
+              // Inbox (the same smoke-and-mirrors stage the jobs deck gets),
+              // so fast swiping builds a visible pipeline instead of
+              // vanishing into toasts.
+              beginPersonPending({
+                name: person.name,
+                company: person.company,
+                title: person.title,
+              });
               void hasSeenPendingHint().then((seen) => {
                 if (seen) {
-                  showToast(`Locking down ${person.name}'s email. Your draft will land in your Inbox.`);
+                  showToast(`Hunting ${person.name}'s email. Watch your Inbox.`);
                 } else {
                   void markPendingHintSeen();
                   showToast(
-                    `Hard-to-find addresses take a minute or two. We keep hunting ${person.name}'s in the background and the bell rings when the draft lands. You are only charged if we find one.`,
+                    `Hard-to-find addresses take a minute or two. ${person.name} is now in your Inbox while we hunt, and the bell rings when the draft lands. You are only charged if we find one.`,
                   );
                 }
               });
@@ -476,7 +485,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           showToast('Could not reach that person. You were not charged.');
         });
     },
-    [deckId, showToast, action, peopleFilter],
+    [deckId, showToast, action, peopleFilter, beginPersonPending],
   );
 
   // Loading and error belong to whichever source is live. A filtered deck that
@@ -589,23 +598,35 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       return (
         <StateView
           card
-          icon={noneAtAll ? 'search-outline' : 'checkmark-done-circle-outline'}
+          icon={noneAtAll ? 'search-outline' : 'flash-outline'}
           tone={noneAtAll ? 'neutral' : 'success'}
-          title={noneAtAll ? 'Nobody matched that' : 'That’s all of them'}
+          title={noneAtAll ? 'Nobody matched that' : 'Batch cleared'}
           body={
             noneAtAll
               ? searchQuery.data?.vagueReason ||
                 `We couldn’t find anyone matching “${peopleFilter}”. Try a broader role, or drop the city.`
-              : `You’ve been through everyone we found for “${peopleFilter}”.`
+              : `That’s this round of “${peopleFilter}”. There are more where they came from.`
           }
-          prominent={!!moreCursor}
-          actionLabel={moreCursor ? 'Show more' : 'Change my search'}
+          prominent
+          actionLabel={moreCursor ? 'Keep going' : 'Find me more'}
           onAction={
-            moreCursor ? loadMorePeople : () => router.push('/feed-filter?deck=people')
+            moreCursor
+              ? loadMorePeople
+              : () => {
+                  // Same sentence, fresh humans: the server excludes everyone
+                  // from recent decks and saved contacts, so re-searching digs
+                  // deeper into the well instead of replaying it.
+                  if (!peopleFilter) return;
+                  queryClient.removeQueries({ queryKey: ['peopleSearch', peopleFilter] });
+                  void searchQuery.refetch();
+                  showToast('Digging deeper. Fresh people on the way.');
+                }
           }
           actionLoading={loadingMore}
-          secondaryLabel="Back to my default feed"
-          onSecondary={() => updateSwipeSettings({ peopleFilter: null })}
+          secondaryLabel="Change my search"
+          onSecondary={() => router.push('/feed-filter?deck=people')}
+          tertiaryLabel="Back to my default feed"
+          onTertiary={() => updateSwipeSettings({ peopleFilter: null })}
         />
       );
     }

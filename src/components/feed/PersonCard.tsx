@@ -246,7 +246,7 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
             labelled sections for two chips spent about 60pt of card height
             restating what the icons already say — a graduation cap is
             "School" and a person glyph is "who they are". */}
-        {person.school || person.relation || person.joinedYear || appliedHere ? (
+        {person.school || person.relation || person.joinedYear || person.prevCompany || appliedHere ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {/* The reason this person is in front of you, when it is the
                 strongest one there is: you already applied to this company, so
@@ -288,7 +288,33 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
                 size="lg"
               />
             ) : null}
+            {/* Where they were before: "ex-Goldman" is a settle-worthy fact
+                (Rylan 2026-08-27: thin cards get flicked). Real data only. */}
+            {person.prevCompany ? (
+              <Chip
+                label={`ex-${person.prevCompany}`}
+                tone="neutral"
+                icon="arrow-forward-outline"
+                size="lg"
+                numberOfLines={1}
+              />
+            ) : null}
           </View>
+        ) : null}
+
+        {/* The one-line why, when the scorer wrote one and the fuller reasons
+            list below is empty (both render would say the same thing twice). */}
+        {!person.reasons?.length && person.briefing ? (
+          <Text
+            numberOfLines={2}
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 13.5,
+              lineHeight: 19,
+              color: colors.inkSecondary,
+            }}>
+            {person.briefing}
+          </Text>
         ) : null}
 
         {/* Reasons as ROWS, not chips. The ranker writes sentences ("Goldman

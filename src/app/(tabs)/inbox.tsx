@@ -223,12 +223,15 @@ function DraftingRow({ item, onPress }: { item: OutreachItem; onPress: () => voi
         gap: 12,
       }}>
       {!queued && size.w > 0 ? <SnakeBorder w={size.w} h={size.h} color={colors.marketing} /> : null}
-      <Avatar name={item.contact?.name || item.company} size={44} />
+      <Avatar name={item.contact?.name || item.personName || item.company} size={44} />
       <View style={{ flex: 1, gap: 4 }}>
         <Text numberOfLines={1} style={{ fontFamily: fonts.sansSemibold, fontSize: 15.5, color: colors.ink }}>
           {/* The magic moment: the row becomes the PERSON as soon as the
               server finds them, while the draft is still being written. */}
-          {item.contact?.name ? `${item.contact.name} · ${item.company}` : item.company}
+          {/* People-deck hunts know the person from the swipe itself. */}
+          {(item.contact?.name || item.personName)
+            ? `${item.contact?.name || item.personName} · ${item.company}`
+            : item.company}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {queued ? (
