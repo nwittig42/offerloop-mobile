@@ -1032,10 +1032,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // can follow the swap instead of showing "no longer exists".
   const reconciledIds = useRef<Record<string, string>>({});
 
+  const lastToastAt = useRef(0);
   const showToast = useCallback((message: string, showInboxAction = false) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    // Rapid-fire toasts (fast swiping fires one per reveal) get a short
+    // life: when another toast showed in the last 4s the reader is mid-
+    // rhythm and each one only needs a glance (Rylan 2026-08-27: "when
+    // you're swiping pretty fast, it's just kinda a lot"). A lone toast
+    // keeps the full read time.
+    const now = Date.now();
+    const rapid = now - lastToastAt.current < 4000;
+    lastToastAt.current = now;
     setToast({ message, showInboxAction });
-    toastTimer.current = setTimeout(() => setToast(null), 3200);
+    toastTimer.current = setTimeout(() => setToast(null), rapid ? 1600 : 3200);
   }, []);
 
   // Give a swipe-token back when a swipe finds no contact (nothing was actually
