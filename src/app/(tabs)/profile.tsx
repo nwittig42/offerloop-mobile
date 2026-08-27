@@ -178,7 +178,9 @@ function ProfileCompletion({
     { label: 'Pick target industries', done: profile.industries.length > 0, action: 'industries' },
     { label: 'Add your grad year', done: !!profile.gradYear?.trim(), action: 'gradYear' },
     { label: 'Write a short About', done: !!profile.about?.trim(), action: 'about' },
-    { label: 'Upload your resume', done: profile.hasResume, action: 'resume' },
+    // "Add", not "Upload": the action opens the three doors (upload /
+    // LinkedIn / describe), and half its audience has no file to upload.
+    { label: 'Add your resume', done: profile.hasResume, action: 'resume' },
     { label: 'Connect Gmail', done: profile.gmailConnected, action: 'gmail' },
   ];
   const done = items.filter((i) => i.done).length;
