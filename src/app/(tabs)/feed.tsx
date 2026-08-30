@@ -26,7 +26,6 @@ import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import { sendJobFeedback } from '@/api/endpoints/feed';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
-import DraftSendChoice from '@/components/feed/DraftSendChoice';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
 import PeopleFeedView from '@/components/feed/PeopleFeedView';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
@@ -163,32 +162,38 @@ export default function FeedScreen() {
   }, [updateSwipeSettings, showToast]);
 
   const enableHiringManagerSend = useCallback(() => {
-    updateSwipeSettings({ action: 'send' });
+    // Reachable straight from Off in the one-row control, so confirming Send
+    // must also turn the feature on, not just flip the action.
+    updateSwipeSettings({ action: 'send', emailHiringManager: true, priority: 'hiring_manager' });
     showToast('Auto-sending. Swipes go out without review.');
   }, [updateSwipeSettings, showToast]);
 
-  const toggleHiringManager = useCallback(() => {
-    if (swipeSettings.emailHiringManager) {
-      updateSwipeSettings({ emailHiringManager: false });
-      showToast('Off. Swipes just submit the application.');
-      return;
-    }
-    setHmConfirm('enable');
-  }, [swipeSettings.emailHiringManager, updateSwipeSettings, showToast]);
-
-  // Draft is a free move. Send is not, so it goes through the dialog and the
-  // segmented control only follows once that is answered.
-  const chooseDraftOrSend = useCallback(
-    (next: 'draft' | 'send') => {
-      if (next === draftOrSend) return;
+  // One handler for the one-row Off / Draft / Send control. Off and Draft
+  // are instant; turning on (extra credits) and Send (auto-sending in the
+  // user's name) each confirm first, so the control only moves once the
+  // dialog is answered.
+  const selectHiringManagerMode = useCallback(
+    (next: 'off' | 'draft' | 'send') => {
+      const on = swipeSettings.emailHiringManager;
+      const current = !on ? 'off' : swipeSettings.action === 'send' ? 'send' : 'draft';
+      if (next === current) return;
+      if (next === 'off') {
+        updateSwipeSettings({ emailHiringManager: false });
+        showToast('Off. Swipes just submit the application.');
+        return;
+      }
       if (next === 'draft') {
+        if (!on) {
+          setHmConfirm('enable');
+          return;
+        }
         updateSwipeSettings({ action: 'draft' });
         showToast('We’ll draft it. Nothing goes out without you.');
         return;
       }
       setHmConfirm('send');
     },
-    [draftOrSend, updateSwipeSettings, showToast],
+    [swipeSettings.emailHiringManager, swipeSettings.action, updateSwipeSettings, showToast],
   );
 
   // The auto-apply nudge card lived here for one release; Rylan cut it
@@ -588,8 +593,14 @@ export default function FeedScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <HiringManagerToggle
-                      on={swipeSettings.emailHiringManager}
-                      onPress={toggleHiringManager}
+                      mode={
+                        !swipeSettings.emailHiringManager
+                          ? 'off'
+                          : swipeSettings.action === 'send'
+                            ? 'send'
+                            : 'draft'
+                      }
+                      onSelect={selectHiringManagerMode}
                     />
                   </View>
                   <ActionCircle
@@ -636,18 +647,10 @@ export default function FeedScreen() {
                 ) : null}
 
               </GlassBar>
-              {/* The follow-up, and only when it means something: we are
-                  writing to this person, so do you want to read it first?
-                  OUTSIDE the glass bar (2026-08-30): as a second row inside
-                  it, it spilled past the bar's bottom edge and the action
-                  circles drew on top of "Draft it / Send it", which read as
-                  a rendering glitch. As its own row the layout flows and
-                  nothing overlaps. */}
-              {swipeSettings.emailHiringManager ? (
-                <View style={{ marginTop: 10 }}>
-                  <DraftSendChoice value={draftOrSend} onChange={chooseDraftOrSend} />
-                </View>
-              ) : null}
+              {/* Draft-versus-send no longer exists as a second row here at
+                  all (2026-08-30): it merged into the Off / Draft / Send
+                  control inside the bar, because a second row kept colliding
+                  with the floating action circles no matter where it stood. */}
               <View style={{ marginTop: 14, marginBottom: 8 }}>
                 <DeckActions
                   drag={dragX}
