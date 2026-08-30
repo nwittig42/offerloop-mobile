@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { listAppliedJobs } from '@/api/endpoints/autoApply';
@@ -659,7 +659,15 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       );
     }
     return (
-      <View style={{ flex: 1 }}>
+      /* Scrolls, deliberately: the batch-cleared card plus the firms nudge is
+         taller than most phones, and as fixed siblings the nudge drew ON TOP
+         of the card's last button (Rylan 2026-08-30, screenshot). In a scroll
+         everything keeps its own space and the nudge peeking up from the
+         bottom is its own invitation to scroll. */
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}>
         <StateView
           card
           icon="checkmark-done-circle-outline"
@@ -719,7 +727,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             />
           </View>
         ) : null}
-      </View>
+      </ScrollView>
     );
   }
 

@@ -82,8 +82,20 @@ export default function ScoutProfileNudge({
   const [picked, setPicked] = useState<string[]>([]);
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  // Firms (or roles, or cities) the user typed themselves. They render as
+  // chips alongside the suggestions, already selected, and save the same way.
+  const [custom, setCustom] = useState<string[]>([]);
+  const [customText, setCustomText] = useState('');
 
-  const chips = useMemo(() => CHIPS[nudge] ?? [], [nudge]);
+  const addCustom = useCallback(() => {
+    const v = customText.trim();
+    if (!v) return;
+    setCustom((prev) => (prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v]));
+    setPicked((prev) => (prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v]));
+    setCustomText('');
+  }, [customText]);
+
+  const chips = useMemo(() => [...(CHIPS[nudge] ?? []), ...custom], [nudge, custom]);
   const isText = nudge === 'school';
   const canSave = isText ? !!text.trim() : picked.length > 0;
 
@@ -189,6 +201,41 @@ export default function ScoutProfileNudge({
           })}
         </View>
       )}
+
+      {!isText ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Input
+              value={customText}
+              onChangeText={setCustomText}
+              placeholder="Add your own…"
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={addCustom}
+            />
+          </View>
+          <Pressable
+            onPress={addCustom}
+            disabled={!customText.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Add what you typed to the list"
+            hitSlop={8}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: customText.trim() ? colors.navy : colors.surface,
+            }}>
+            <Ionicons
+              name="add"
+              size={20}
+              color={customText.trim() ? colors.paper : colors.inkTertiary}
+            />
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <Pressable
