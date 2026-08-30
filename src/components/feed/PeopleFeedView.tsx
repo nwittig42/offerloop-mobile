@@ -667,7 +667,13 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 24 }}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        // Typing in the nudge must not strand the input under the keyboard:
+        // the insets adjustment gives the scroll room to reach it, and
+        // persistTaps lets a suggestion chip be tapped without a first tap
+        // that only dismisses the keyboard.
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled">
         <StateView
           card
           icon="checkmark-done-circle-outline"

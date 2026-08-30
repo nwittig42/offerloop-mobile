@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { saveRankerSignals, saveTargetTrack, savePreferredLocations } from '@/api/endpoints/preferences';
 import Input from '@/components/ui/Input';
+import { suggestFirms } from '@/lib/firmSuggestions';
 import { markNudgeAnswered, markNudgeDismissed, type NudgeKey } from '@/lib/profileNudge';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -88,12 +89,18 @@ export default function ScoutProfileNudge({
   const [customText, setCustomText] = useState('');
 
   const addCustom = useCallback(() => {
-    const v = customText.trim();
+    let v = customText.trim();
     if (!v) return;
+    // Enter on "barclay" adds Barclays: snap to the canonical name when the
+    // top suggestion starts with what they typed. A miss keeps their text.
+    if (nudge === 'dreamCompanies') {
+      const top = suggestFirms(v, [])[0];
+      if (top && top.toLowerCase().startsWith(v.toLowerCase())) v = top;
+    }
     setCustom((prev) => (prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v]));
     setPicked((prev) => (prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v]));
     setCustomText('');
-  }, [customText]);
+  }, [customText, nudge]);
 
   const chips = useMemo(() => [...(CHIPS[nudge] ?? []), ...custom], [nudge, custom]);
   const isText = nudge === 'school';
@@ -201,6 +208,40 @@ export default function ScoutProfileNudge({
           })}
         </View>
       )}
+
+      {!isText && nudge === 'dreamCompanies' && customText.trim().length >= 2 ? (
+        /* Live matches for what they are typing: "barclay" should become
+           Barclays, not a typo the dig then anchors an exact search on. */
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {suggestFirms(customText, [...picked, ...custom]).map((f) => (
+            <Pressable
+              key={f}
+              onPress={() => {
+                setPicked((prev) => (prev.includes(f) ? prev : [...prev, f]));
+                setCustom((prev) => (prev.includes(f) ? prev : [...prev, f]));
+                setCustomText('');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${f}`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 9,
+                backgroundColor: colors.accent + '14',
+                borderWidth: 1,
+                borderColor: colors.accent + '44',
+              }}>
+              <Ionicons name="add" size={12} color={colors.accent} />
+              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+                {f}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {!isText ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
