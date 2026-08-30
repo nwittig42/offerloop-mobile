@@ -82,9 +82,11 @@ export default function HiringManagerToggle({
             paddingHorizontal: 9,
             paddingVertical: 3,
             borderRadius: 6,
-            backgroundColor: on ? colors.accent + '1F' : colors.surface,
+            // The verb keeps its accent even while off, just quieter, so the
+            // whole row does not wash out to grey (Rylan 2026-08-30).
+            backgroundColor: on ? colors.accent + '1F' : colors.accent + '12',
             borderWidth: 1,
-            borderColor: on ? colors.accent + '55' : colors.hairline,
+            borderColor: on ? colors.accent + '55' : colors.accent + '33',
             flexDirection: 'row',
             alignItems: 'center',
             gap: 4,
@@ -93,14 +95,14 @@ export default function HiringManagerToggle({
             style={{
               fontFamily: fonts.sansSemibold,
               fontSize: 12.5,
-              color: on ? colors.accent : colors.inkTertiary,
+              color: on ? colors.accent : colors.accent + '99',
             }}>
             {verb}
           </Text>
           <Ionicons
             name="chevron-expand-outline"
             size={11}
-            color={on ? colors.accent : colors.inkTertiary}
+            color={on ? colors.accent : colors.accent + '99'}
           />
         </View>
         <Text
@@ -124,7 +126,12 @@ export default function HiringManagerToggle({
           width: TRACK_W,
           height: TRACK_H,
           borderRadius: TRACK_H / 2,
-          backgroundColor: on ? colors.accent : colors.hairline,
+          // Off must still read as a switch. The hairline track vanished
+          // into the glass bar (Rylan 2026-08-30), so off gets a real grey
+          // with a border, and the thumb keeps its own outline below.
+          backgroundColor: on ? colors.accent : colors.inkTertiary + '55',
+          borderWidth: on ? 0 : 1,
+          borderColor: colors.inkTertiary + '66',
           justifyContent: 'center',
           paddingHorizontal: 2,
         }}>
@@ -135,6 +142,8 @@ export default function HiringManagerToggle({
               height: THUMB,
               borderRadius: THUMB / 2,
               backgroundColor: colors.paper,
+              borderWidth: 1,
+              borderColor: on ? 'transparent' : colors.inkTertiary + '44',
             },
             thumbStyle,
           ]}

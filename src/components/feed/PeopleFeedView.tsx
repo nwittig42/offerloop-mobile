@@ -157,7 +157,12 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
         setFront([]);
         showToast(`${next.candidates.length} more people from your targets.`);
       } else {
-        showToast('That really is everyone we hold at your targets, for now.');
+        // The well is only as deep as the target list, and a dry "show more"
+        // almost always means the list is one firm long. Put the firms sheet
+        // right here (bypassing the nudge pacing, this is the fix, not a nag)
+        // instead of leaving a dead-end toast.
+        setNudge('dreamCompanies');
+        showToast('That is everyone at your current targets. Add firms to dig deeper.');
       }
     } catch {
       showToast('Could not load more right now. Try again in a moment.');
