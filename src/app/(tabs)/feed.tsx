@@ -168,33 +168,32 @@ export default function FeedScreen() {
     showToast('Auto-sending. Swipes go out without review.');
   }, [updateSwipeSettings, showToast]);
 
-  // One handler for the one-row Off / Draft / Send control. Off and Draft
-  // are instant; turning on (extra credits) and Send (auto-sending in the
-  // user's name) each confirm first, so the control only moves once the
-  // dialog is answered.
-  const selectHiringManagerMode = useCallback(
-    (next: 'off' | 'draft' | 'send') => {
-      const on = swipeSettings.emailHiringManager;
-      const current = !on ? 'off' : swipeSettings.action === 'send' ? 'send' : 'draft';
-      if (next === current) return;
-      if (next === 'off') {
-        updateSwipeSettings({ emailHiringManager: false });
-        showToast('Off. Swipes just submit the application.');
-        return;
-      }
-      if (next === 'draft') {
-        if (!on) {
-          setHmConfirm('enable');
-          return;
-        }
-        updateSwipeSettings({ action: 'draft' });
-        showToast('We’ll draft it. Nothing goes out without you.');
-        return;
-      }
-      setHmConfirm('send');
-    },
-    [swipeSettings.emailHiringManager, swipeSettings.action, updateSwipeSettings, showToast],
-  );
+  // The switch: on/off. Turning on confirms (it spends credits); off is
+  // instant.
+  const toggleHiringManager = useCallback(() => {
+    if (swipeSettings.emailHiringManager) {
+      updateSwipeSettings({ emailHiringManager: false });
+      showToast('Off. Swipes just submit the application.');
+      return;
+    }
+    setHmConfirm('enable');
+  }, [swipeSettings.emailHiringManager, updateSwipeSettings, showToast]);
+
+  // The [Draft]/[Send] word in the sentence. While on it flips the action
+  // (Send confirms first); while off it acts as turn-on, same dialog as the
+  // switch, because tapping the sentence is clearly reaching for the feature.
+  const tapHiringManagerVerb = useCallback(() => {
+    if (!swipeSettings.emailHiringManager) {
+      setHmConfirm('enable');
+      return;
+    }
+    if (swipeSettings.action === 'send') {
+      updateSwipeSettings({ action: 'draft' });
+      showToast('We’ll draft it. Nothing goes out without you.');
+      return;
+    }
+    setHmConfirm('send');
+  }, [swipeSettings.emailHiringManager, swipeSettings.action, updateSwipeSettings, showToast]);
 
   // The auto-apply nudge card lived here for one release; Rylan cut it
   // 2026-08-11 (it ate feed space). Discovery of the swipe's add-on now rests
@@ -593,14 +592,10 @@ export default function FeedScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <HiringManagerToggle
-                      mode={
-                        !swipeSettings.emailHiringManager
-                          ? 'off'
-                          : swipeSettings.action === 'send'
-                            ? 'send'
-                            : 'draft'
-                      }
-                      onSelect={selectHiringManagerMode}
+                      on={swipeSettings.emailHiringManager}
+                      action={swipeSettings.action === 'send' ? 'send' : 'draft'}
+                      onToggle={toggleHiringManager}
+                      onActionTap={tapHiringManagerVerb}
                     />
                   </View>
                   <ActionCircle
