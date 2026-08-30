@@ -64,8 +64,11 @@ const STATE_MARK: Record<ContactState, { icon: keyof typeof Ionicons.glyphMap | 
 };
 
 const IN_FLIGHT = (j: AppliedJob) => !AUTO_APPLY_TERMINAL.includes(j.status);
-const NEEDS_YOU = (j: AppliedJob) =>
-  j.status === 'needs_attention' || j.status === 'needs_verification';
+// Red is for homework: questions only the student can answer. An emailed
+// verification code is a different, calmer ask (and often resolves on its
+// own), so it gets its own amber card below rather than swelling the red one.
+const NEEDS_YOU = (j: AppliedJob) => j.status === 'needs_attention';
+const NEEDS_CODE = (j: AppliedJob) => j.status === 'needs_verification';
 
 // Newest leads and is the default (Rylan 2026-08-18): "I just did that" is a
 // small win every visit, and an A-Z list reads identical day after day until
@@ -321,7 +324,8 @@ export default function NetworkScreen() {
   }, [appliedJobs, q]);
 
   const needsList = filteredApplied.filter(NEEDS_YOU);
-  const doneList = filteredApplied.filter((j) => !NEEDS_YOU(j));
+  const codeList = filteredApplied.filter(NEEDS_CODE);
+  const doneList = filteredApplied.filter((j) => !NEEDS_YOU(j) && !NEEDS_CODE(j));
 
   const switchTab = (t: TabKey) => {
     setTab(t);
@@ -838,17 +842,18 @@ export default function NetworkScreen() {
                     </Text>
                     {needsList.map((j) => {
                       const qs = j.pending_questions || [];
-                      const waitingOnCode = j.status === 'needs_verification';
                       // Say what is actually waiting. "Finish" alone never told
                       // the student that tapping opens a form, or how much work
                       // it is — naming the questions makes the doorway obvious
                       // before they commit to walking through it.
-                      const what = waitingOnCode
-                        ? 'Waiting on an emailed code'
-                        : qs.length
-                          ? `${qs.length} question${qs.length === 1 ? '' : 's'} to answer`
-                          : 'A few questions to answer';
-                      const preview = !waitingOnCode && qs[0]?.label ? qs[0].label : '';
+                      const what = qs.length
+                        ? `${qs.length} question${qs.length === 1 ? '' : 's'} to answer`
+                        : 'A few questions to answer';
+                      // Pending questions carry their text under "question";
+                      // reading only "label" left this preview permanently
+                      // blank (same field-name bug the answer library had).
+                      const firstQ: any = qs[0] || {};
+                      const preview = firstQ.label || firstQ.question || '';
                       return (
                         <Pressable
                           key={j.auto_apply_id}
@@ -912,7 +917,7 @@ export default function NetworkScreen() {
                               backgroundColor: colors.negative + '0D',
                             }}>
                             <Ionicons
-                              name={waitingOnCode ? 'mail-unread-outline' : 'help-circle-outline'}
+                              name="help-circle-outline"
                               size={15}
                               color={colors.negative}
                             />
@@ -931,13 +936,73 @@ export default function NetworkScreen() {
                                 fontSize: 13,
                                 color: colors.negative,
                               }}>
-                              {waitingOnCode ? 'Open' : 'Answer them'}
+                              Answer them
                             </Text>
                             <Ionicons name="chevron-forward" size={15} color={colors.negative} />
                           </View>
                         </Pressable>
                       );
                     })}
+                  </View>
+                ) : null}
+
+                {/* Waiting on an emailed code: a calmer ask than the red
+                    block. The company's system emailed a confirmation code;
+                    tapping opens the entry form, and if the email never came
+                    the honest fallback is applying on the site. Amber, not
+                    red: this is a hold-up, not homework. */}
+                {codeList.length > 0 ? (
+                  <View
+                    style={{
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: colors.waiting + '66',
+                      backgroundColor: colors.waiting + '14',
+                      padding: 12,
+                      gap: 8,
+                    }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="mail-unread-outline" size={16} color={colors.waiting} />
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontFamily: fonts.sansSemibold,
+                          fontSize: 13.5,
+                          color: colors.ink,
+                        }}>
+                        Waiting on an email confirmation
+                      </Text>
+                    </View>
+                    {codeList.map((j) => (
+                      <Pressable
+                        key={j.auto_apply_id}
+                        onPress={() => router.push(`/apply-questions/${j.auto_apply_id}`)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${j.job_title} at ${j.company}. Waiting on an emailed code. Opens the code entry.`}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          backgroundColor: colors.paper,
+                          borderRadius: 12,
+                          padding: 11,
+                        }}>
+                        <CompanyLogo name={j.company} size={32} radius={8} />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            numberOfLines={1}
+                            style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: colors.ink }}>
+                            {j.job_title || 'Role'}
+                          </Text>
+                          <Text
+                            numberOfLines={1}
+                            style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkSecondary }}>
+                            The company emailed a code. Have it? Tap to enter it.
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={15} color={colors.inkTertiary} />
+                      </Pressable>
+                    ))}
                   </View>
                 ) : null}
 

@@ -337,7 +337,7 @@ export function appliedStatusMeta(
     case 'submitted':
       return { label: 'Applied', tone: 'positive' };
     case 'needs_verification':
-      return { label: 'Needs verification', tone: 'waiting' };
+      return { label: 'Waiting on an email code', tone: 'waiting' };
     case 'needs_attention':
       return { label: 'Needs your input', tone: 'waiting' };
     case 'failed':
@@ -370,9 +370,11 @@ export function appliedStatusMeta(
  */
 export function needsUserCount(jobs: AppliedJob[] | undefined): number {
   if (!jobs?.length) return 0;
-  return jobs.filter(
-    (j) => j.status === 'needs_attention' || j.status === 'needs_verification',
-  ).length;
+  // Only real homework counts: questions the student must answer. A pending
+  // email code renders as its own calm amber card, not a red badge, because
+  // it often resolves on its own and alarming red taught users to distrust
+  // the badge (Rylan 2026-08-30).
+  return jobs.filter((j) => j.status === 'needs_attention').length;
 }
 
 export type SavedAnswer = {

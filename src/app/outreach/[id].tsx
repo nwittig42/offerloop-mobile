@@ -470,11 +470,33 @@ export default function OutreachDetailScreen() {
                   />
                 </View>
                 <View style={{ gap: 8 }}>
-                  <Button label="Send" fullWidth size="lg" onPress={send} />
+                  {/* An empty draft must not be sendable. A blank body here
+                      means the pipeline never finished writing (no verified
+                      email, or the draft is still landing), and Send would
+                      fire a blank email at a real person. */}
+                  {body ? (
+                    <Button label="Send" fullWidth size="lg" onPress={send} />
+                  ) : !messagesQuery.isLoading ? (
+                    <Text
+                      style={{
+                        fontFamily: fonts.sans,
+                        fontSize: 12.5,
+                        lineHeight: 18,
+                        color: colors.inkSecondary,
+                        textAlign: 'center',
+                        paddingVertical: 6,
+                      }}>
+                      This draft is not ready to send. We could not lock down a
+                      verified email for this person yet, so there is nothing
+                      written. Try Find another contact, or check back shortly.
+                    </Text>
+                  ) : null}
                   <GmailButton onPress={openGmail} />
-                  <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
-                    Sends from your connected Gmail, no need to leave the app.
-                  </Text>
+                  {body ? (
+                    <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkTertiary, textAlign: 'center' }}>
+                      Sends from your connected Gmail, no need to leave the app.
+                    </Text>
+                  ) : null}
                 </View>
               </Card>
             )}

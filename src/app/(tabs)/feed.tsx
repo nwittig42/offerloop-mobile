@@ -23,6 +23,7 @@ import { requestReviewIfDue } from '@/lib/appRating';
 import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
 import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
+import { sendJobFeedback } from '@/api/endpoints/feed';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
@@ -359,6 +360,12 @@ export default function FeedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
 
+      // Teach the ranker. A right swipe is the strongest taste signal the
+      // deck produces, and until now the server never heard it: only passes
+      // were recorded, so the rank learned what you hate but not what you
+      // want. Fire-and-forget, same as the pass signal.
+      void sendJobFeedback(job.id, 'positive');
+
       if (job.autoApplyEligible) {
         // Deduped background submission (surfaces in Network › Applied).
         // autoApplyJob blocks a second apply to the same job.
@@ -628,13 +635,19 @@ export default function FeedScreen() {
                   </Pressable>
                 ) : null}
 
-                {/* The follow-up, and only when it means something: we are
-                    writing to this person, so do you want to read it first? */}
-                {swipeSettings.emailHiringManager ? (
-                  <DraftSendChoice value={draftOrSend} onChange={chooseDraftOrSend} />
-                ) : null}
-              
               </GlassBar>
+              {/* The follow-up, and only when it means something: we are
+                  writing to this person, so do you want to read it first?
+                  OUTSIDE the glass bar (2026-08-30): as a second row inside
+                  it, it spilled past the bar's bottom edge and the action
+                  circles drew on top of "Draft it / Send it", which read as
+                  a rendering glitch. As its own row the layout flows and
+                  nothing overlaps. */}
+              {swipeSettings.emailHiringManager ? (
+                <View style={{ marginTop: 10 }}>
+                  <DraftSendChoice value={draftOrSend} onChange={chooseDraftOrSend} />
+                </View>
+              ) : null}
               <View style={{ marginTop: 14, marginBottom: 8 }}>
                 <DeckActions
                   drag={dragX}
