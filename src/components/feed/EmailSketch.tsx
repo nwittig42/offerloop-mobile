@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
+import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
@@ -15,6 +16,12 @@ import { fonts } from '@/theme/tokens';
 export default function EmailSketch({ onNavigate }: { onNavigate?: () => void }) {
   const colors = useColors();
   const router = useRouter();
+  const { profile } = useApp();
+  const fromAddress = (profile.gmailAddress || '').trim();
+  // A school address makes outreach land as "current student" before a word
+  // is read; a casual personal handle can cost the open (Rylan 2026-08-31,
+  // straight from a friend's onboarding question).
+  const isEdu = fromAddress.toLowerCase().endsWith('.edu');
 
   const lines: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
     { icon: 'sparkles-outline', text: 'Opener tied to their actual path' },
@@ -40,6 +47,13 @@ export default function EmailSketch({ onNavigate }: { onNavigate?: () => void })
           borderBottomWidth: 1,
           borderBottomColor: colors.hairline,
         }}>
+        {fromAddress ? (
+          <Text
+            numberOfLines={1}
+            style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.ink, marginBottom: 2 }}>
+            From: {fromAddress}
+          </Text>
+        ) : null}
         <Text style={{ fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.inkSecondary }}>
           Subject: written per person, named after their role or move
         </Text>
@@ -61,6 +75,20 @@ export default function EmailSketch({ onNavigate }: { onNavigate?: () => void })
           </View>
         ))}
       </View>
+      {fromAddress && !isEdu ? (
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 11.5,
+            lineHeight: 16,
+            color: colors.inkSecondary,
+            paddingHorizontal: 12,
+            paddingBottom: 10,
+          }}>
+          Tip: a school address gets outreach taken most seriously. If your
+          school email runs on Gmail, connect it from Profile, then Settings.
+        </Text>
+      ) : null}
       <Pressable
         onPress={() => {
           onNavigate?.();

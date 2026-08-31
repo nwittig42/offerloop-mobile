@@ -50,6 +50,18 @@ export async function saveTargetTrack(opts: {
       ...(opts.linkedinUrl ? { linkedinUrl: opts.linkedinUrl } : {}),
     },
   });
+  // A LinkedIn URL is a whole profile the engine can read. The website has
+  // always self-enriched on this moment; the app never did, so app-only
+  // users kept an empty resumeParsed and generic emails (Rylan 2026-08-31).
+  // Fire-and-forget: the server merges LinkedIn under any real resume, so
+  // the resume-first hierarchy holds.
+  if (opts.linkedinUrl) {
+    void apiFetch('/api/enrich-linkedin-onboarding', {
+      method: 'POST',
+      body: { linkedin_url: opts.linkedinUrl },
+      timeoutMs: 60_000,
+    }).catch(() => {});
+  }
 }
 
 /** Acquisition attribution from onboarding ("How did you hear about us?").
