@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { isInsufficientCredits } from '@/api/errors';
 import { previewMeetingPrep, type MeetingPrepPreview } from '@/api/endpoints/meetingPreps';
@@ -161,6 +161,35 @@ export default function NewMeetingPrepScreen() {
               Scan a LinkedIn QR at a career fair
             </Text>
           </Pressable>
+
+          {/* The other half of "paste their LinkedIn": going and GETTING it.
+              Opens the LinkedIn app when installed, the site otherwise, and
+              the three steps under it are the whole how-to (Rylan
+              2026-08-30: users did not know how to grab a profile URL). */}
+          <Pressable
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            onPress={() => {
+              void Linking.openURL('linkedin://').catch(() =>
+                Linking.openURL('https://www.linkedin.com'),
+              );
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open LinkedIn to find their profile">
+            <Ionicons name="logo-linkedin" size={16} color={colors.accent} />
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+              Open LinkedIn to find them
+            </Text>
+          </Pressable>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              lineHeight: 18,
+              color: colors.inkTertiary,
+            }}>
+            In LinkedIn: open their profile, tap the three dots, then Share via,
+            then Copy link. Come back and paste it above.
+          </Text>
         </Card>
 
         {previewing ? (

@@ -269,8 +269,8 @@ export default function MeetingPrepDetailScreen() {
                 {prep.stageLabel || 'Still building the rest…'}
               </Text>
               <Text style={{ fontFamily: fonts.sans, fontSize: 11.5, color: colors.inkSecondary }}>
-                Sections appear as they’re ready — you can start reading now, or
-                close this and we’ll notify you.
+                About 2 minutes, and it builds on our servers: keep swiping,
+                even close the app. It lands in Network, under Meetings.
               </Text>
             </View>
             {typeof prep.progressPct === 'number' ? (
