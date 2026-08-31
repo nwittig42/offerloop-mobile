@@ -345,7 +345,10 @@ function Body({ person, appliedHere }: { person: Candidate; appliedHere?: boolea
                   style={{ marginTop: 1 }}
                 />
                 <Text
-                  numberOfLines={2}
+                  // Full sentences, no ellipsis (Rylan 2026-08-30): the "why"
+                  // is the card's persuasion and "...just as Amazon is one
+                  // of your target compa..." persuades nobody. Bullets are
+                  // capped at 3, so worst case is a few extra lines.
                   style={{
                     flex: 1,
                     fontFamily: fonts.sansMedium,

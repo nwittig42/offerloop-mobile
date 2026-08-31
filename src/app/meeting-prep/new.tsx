@@ -145,6 +145,41 @@ export default function NewMeetingPrepScreen() {
               autoCapitalize="none"
             />
           </View>
+
+          {/* The other half of "paste their LinkedIn": going and GETTING it.
+              A real button, right under the field it feeds (Rylan
+              2026-08-30: the small link version was missable and users go
+              to the LinkedIn app anyway to find profiles). The https URL is
+              a universal link: iOS opens the LinkedIn APP when installed,
+              the site otherwise, no custom scheme allowlisting needed. */}
+          <Pressable
+            onPress={() => void Linking.openURL('https://www.linkedin.com/')}
+            accessibilityRole="button"
+            accessibilityLabel="Open LinkedIn to find their profile"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              height: 46,
+              borderRadius: 10,
+              backgroundColor: '#0A66C2',
+            }}>
+            <Ionicons name="logo-linkedin" size={18} color="#FFFFFF" />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: '#FFFFFF' }}>
+              Open LinkedIn to find them
+            </Text>
+          </Pressable>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              lineHeight: 18,
+              color: colors.inkTertiary,
+            }}>
+            In LinkedIn: open their profile, tap the three dots, then Share via,
+            then Copy link. Come back and paste it above.
+          </Text>
           <View style={{ gap: 6 }}>
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: colors.inkSecondary }}>
               Their name (optional)
@@ -161,35 +196,6 @@ export default function NewMeetingPrepScreen() {
               Scan a LinkedIn QR at a career fair
             </Text>
           </Pressable>
-
-          {/* The other half of "paste their LinkedIn": going and GETTING it.
-              Opens the LinkedIn app when installed, the site otherwise, and
-              the three steps under it are the whole how-to (Rylan
-              2026-08-30: users did not know how to grab a profile URL). */}
-          <Pressable
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            onPress={() => {
-              void Linking.openURL('linkedin://').catch(() =>
-                Linking.openURL('https://www.linkedin.com'),
-              );
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open LinkedIn to find their profile">
-            <Ionicons name="logo-linkedin" size={16} color={colors.accent} />
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
-              Open LinkedIn to find them
-            </Text>
-          </Pressable>
-          <Text
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 12,
-              lineHeight: 18,
-              color: colors.inkTertiary,
-            }}>
-            In LinkedIn: open their profile, tap the three dots, then Share via,
-            then Copy link. Come back and paste it above.
-          </Text>
         </Card>
 
         {previewing ? (

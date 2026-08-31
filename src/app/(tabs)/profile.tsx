@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import ReferralCard from '@/components/ReferralCard';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -126,7 +127,10 @@ function ResumeDrop({
           </Text>
         </View>
         <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
-          {hasResume ? 'Replace' : 'Upload'}
+          {/* "Add", matching the row title: the action opens the three doors
+              (upload / LinkedIn / describe), and half its audience has no
+              file to upload. */}
+          {hasResume ? 'Replace' : 'Add'}
         </Text>
       </Card>
     </Pressable>
@@ -617,6 +621,13 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           </LinearGradient>
+          {/* Invite friends rides directly under the identity band (Rylan
+              2026-08-30): it lived at the bottom of Settings > More, where
+              the one growth loop we have was invisible. Same card, better
+              real estate. */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 12 }}>
+            <ReferralCard compact />
+          </View>
           {/* One line, one job (Rylan 2026-08-19): the centered action under
               the band. The ring above already says the balance; the exact
               count and the bar were restating it. */}

@@ -416,11 +416,9 @@ export default function SettingsScreen() {
 
         <SettingsSection label="More" />
 
-        {/* Invite friends moved off the always-visible stack. It is a
-            good offer, but it was the third gradient card competing for
-            attention above the fold on a page about you. */}
-        <ReferralCard compact />
-
+        {/* Invite friends lives under the identity band on the Profile tab
+            now (Rylan 2026-08-30): buried at the bottom of More, the one
+            growth loop we have was invisible. */}
         <Pressable onPress={() => router.push('/feedback')}>
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View
