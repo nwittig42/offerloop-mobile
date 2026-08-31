@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { ReactNode } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -30,6 +31,7 @@ export function ConfirmDialog({
   cancelLabel = 'Not now',
   onConfirm,
   onClose,
+  children,
 }: {
   visible: boolean;
   /** Optional. Omit both this and `title` when the explanation IS the dialog
@@ -44,6 +46,9 @@ export function ConfirmDialog({
   cancelLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
+  /** Optional visual between the body and the buttons, e.g. the email
+   *  structure sketch shown before enabling auto-send. */
+  children?: ReactNode;
 }) {
   const colors = useColors();
   const accent = tone === 'caution' ? colors.waiting : colors.accent;
@@ -103,6 +108,7 @@ export function ConfirmDialog({
               }}>
               {body}
             </Text>
+            {children}
           </View>
 
           <View style={{ gap: 8 }}>

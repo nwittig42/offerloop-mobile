@@ -26,6 +26,7 @@ import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import { sendJobFeedback } from '@/api/endpoints/feed';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
+import EmailSketch from '@/components/feed/EmailSketch';
 import HiringManagerToggle from '@/components/feed/HiringManagerToggle';
 import PeopleFeedView from '@/components/feed/PeopleFeedView';
 import SwipeDeck, { type SwipeDeckHandle } from '@/components/feed/SwipeDeck';
@@ -714,12 +715,13 @@ export default function FeedScreen() {
         icon="paper-plane-outline"
         tone="caution"
         title="Send these emails automatically?"
-        body="Your hiring-manager email goes out from your Gmail the moment you swipe, with nobody reading it first. This is your global outreach rule, so it applies everywhere in the app, not just this deck. Swipes between 10pm and 8am are saved as drafts instead."
+        body="Your hiring-manager email goes out from your Gmail the moment you swipe, with nobody reading it first. Every email follows this shape. This is your global outreach rule, so it applies everywhere in the app; swipes between 10pm and 8am are saved as drafts instead."
         confirmLabel="Send automatically"
         cancelLabel="Keep drafting"
         onConfirm={enableHiringManagerSend}
-        onClose={() => setHmConfirm(null)}
-      />
+        onClose={() => setHmConfirm(null)}>
+        <EmailSketch onNavigate={() => setHmConfirm(null)} />
+      </ConfirmDialog>
 
       {/* The resume doors: shown when the swipe wall blocks an auto-apply
           because the application profile is unfinished. Same bottom-sheet

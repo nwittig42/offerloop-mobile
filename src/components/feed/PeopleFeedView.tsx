@@ -16,6 +16,7 @@ import ProfileGapSurvey from '@/components/feed/ProfileGapSurvey';
 import ScoutProfileNudge from '@/components/feed/ScoutProfileNudge';
 import { ActionCircle } from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import EmailSketch from '@/components/feed/EmailSketch';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
 import {
@@ -908,8 +909,9 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           updateSwipeSettings({ action: 'send' });
           showToast('Auto-sending. Swipes go out without review.');
         }}
-        onClose={() => setConfirmSend(false)}
-      />
+        onClose={() => setConfirmSend(false)}>
+        <EmailSketch onNavigate={() => setConfirmSend(false)} />
+      </ConfirmDialog>
     </View>
   );
 }
