@@ -553,6 +553,21 @@ export default function SettingsScreen() {
             </Text>
           </View>
         )}
+        {/* Data heritage line: the FullEnrich reseller agreement requires
+            visible attribution for email data, placement agreed over email
+            2026-09-01 (quiet footer on the legal surface). Keep the exact
+            wording; it is the contractual sentence. */}
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 11,
+            color: colors.inkTertiary,
+            textAlign: 'center',
+            paddingTop: 10,
+            paddingBottom: 4,
+          }}>
+          Email data provided by FullEnrich
+        </Text>
       </ScrollView>
 
       <ConfirmDialog
