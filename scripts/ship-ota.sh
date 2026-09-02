@@ -32,8 +32,8 @@ fi
 # staging eas.json swap (commit 79ecd82) is gone: the staging TestFlight build
 # of 2026-08-13 was cut from this file. Update the constant below whenever a
 # new TestFlight build ships for that channel.
-PROD_RUNTIME="4e2b93f9bbb5b0a9c84ebe8812b9a656469c46a5"     # build 21, 1.2.0, 2026-09-01
-STAGING_RUNTIME="8191b301564de6706e0db75a2ccf7d86fec3de71"  # staging TF build 11, 2026-09-01
+PROD_RUNTIME="d7251e02a9b17f61d675a38c4e88a881d21aa0dc"     # build 22, 1.2.0 asset-fix, 2026-09-01
+STAGING_RUNTIME="bbb0d9a729bfeabcdf2fce3b3c9aea97944ea32c"  # staging TF build 13, 2026-09-01
 
 if [[ "$CHANNEL" == "production" ]]; then
   BRANCH="production"
