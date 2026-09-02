@@ -26,17 +26,27 @@ import type { Candidate } from '@/types';
  * dev/staging builds; production redirects to the feed.
  */
 
-const photo = (mod: number) =>
-  Image.resolveAssetSource(
-    [
-      require('../../../assets/images/screenshot/persona-0.png'),
-      require('../../../assets/images/screenshot/persona-1.png'),
-      require('../../../assets/images/screenshot/persona-2.png'),
-      require('../../../assets/images/screenshot/persona-3.png'),
-    ][mod],
-  ).uri;
+// Resolved LAZILY inside the component, never at module scope: expo-router
+// imports every route file during app startup, and a module-scope
+// resolveAssetSource ran at launch on every open of the app (staging build
+// 11 crash, 2026-09-01). Wrapped so a resolution failure degrades to the
+// initials tile instead of taking the process down.
+const photo = (mod: number): string | undefined => {
+  try {
+    return Image.resolveAssetSource(
+      [
+        require('../../../assets/images/screenshot/persona-0.png'),
+        require('../../../assets/images/screenshot/persona-1.png'),
+        require('../../../assets/images/screenshot/persona-2.png'),
+        require('../../../assets/images/screenshot/persona-3.png'),
+      ][mod],
+    )?.uri;
+  } catch {
+    return undefined;
+  }
+};
 
-const PERSONAS: Candidate[] = [
+const buildPersonas = (): Candidate[] => [
   {
     id: 'shot-1',
     name: 'Alina Cho',
@@ -86,24 +96,23 @@ const PERSONAS: Candidate[] = [
   },
 ];
 
-// isMock stays false ON PURPOSE: true renders the sample-data banner, which
-// would end up in the store screenshots. The screen itself never ships to
-// users, so there is no one to mislead.
-const FIXTURE_DECK: Deck = {
-  deckId: 'screenshot-stage',
-  candidates: PERSONAS,
-  isMock: false,
-};
-
 export default function ScreenshotDeck() {
   const colors = useColors();
   const router = useRouter();
   const queryClient = useQueryClient();
 
   // Seed the deck cache BEFORE PeopleFeedView mounts so its query renders
-  // the personas instead of fetching the real ranker deck.
+  // the personas instead of fetching the real ranker deck. Built inside
+  // the component so nothing here runs at app startup. isMock stays false
+  // ON PURPOSE: true renders the sample-data banner, which would end up in
+  // the store screenshots; the screen never ships to users.
   useState(() => {
-    queryClient.setQueryData(['rankerDeck'], FIXTURE_DECK);
+    const deck: Deck = {
+      deckId: 'screenshot-stage',
+      candidates: buildPersonas(),
+      isMock: false,
+    };
+    queryClient.setQueryData(['rankerDeck'], deck);
     return true;
   });
 
