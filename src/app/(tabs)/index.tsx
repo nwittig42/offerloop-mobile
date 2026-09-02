@@ -388,6 +388,7 @@ function ScoutTabInner() {
     isTourPending()
       .then((pending) => {
         if (!alive || !pending) return;
+        tourLaunched.current = false;
         setTourArmed(true);
         setTyped(TOUR_OPENER);
         track('tour_offered', {});
@@ -401,7 +402,13 @@ function ScoutTabInner() {
   // does NOT reach the model: this is the first thing a new user ever sends,
   // and it should be instant, free, and the same for everyone. Scout's answer
   // is the tour's first card.
+  // One-shot. Two taps on the send button in the same frame both see
+  // tourArmed as true; without this the opener lands in the thread twice and
+  // the tour starts on top of itself.
+  const tourLaunched = useRef(false);
   const startTourFromScout = useCallback(() => {
+    if (tourLaunched.current) return;
+    tourLaunched.current = true;
     setTourArmed(false);
     setTyped('');
     scoutThread.append({ from: 'user', text: TOUR_OPENER });

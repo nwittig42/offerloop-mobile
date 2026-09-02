@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 
 import { pickResume, uploadResume, type PickedResume, type ResumeParsed } from '@/api/endpoints/resume';
+import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import PrimaryCta from '@/components/ui/PrimaryCta';
 import LinkedInUrlHelp from '@/components/onboarding/LinkedInUrlHelp';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
@@ -168,6 +169,13 @@ export default function Intake() {
   const [resumeName, setResumeName] = useState('');
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ResumeParsed | null>(null);
+  // Build-from-LinkedIn, the door Rylan found missing on 2026-09-01: the
+  // builder already exists behind Profile and the Feed, onboarding just never
+  // offered it. It needs the URL saved and the profile enriched first, so this
+  // waits on both before opening the preview.
+  const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [pendingBuild, setPendingBuild] = useState(false);
 
   const [track, setTrack] = useState<string | null>(null);
   // The builder finalizes onto the account and invalidates /me, so a resume
@@ -204,6 +212,15 @@ export default function Intake() {
     // submitStep0 is stable enough for this: it only fires on the consent flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingContinue, consent]);
+
+  useEffect(() => {
+    if (pendingBuild && consent === 'granted') {
+      setPendingBuild(false);
+      void buildFromLinkedin();
+    }
+    // Same shape as the Continue resume above: fires once, on the consent flip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBuild, consent]);
 
 
   /** Each step returns early, and the account sheet has to outlive all three
@@ -327,6 +344,48 @@ export default function Intake() {
     }
   };
 
+  /**
+   * Build my resume from this LinkedIn. Same consent gate as Continue: the
+   * scrape sends their profile to an AI, so the disclosure comes first.
+   *
+   * The builder's preview route reads the ENRICHED profile from the account,
+   * not the URL, so the order here is fixed: save the URL (so it is never
+   * lost, see submitStep0), enrich and wait for it, then open the preview.
+   * Enrichment is a live scrape and takes a while; the button says so.
+   */
+  const buildFromLinkedin = async () => {
+    const normalized = normalizeLinkedin(linkedin);
+    if (!normalized) {
+      setLinkedinError('Add your LinkedIn link first.');
+      return;
+    }
+    setLinkedinError(null);
+    setBuildError(null);
+    if (!hasAIConsent()) {
+      setPendingBuild(true);
+      promptAIConsent();
+      return;
+    }
+    setBuilding(true);
+    try {
+      await saveTargetTrack({ linkedinUrl: normalized });
+      updateProfile({ linkedinUrl: normalized });
+      const r = await enrichLinkedin(normalized);
+      if (!r.enriched) {
+        setBuildError(
+          'We could not read that LinkedIn profile. Your link is saved, so you can continue with it, or upload a resume instead.',
+        );
+        return;
+      }
+      trackEvent('intake_build_from_linkedin_opened');
+      router.push('/resume-preview');
+    } catch {
+      setBuildError('Could not reach LinkedIn right now. Try again in a moment, or upload a resume.');
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   const openLinkedIn = async () => {
     try {
       await Linking.openURL('linkedin://');
@@ -447,6 +506,63 @@ export default function Intake() {
           </Text>
         ) : null}
 
+        {/* The LinkedIn-builds-my-resume door. Shows once a real link is in
+            the box and no file was chosen; a file already covers this step. */}
+        {RESUME_BUILDER_LIVE && normalized && !picked && resumeState !== 'done' ? (
+          builtResume ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                marginTop: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderRadius: 12,
+                borderWidth: 2,
+                borderColor: colors.positive,
+                backgroundColor: colors.positive + '0F',
+              }}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.positive} />
+              <Text style={{ flex: 1, fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.ink }}>
+                Resume built from your LinkedIn
+              </Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={buildFromLinkedin}
+              disabled={building || working}
+              accessibilityRole="button"
+              accessibilityLabel="Build my resume from this LinkedIn"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                minHeight: 48,
+                marginTop: 12,
+                paddingVertical: 12,
+                borderRadius: 12,
+                backgroundColor: colors.ink,
+                opacity: building ? 0.7 : 1,
+              }}>
+              {building ? (
+                <ActivityIndicator size="small" color={colors.paper} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={18} color={colors.paper} />
+              )}
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+                {building ? 'Reading your LinkedIn, about half a minute' : 'Build my resume from this LinkedIn'}
+              </Text>
+            </Pressable>
+          )
+        ) : null}
+        {buildError ? (
+          <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.negative, marginTop: 8 }}>
+            {buildError}
+          </Text>
+        ) : null}
+
         <Pressable
           onPress={() => {
             trackEvent('intake_linkedin_help_opened');
@@ -467,10 +583,11 @@ export default function Intake() {
           </Text>
         </Pressable>
 
-        <Pressable
-          onPress={openLinkedIn}
-          accessibilityRole="button"
-          style={{
+        {normalized ? null : (
+          <Pressable
+            onPress={openLinkedIn}
+            accessibilityRole="button"
+            style={{
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
@@ -487,7 +604,8 @@ export default function Intake() {
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: '#0A66C2' }}>
             Open LinkedIn to grab my link
           </Text>
-        </Pressable>
+          </Pressable>
+        )}
 
         {/* The neither case. Plenty of first-years have no resume file on their
             phone and a bare LinkedIn, and dead-ending them here loses them. */}
