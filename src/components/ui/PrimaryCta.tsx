@@ -33,18 +33,21 @@ export default function PrimaryCta({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: off }}
-      style={({ pressed }) => ({
+      // Static object on purpose: function-form Pressable styles are dropped
+      // in release bundles (see pressable-function-styles-broken), which left
+      // "Get started" as white text on white on the 1.2.0 store build.
+      style={{
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
         minHeight: 52,
         width: '100%',
-        backgroundColor: pressed ? colors.navyDeep : colors.ink,
+        backgroundColor: colors.ink,
         borderRadius: 8,
         paddingVertical: 16,
         opacity: off ? 0.45 : 1,
-      })}>
+      }}>
       {busy ? (
         <ActivityIndicator size="small" color={colors.paper} />
       ) : (

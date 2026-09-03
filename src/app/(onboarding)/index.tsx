@@ -318,21 +318,22 @@ export default function Onboarding() {
                 disabled={gmailConnecting}
                 accessibilityRole="button"
                 accessibilityLabel={primaryLabel}
-                style={({ pressed }) => ({
+                // Static object: function-form styles vanish in release bundles.
+                style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 10,
                   minHeight: 58,
                   borderRadius: 10,
-                  backgroundColor: pressed ? colors.navyDeep : colors.ink,
+                  backgroundColor: colors.ink,
                   shadowColor: colors.ink,
                   shadowOffset: { width: 0, height: 6 },
                   shadowOpacity: 0.22,
                   shadowRadius: 14,
                   elevation: 6,
                   opacity: gmailConnecting ? 0.7 : 1,
-                })}>
+                }}>
                 {gmailConnecting ? (
                   <ActivityIndicator size="small" color={colors.paper} />
                 ) : personalGmailSignIn ? (
