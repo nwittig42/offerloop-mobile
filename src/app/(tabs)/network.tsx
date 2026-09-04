@@ -192,7 +192,7 @@ export default function NetworkScreen() {
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';
   const isFocused = useIsFocused();
-  const { unreadCount, meetingPreps } = useApp();
+  const { unreadCount, meetingPreps, passedPeople, passedJobs } = useApp();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Scout's receipt chips deep-link here ("Open Applications"), so the tab is
@@ -593,6 +593,34 @@ export default function NetworkScreen() {
             every way to look at the list, and switching is one tap rather than
             open-read-choose. "Company" is the odd one out — it swaps the list
             for the grid — so it reads as a destination, not a sort. */}
+        {/* The two bins. Passed jobs had a screen and no way to reach it;
+            passed people had neither (Rylan 2026-09-03). */}
+        {tab === 'Contacts' && (passedPeople.length > 0 || passedJobs.length > 0) ? (
+          <View style={{ flexDirection: 'row', gap: 14, paddingHorizontal: 20, paddingTop: 10 }}>
+            {passedPeople.length > 0 ? (
+              <Pressable
+                onPress={() => router.push('/passed-people' as never)}
+                accessibilityRole="button"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 }}>
+                <Ionicons name="arrow-undo-outline" size={14} color={colors.marketing} />
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.marketing }}>
+                  People you passed on ({passedPeople.length})
+                </Text>
+              </Pressable>
+            ) : null}
+            {passedJobs.length > 0 ? (
+              <Pressable
+                onPress={() => router.push('/passed-jobs')}
+                accessibilityRole="button"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 }}>
+                <Ionicons name="arrow-undo-outline" size={14} color={colors.marketing} />
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.marketing }}>
+                  Jobs you passed on ({passedJobs.length})
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         {tab === 'Contacts' && contacts.length > 1 ? (
           <View
             style={{

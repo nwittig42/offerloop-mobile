@@ -303,6 +303,22 @@ export async function sendFeedback(args: {
   }
 }
 
+/** Undo a left swipe for good: clears the server's "don't show again" mark
+ *  so the ranker can serve this person again. Best-effort, like feedback. */
+export async function restorePassedCandidate(candidateId: string): Promise<void> {
+  if (USE_MOCKS) return;
+  try {
+    await apiFetch('/api/ranker/feedback', {
+      method: 'POST',
+      body: { candidate_id: candidateId, signal: 'restore', deck_id: 'restore', rank: 0 },
+      timeoutMs: 10000,
+    });
+  } catch {
+    // Swallowed on purpose: the local list already forgot them, and the deck
+    // refetch is what the user sees.
+  }
+}
+
 /**
  * Pay to reveal an email on swipe-right. Cache-first with a 30-day TTL, and
  * the backend refunds on an unverified address or a no-hit, so `charged` tells

@@ -69,8 +69,15 @@ import type { Candidate } from '@/types';
  */
 export default function PeopleFeedView({ active = true }: { active?: boolean }) {
   const router = useRouter();
-  const { profile, showToast, swipeSettings, updateSwipeSettings, beginPersonPending, endPersonPending } =
-    useApp();
+  const {
+    profile,
+    showToast,
+    swipeSettings,
+    updateSwipeSettings,
+    beginPersonPending,
+    endPersonPending,
+    addPassedPerson,
+  } = useApp();
   const { connect: connectGmail } = useGmailConnect();
   const colors = useColors();
   // The same global draft-or-send rule the Jobs bar edits, so the two decks can
@@ -359,6 +366,9 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       if (direction === 'left' || direction === 'up') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setPassed((prev) => [...prev, person]);
+        // The bin (Network > People you passed on): survives the session, so
+        // an accidental pass is recoverable after the undo button is gone.
+        if (direction === 'left') addPassedPerson(person);
         // Feedback trains the RANKER. A prompt deck was not ranked, so there is
         // nothing to train and no deck the server would recognise.
         if (currentDeckId && !peopleFilter) {
@@ -517,7 +527,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           showToast('Could not reach that person. You were not charged.');
         });
     },
-    [deckId, showToast, action, peopleFilter, beginPersonPending, endPersonPending, queryClient],
+    [deckId, showToast, action, peopleFilter, beginPersonPending, endPersonPending, addPassedPerson, queryClient],
   );
 
   // Loading and error belong to whichever source is live. A filtered deck that

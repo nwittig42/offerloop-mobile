@@ -267,6 +267,7 @@ function ThemedShell() {
         <Stack.Screen name="what-we-send" options={{ presentation: 'card' }} />
         <Stack.Screen name="settings" options={{ presentation: 'card' }} />
         <Stack.Screen name="passed-jobs" options={{ presentation: 'card' }} />
+        <Stack.Screen name="passed-people" options={{ presentation: 'card' }} />
         <Stack.Screen name="milestones" options={{ presentation: 'card' }} />
         <Stack.Screen name="share" options={{ presentation: 'modal' }} />
         <Stack.Screen name="outreach-template" options={{ presentation: 'modal' }} />

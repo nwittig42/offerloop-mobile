@@ -58,6 +58,7 @@ import {
   MOCK_OUTREACH_SEED,
   MOCK_PROFILE,
 } from '@/mocks/data';
+import { restorePassedCandidate } from '@/api/endpoints/ranker';
 import type {
   Job,
   Loop,
@@ -69,6 +70,7 @@ import type {
   ResumeExperience,
   SwipeSettings,
   TrackerRow,
+  Candidate,
 } from '@/types';
 
 /**
@@ -215,6 +217,9 @@ const onboardingStorageKey = (uid: string) => `offerloop.onboarding.${uid}.v1`;
 // stale forever. Half a day: long enough to cover a session, short enough that a
 // job you passed this morning can resurface tomorrow.
 const passedJobsStorageKey = (uid: string) => `offerloop.passedJobs.${uid}.v1`;
+const passedPeopleStorageKey = (uid: string) => `offerloop.passedPeople.${uid}.v1`;
+// People do not churn the way job listings do: keep a pass for a month.
+const PASSED_PEOPLE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Swipe settings used to be plain in-memory state, so every relaunch silently
 // reset targeting and auto-apply back to defaults. Persisted per-user now:
 // saved choices win, defaults only fill gaps (new fields, fresh installs).
@@ -287,6 +292,10 @@ type AppStore = {
   canUndo: boolean;
   passedCount: number;
   passedJobs: Job[];
+  /** People swiped left on the People deck, newest last. */
+  passedPeople: Candidate[];
+  addPassedPerson: (person: Candidate) => void;
+  restorePassedPerson: (id: string) => void;
   savedCount: number;
   savedJobs: Job[];
   swipeSettings: SwipeSettings;
@@ -508,6 +517,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!uid || !passedLoaded) return;
     { const j = safeStringify(passedEntries); if (j) AsyncStorage.setItem(passedJobsStorageKey(uid), j).catch(() => {}); }
   }, [uid, passedEntries, passedLoaded]);
+
+  // People passed on the People deck, same shape as passed jobs: timestamped
+  // entries, per-user key, expired on load. The deck's own undo covers only
+  // the last pass this session; this is the bin (Rylan 2026-09-03).
+  const [passedPeopleEntries, setPassedPeopleEntries] = useState<{ person: Candidate; ts: number }[]>([]);
+  const [passedPeopleLoaded, setPassedPeopleLoaded] = useState(false);
+  const passedPeople = useMemo(() => passedPeopleEntries.map((e) => e.person), [passedPeopleEntries]);
+  useEffect(() => {
+    if (!uid) {
+      setPassedPeopleEntries([]);
+      setPassedPeopleLoaded(true);
+      return;
+    }
+    setPassedPeopleLoaded(false);
+    let cancelled = false;
+    AsyncStorage.getItem(passedPeopleStorageKey(uid))
+      .then((raw) => {
+        if (cancelled) return;
+        const cutoff = Date.now() - PASSED_PEOPLE_TTL_MS;
+        let entries: { person: Candidate; ts: number }[] = [];
+        try {
+          const parsed = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(parsed)) {
+            entries = parsed.filter((e) => e && e.person && typeof e.ts === 'number' && e.ts >= cutoff);
+          }
+        } catch {
+          /* ignore a corrupt blob */
+        }
+        setPassedPeopleEntries(entries);
+        setPassedPeopleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPassedPeopleEntries([]);
+          setPassedPeopleLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+  useEffect(() => {
+    if (!uid || !passedPeopleLoaded) return;
+    { const j = safeStringify(passedPeopleEntries); if (j) AsyncStorage.setItem(passedPeopleStorageKey(uid), j).catch(() => {}); }
+  }, [uid, passedPeopleEntries, passedPeopleLoaded]);
+  const addPassedPerson = useCallback((person: Candidate) => {
+    setPassedPeopleEntries((prev) => [...prev.filter((e) => e.person.id !== person.id), { person, ts: Date.now() }]);
+  }, []);
+  const restorePassedPerson = useCallback(
+    (id: string) => {
+      setPassedPeopleEntries((prev) => prev.filter((e) => e.person.id !== id));
+      void restorePassedCandidate(id).finally(() =>
+        queryClient.invalidateQueries({ queryKey: ['rankerDeck'] }),
+      );
+    },
+    [queryClient],
+  );
 
   // The real job card the user swiped, per company (see key above). Persisted so
   // the company page shows the exact card even after a relaunch.
@@ -1888,6 +1954,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canUndo: passedJobs.length > 0,
       passedCount: passedJobs.length,
       passedJobs,
+      passedPeople,
+      addPassedPerson,
+      restorePassedPerson,
       savedCount: savedJobs.length,
       savedJobs,
       swipeSettings,
@@ -1948,6 +2017,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loops,
       meetingPreps,
       passedJobs,
+      passedPeople,
+      addPassedPerson,
+      restorePassedPerson,
       savedJobs,
       swipeSettings,
       draftsLeft,
