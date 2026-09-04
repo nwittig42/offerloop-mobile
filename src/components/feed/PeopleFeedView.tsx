@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { qk } from '@/api/queryKeys';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,7 +69,8 @@ import type { Candidate } from '@/types';
  */
 export default function PeopleFeedView({ active = true }: { active?: boolean }) {
   const router = useRouter();
-  const { profile, showToast, swipeSettings, updateSwipeSettings, beginPersonPending } = useApp();
+  const { profile, showToast, swipeSettings, updateSwipeSettings, beginPersonPending, endPersonPending } =
+    useApp();
   const { connect: connectGmail } = useGmailConnect();
   const colors = useColors();
   // The same global draft-or-send rule the Jobs bar edits, so the two decks can
@@ -385,6 +388,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             // The person now exists as a contact (or will, once pending
             // resolves); make sure Network sees them on its next open.
             void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            void queryClient.invalidateQueries({ queryKey: qk.inbox });
             // The swipe out-ran the email hunt: the server finishes in the
             // background and the draft-ready bell rings when it lands. Keep
             // swiping; nothing was charged yet. First time ever, explain the
@@ -449,16 +453,29 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
         });
       }
 
+      // The swipe shows up in the Inbox at once as the "Being written" row
+      // (Rylan 2026-09-03: the ranked deck skipped the ghost the prompt deck
+      // already had, so a right swipe vanished into toasts until the Inbox
+      // refetched). The inbox refetch swaps it for the real draft; a miss
+      // removes it.
+      const ghostId = beginPersonPending({
+        name: person.name,
+        company: person.company,
+        title: person.title,
+      });
+
       // The paid step, in two beats. Find the address, then write to them.
       // Render from the response fields, never from an assumption about what
       // the charge did.
       revealEmail(person.id)
         .then((result) => {
           if (!result.email) {
+            endPersonPending(ghostId);
             showToast(`No email found for ${person.name}. You were not charged.`);
             return;
           }
           if (!result.verified) {
+            endPersonPending(ghostId);
             showToast(`Found an unverified address for ${person.name}. Refunded.`);
             return;
           }
@@ -472,10 +489,12 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           return draftToCandidate(person.id, intent)
             .then((out) => {
               if (out.sent) {
+                void queryClient.invalidateQueries({ queryKey: qk.inbox });
                 showToast(`Sent to ${person.name}`);
                 return;
               }
               if (out.drafted) {
+                void queryClient.invalidateQueries({ queryKey: qk.inbox });
                 showToast(
                   deferred
                     ? `Drafted to ${person.name}. Held for morning, send it from your Inbox.`
@@ -485,17 +504,20 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               }
               // The address is unlocked either way, so say what the user got
               // rather than reporting a flat failure.
+              endPersonPending(ghostId);
               showToast(`${person.name}'s email is ready. We couldn't write the draft.`);
             })
             .catch(() => {
+              endPersonPending(ghostId);
               showToast(`${person.name}'s email is ready. We couldn't write the draft.`);
             });
         })
         .catch(() => {
+          endPersonPending(ghostId);
           showToast('Could not reach that person. You were not charged.');
         });
     },
-    [deckId, showToast, action, peopleFilter, beginPersonPending],
+    [deckId, showToast, action, peopleFilter, beginPersonPending, endPersonPending, queryClient],
   );
 
   // Loading and error belong to whichever source is live. A filtered deck that

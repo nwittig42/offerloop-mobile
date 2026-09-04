@@ -307,7 +307,9 @@ type AppStore = {
   draftAnotherContact: (opts: { company: string; jobTitle?: string }) => void;
   /** Re-run the draft for a failed Inbox row (tap-to-retry). */
   retryDraft: (id: string) => void;
-  beginPersonPending: (person: { name: string; company: string; title?: string }) => void;
+  beginPersonPending: (person: { name: string; company: string; title?: string }) => string;
+  /** Drop a ghost row when the hunt it stood for came back empty. */
+  endPersonPending: (id: string) => void;
   /** Remember a job as the swiped card for its company (per-company Roles deck). */
   rememberSwipedCard: (job: Job) => void;
   /** Deduped auto-apply for any job — blocks a second application to the same one. */
@@ -1516,9 +1518,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         ...prev,
       ]);
+      return outreachId;
     },
     [],
   );
+
+  const endPersonPending = useCallback((id: string) => {
+    setOutreach((prev) => prev.filter((o) => o.id !== id));
+  }, []);
 
   const retryDraft = useCallback(
     (id: string) => {
@@ -1900,6 +1907,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftAnotherContact,
       retryDraft,
       beginPersonPending,
+      endPersonPending,
       rememberSwipedCard,
       autoApplyJob,
       undoLastPass,
@@ -1958,6 +1966,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftAnotherContact,
       retryDraft,
       beginPersonPending,
+      endPersonPending,
       rememberSwipedCard,
       autoApplyJob,
       updateSwipeSettings,

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
@@ -497,6 +498,15 @@ export default function InboxScreen() {
   const colors = useColors();
   const { outreach, unreadCount, toggleOutreachPin, showToast, inboxState, refetchInbox, retryDraft } =
     useApp();
+  // Drafts written by a People swipe reach this list on the next fetch, and
+  // the list used to wait for pull-to-refresh (Nick 2026-09-03: five drafts
+  // in Gmail, none on screen). Every visit to the tab re-reads it.
+  const isFocused = useIsFocused();
+  useEffect(() => {
+    if (isFocused) void refetchInbox();
+    // refetchInbox is stable; re-running on focus is the point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
   // Pull-to-refresh: force a fresh inbox fetch, which also runs the optimistic->
   // real id reconcile so a just-swiped draft picks up its real id right away
   // (no 60s wait) and becomes openable + sendable in-app.

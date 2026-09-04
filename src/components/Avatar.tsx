@@ -25,7 +25,12 @@ export function Avatar({ name, photoUrl, size = 48 }: { name: string; photoUrl?:
     .join('')
     .toUpperCase();
 
-  if (photoUrl && !broken) {
+  // LinkedIn serves a generic grey silhouette (static.licdn.com/aero-v1/...)
+  // for people with no photo, and the vendors pass that URL through. Four of
+  // nine contacts in the 2026-09-03 test carried it. Initials read as a
+  // person; the silhouette reads as a broken app.
+  const placeholder = !!photoUrl && /static\.licdn\.com\/aero-v1\//.test(photoUrl);
+  if (photoUrl && !broken && !placeholder) {
     return (
       <Image
         source={{ uri: photoUrl }}
