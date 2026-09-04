@@ -9,8 +9,8 @@ import * as Updates from 'expo-updates';
  * the next number and says what shipped. If the number on the phone matches
  * the number in the publish message, you are testing the right build.
  */
-export const OTA_VERSION = 'production v59';
-export const OTA_NOTES = 'Get started and Connect Gmail buttons visible again';
+export const OTA_VERSION = 'production v60';
+export const OTA_NOTES = 'Network refresh, onboarding People swipe, tour and label fixes, password eye';
 
 /** Store builds (production channel) hide the stamp entirely: it is a
  *  staging QA affordance, not something App Review or a real user should
