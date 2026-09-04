@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -9,7 +10,9 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useGmailConnect } from '@/hooks/useGmailConnect';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import PersonDeck from '@/components/feed/PersonDeck';
 import SwipeDeck from '@/components/feed/SwipeDeck';
+import { fetchCandidates, type Deck } from '@/api/endpoints/ranker';
 import { OnboardingScaffold } from '@/components/onboarding/Scaffold';
 import GmailLogo from '@/components/auth/GmailLogo';
 import DraftPreviewCard from '@/components/onboarding/DraftPreviewCard';
@@ -19,7 +22,7 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL, stepNumber } from '@/lib/onboarding
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
-import type { Job } from '@/types';
+import type { Candidate, Job } from '@/types';
 
 /** This screen's slice of the shared flow (see lib/onboardingFlow). */
 const STEP_NAMES = ONBOARDING_STEPS.slice(1);
@@ -75,6 +78,24 @@ export default function Onboarding() {
   useEffect(() => {
     if (!demoJobs.length && jobs.length) setDemoJobs(jobs.slice(0, 3));
   }, [jobs, demoJobs.length]);
+  // The teaching swipe is a PERSON, not a job (Rylan 2026-09-03): the People
+  // deck is the thing the store listing leads with and the thing a student
+  // cannot get elsewhere. Same query key as the Feed, so this also warms the
+  // deck they land on. Real people, held locally; a swipe here reveals and
+  // drafts nothing. If nobody loads in time the job deck below still teaches
+  // the gesture.
+  const rankerQuery = useQuery<Deck>({
+    queryKey: ['rankerDeck'],
+    queryFn: ({ signal }) => fetchCandidates(signal),
+    staleTime: 5 * 60 * 1000,
+  });
+  const [demoPeople, setDemoPeople] = useState<Candidate[]>([]);
+  useEffect(() => {
+    const got = rankerQuery.data?.candidates ?? [];
+    if (!demoPeople.length && got.length) setDemoPeople(got.slice(0, 3));
+  }, [rankerQuery.data, demoPeople.length]);
+  const peopleReady = demoPeople.length > 0;
+  const peopleSettled = !rankerQuery.isLoading;
   const [applied, setApplied] = useState(false);
   const appliedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -156,6 +177,21 @@ export default function Onboarding() {
     setDemoJobs((prev) => prev.filter((x) => x.id !== j.id));
   };
 
+  const onDemoPersonSwipe = (direction: 'left' | 'right' | 'up', person: Candidate) => {
+    if (direction === 'up') return;
+    setSwiped(true);
+    if (direction === 'right') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 60);
+      setApplied(true);
+      if (appliedTimer.current) clearTimeout(appliedTimer.current);
+      appliedTimer.current = setTimeout(() => setApplied(false), 1800);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setDemoPeople((prev) => prev.filter((x) => x.id !== person.id));
+  };
+
   // ── Step 3: aha demo swipe ─────────────────────────────────────────────
   if (step === 0) {
     // NOTE(2026-08-11): a PersonReveal teaching beat with fixture content
@@ -169,7 +205,11 @@ export default function Onboarding() {
       headerRight={<OfferloopMark />}
         onBack={back}
         title="Try one swipe"
-        subtitle="Swipe right to apply, left to pass."
+        subtitle={
+          peopleReady || !peopleSettled
+            ? 'Swipe right on a person and Offerloop finds their email and writes your intro. Left to pass.'
+            : 'Swipe right to apply, left to pass.'
+        }
         footer={
           // Appears once they have swiped at least one card, so the lesson
           // happens before the exit exists. After that they can keep swiping
@@ -185,17 +225,26 @@ export default function Onboarding() {
             />
           ) : null
         }>
-        {demoJobs.length ? (
+        {peopleReady || demoJobs.length ? (
           <View style={{ height: 520, marginHorizontal: -4 }}>
             {/* Wraps the deck so the card leans on the same clock as the hand. */}
             <SwipeDemoHint active={!swiped}>
-              <SwipeDeck
-                jobs={demoJobs}
-                expanded={expanded}
-                onToggleExpand={setExpanded}
-                onSwiped={onDemoSwipe}
-                rightStamp="apply"
-              />
+              {peopleReady ? (
+                <PersonDeck
+                  people={demoPeople}
+                  onSwiped={onDemoPersonSwipe}
+                  action="draft"
+                  gesturesEnabled
+                />
+              ) : (
+                <SwipeDeck
+                  jobs={demoJobs}
+                  expanded={expanded}
+                  onToggleExpand={setExpanded}
+                  onSwiped={onDemoSwipe}
+                  rightStamp="apply"
+                />
+              )}
             </SwipeDemoHint>
 
             {/* Floats over the deck and leaves on its own, so the next card is
@@ -219,7 +268,7 @@ export default function Onboarding() {
                 }}>
                 <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.paper }}>
-                  Applied
+                  {peopleReady ? "That's the swipe" : 'Applied'}
                 </Text>
               </Animated.View>
             ) : null}
@@ -227,7 +276,7 @@ export default function Onboarding() {
         ) : (
           <Card style={{ gap: 8 }}>
             <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 15, color: colors.ink }}>Your feed is loading</Text>
-            <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>We’re pulling jobs that fit your targets. Your first swipe is waiting on the Feed.</Text>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 20 }}>We’re finding people at the companies students like you target. Your first swipe is waiting on the Feed.</Text>
           </Card>
         )}
       </OnboardingScaffold>
