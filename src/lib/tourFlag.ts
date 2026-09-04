@@ -33,6 +33,14 @@ export async function isTourPending(): Promise<boolean> {
   }
 }
 
+/** The moment the tour starts. Clears PENDING so a remount of the Scout tab
+ *  (leave mid-tour, come back) does not prefill the opener again under the
+ *  bubble that already sent (Rylan 2026-09-03, "How can you help me?" shown
+ *  twice). DONE stays 0 until the tour ends; Replay re-arms both. */
+export async function markTourStarted(): Promise<void> {
+  await AsyncStorage.setItem(PENDING_KEY, '0').catch(() => {});
+}
+
 /** Started, finished, or skipped: either way it never fires on its own again. */
 export async function endTour(): Promise<void> {
   await AsyncStorage.multiSet([

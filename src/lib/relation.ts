@@ -17,7 +17,14 @@ import type { ContactRelation } from '@/types';
 export function relationFor(title: string | undefined | null): ContactRelation {
   const t = (title || '').toLowerCase();
   if (/recruit|talent|university relations|campus/.test(t)) return 'Recruiter';
-  if (/head|director|vp\b|vice president|chief|manager|lead|partner|principal/.test(t)) {
+  // "Product Manager" and "Account Manager" are individual contributors; the
+  // bare word used to earn the badge (Rylan 2026-09-03, a fintech PM deck
+  // read as all hiring managers). Only titles that plainly run a team count.
+  if (
+    /hiring manager|engineering manager|head|director|vp\b|vice president|chief|team lead|partner|principal/.test(
+      t,
+    )
+  ) {
     return 'Hiring manager';
   }
   return 'Employee';

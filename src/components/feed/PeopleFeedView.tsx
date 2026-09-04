@@ -382,6 +382,9 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
         }
         revealAndWrite(currentDeckId, person.id, intent)
           .then((out) => {
+            // The person now exists as a contact (or will, once pending
+            // resolves); make sure Network sees them on its next open.
+            void queryClient.invalidateQueries({ queryKey: ['contacts'] });
             // The swipe out-ran the email hunt: the server finishes in the
             // background and the draft-ready bell rings when it lands. Keep
             // swiping; nothing was charged yet. First time ever, explain the
@@ -460,6 +463,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             return;
           }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          void queryClient.invalidateQueries({ queryKey: ['contacts'] });
 
           // A revealed address the user has to go write to themselves is a
           // lookup tool, not the product (Nick 2026-08-16). The swipe writes

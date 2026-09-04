@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import PasswordField from '@/components/ui/PasswordField';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -131,25 +132,19 @@ export default function CreateAccountScreen() {
             textContentType="username"
             style={inputStyle(colors, fieldBg)}
           />
-          <TextInput
+          <PasswordField
             value={password}
             onChangeText={setPassword}
             placeholder="Password (8+ characters)"
             placeholderTextColor={colors.inkTertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             textContentType="newPassword"
             style={inputStyle(colors, fieldBg)}
           />
-          <TextInput
+          <PasswordField
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Confirm password"
             placeholderTextColor={colors.inkTertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             textContentType="newPassword"
             returnKeyType="go"
             onSubmitEditing={submit}

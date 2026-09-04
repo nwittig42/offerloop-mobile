@@ -3,7 +3,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -210,6 +210,14 @@ export default function NetworkScreen() {
   const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const contactsQuery = useQuery({ queryKey: ['contacts'], queryFn: () => fetchContacts() });
+  // A reveal on the Feed writes a contact the moment the draft lands, but
+  // this tab used to load once and sit on it (Rylan 2026-09-03: three drafts
+  // in Inbox, an empty Network). Every visit to the tab re-reads the list.
+  useEffect(() => {
+    if (isFocused) void contactsQuery.refetch();
+    // refetch is stable; re-running on focus is the whole point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
   const contacts = useMemo(() => {
     // Dedupe at the source (Rylan 2026-08-18: the same person showed 2-3x;
     // several server write paths can each mint a doc for one human). Keyed

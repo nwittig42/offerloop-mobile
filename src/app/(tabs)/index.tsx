@@ -67,7 +67,7 @@ import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import ChatComposer from '@/components/scout/ChatComposer';
 import TapHand from '@/components/tour/TapHand';
 import { useTour } from '@/components/tour/TourProvider';
-import { isTourPending } from '@/lib/tourFlag';
+import { isTourPending, markTourStarted } from '@/lib/tourFlag';
 import ChatHistoryPanel from '@/components/scout/ChatHistoryPanel';
 import ChatMessage from '@/components/scout/ChatMessage';
 import VoiceMode from '@/components/scout/VoiceMode';
@@ -409,6 +409,7 @@ function ScoutTabInner() {
   const startTourFromScout = useCallback(() => {
     if (tourLaunched.current) return;
     tourLaunched.current = true;
+    void markTourStarted();
     setTourArmed(false);
     setTyped('');
     scoutThread.append({ from: 'user', text: TOUR_OPENER });

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthProvider';
 import SocialAuthButtons, { useSocialAvailable } from '@/components/auth/SocialAuthButtons';
 import { Button } from '@/components/ui/Button';
+import PasswordField from '@/components/ui/PasswordField';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
@@ -336,14 +337,11 @@ export default function SignInScreen() {
               color: colors.ink,
             }}
           />
-          <TextInput
+          <PasswordField
             value={devPassword}
             onChangeText={setDevPassword}
-            placeholder="test password"
+            placeholder="Password"
             placeholderTextColor={colors.inkTertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             style={{
               height: 40,
               borderRadius: 8,
