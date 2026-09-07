@@ -10,7 +10,9 @@ web monorepo. TWO backend branches, two truths, do not mix them up:
   RevenueCat webhook, /api/mobile/*, the credit ledger. When wiring app API
   calls, THIS branch is the truth; read it via
   `git show origin/staging/mobile-field:backend/...` from any checkout of the
-  repo (github.com/deenabandi004-byte/Final_offerloop).
+  repo (github.com/Offerloop/Final_offerloop, the Offerloop GitHub org; the
+  old deenabandi004-byte address redirects there). Push and open PRs as
+  yourself, never through the shared deena account.
 
 A route existing on main does not mean the app can call it (example that bit
 us: resume_builder.py exists only on main). The old working copy at
