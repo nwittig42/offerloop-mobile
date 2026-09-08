@@ -41,7 +41,7 @@ import { presentPaywall } from '@/components/paywall/paywallBus';
 import { hasAIConsent, promptAIConsent } from '@/lib/aiConsent';
 import { qk } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthProvider';
-import { identify, setAnalyticsUser, track } from '@/lib/analytics';
+import { identify, setAnalyticsUser, takePendingSignInMethod, track } from '@/lib/analytics';
 import { safeStringify } from '@/lib/safeJson';
 import { normCompanyName, sameCompany } from '@/lib/company';
 import { markTourPending } from '@/lib/tourFlag';
@@ -835,6 +835,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // CMO can segment by school/plan. Best-effort; no-op until a key is configured.
   useEffect(() => {
     setAnalyticsUser(uid ?? null);
+    if (uid) {
+      const method = takePendingSignInMethod();
+      if (method) track('signed_in', { method });
+    }
     if (uid && meQuery.isSuccess) {
       identify(uid, { school: profile.school, plan: profile.plan, grad_year: profile.gradYear });
     }

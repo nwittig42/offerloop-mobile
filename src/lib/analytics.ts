@@ -62,6 +62,20 @@ export function setAnalyticsUser(uid: string | null) {
   distinctId = uid;
 }
 
+// Sign-in happens BEFORE there is a distinct_id to send with, so the screen
+// that started it records the method here and the store emits `signed_in`
+// the moment the uid lands (Rylan 2026-09-08: the funnel needs sign-in by
+// method: apple, google, password, magic_link, email_new).
+let pendingSignInMethod: string | null = null;
+export function setPendingSignInMethod(method: string | null) {
+  pendingSignInMethod = method;
+}
+export function takePendingSignInMethod(): string | null {
+  const m = pendingSignInMethod;
+  pendingSignInMethod = null;
+  return m;
+}
+
 /** Capture an event. Pass `$set` inside properties to also set person properties
  *  (e.g. track('x', { $set: { referral_source: 'reddit' } })). No-op pre-auth. */
 export function track(event: string, properties: Record<string, unknown> = {}) {

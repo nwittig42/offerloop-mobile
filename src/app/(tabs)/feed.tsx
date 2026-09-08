@@ -23,6 +23,7 @@ import { requestReviewIfDue } from '@/lib/appRating';
 import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
 import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
+import { track } from '@/lib/analytics';
 import { sendJobFeedback } from '@/api/endpoints/feed';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
@@ -346,6 +347,7 @@ export default function FeedScreen() {
   const handleSwiped = useCallback((direction: 'left' | 'right' | 'up', job: Job) => {
     setGhostHint(false);
     void markGhostHintSeen('jobs');
+    track('job_swiped', { direction, company: job.company });
     if (direction === 'up') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       saveJob(job.id);

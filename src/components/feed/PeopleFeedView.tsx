@@ -43,6 +43,7 @@ import { hasSeenGhostHint, markGhostHintSeen } from '@/lib/ghostHint';
 import { hasSeenPendingHint, markPendingHintSeen } from '@/lib/pendingHint';
 import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { markNudgeShown, nextProfileNudge, type NudgeKey } from '@/lib/profileNudge';
+import { track } from '@/lib/analytics';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
@@ -363,6 +364,12 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
       const deferred = action === 'send' && (hour < 8 || hour >= 22);
       const intent: 'draft' | 'send' = deferred ? 'draft' : action;
 
+      track('person_swiped', {
+        direction,
+        deck: peopleFilter ? 'prompt' : 'ranked',
+        alumni: !!person.school,
+        company: person.company,
+      });
       if (direction === 'left' || direction === 'up') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setPassed((prev) => [...prev, person]);
@@ -399,6 +406,9 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             // resolves); make sure Network sees them on its next open.
             void queryClient.invalidateQueries({ queryKey: ['contacts'] });
             void queryClient.invalidateQueries({ queryKey: qk.inbox });
+            track('email_revealed', { deck: 'prompt', outcome: out.pending ? 'pending' : out.sent ? 'sent' : out.drafted ? 'drafted' : 'no_email' });
+            if (out.sent) track('email_sent', { deck: 'prompt' });
+            else if (out.drafted) track('draft_created', { deck: 'prompt' });
             // The swipe out-ran the email hunt: the server finishes in the
             // background and the draft-ready bell rings when it lands. Keep
             // swiping; nothing was charged yet. First time ever, explain the
@@ -491,6 +501,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
           }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+          track('email_revealed', { deck: 'ranked', source: result.cached ? 'warehouse' : 'vendor', charged: result.charged });
 
           // A revealed address the user has to go write to themselves is a
           // lookup tool, not the product (Nick 2026-08-16). The swipe writes
@@ -500,11 +511,13 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             .then((out) => {
               if (out.sent) {
                 void queryClient.invalidateQueries({ queryKey: qk.inbox });
+                track('email_sent', { deck: 'ranked' });
                 showToast(`Sent to ${person.name}`);
                 return;
               }
               if (out.drafted) {
                 void queryClient.invalidateQueries({ queryKey: qk.inbox });
+                track('draft_created', { deck: 'ranked' });
                 showToast(
                   deferred
                     ? `Drafted to ${person.name}. Held for morning, send it from your Inbox.`

@@ -26,6 +26,7 @@ import {
 } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
 import { AIConsentRequiredError } from '@/lib/aiConsent';
+import { track } from '@/lib/analytics';
 import PdfView from '@/components/resume/PdfView';
 import { Button } from '@/components/ui/Button';
 import { useApp } from '@/store/app';
@@ -242,6 +243,7 @@ export default function ResumeFromTextScreen() {
     const ok = await finalizeResume(state.resume);
     setAdopting(false);
     if (ok) {
+      track('resume_built', { method: 'described' });
       showToast('Resume saved. Auto-apply can use it now.');
       await queryClient.invalidateQueries({ queryKey: qk.me });
       await queryClient.invalidateQueries({ queryKey: ['applicationProfile'] });

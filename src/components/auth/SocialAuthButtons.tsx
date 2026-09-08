@@ -11,6 +11,7 @@ import {
 import GoogleG from '@/components/auth/GoogleG';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { setPendingSignInMethod } from '@/lib/analytics';
 
 /**
  * Apple and Google, rendered inline on the sign-up and sign-in PAGES. These
@@ -67,6 +68,7 @@ export default function SocialAuthButtons({
   const run = async (which: 'apple' | 'google') => {
     if (busy) return;
     setBusy(which);
+    setPendingSignInMethod(which);
     try {
       const result =
         which === 'apple' ? await signInWithAppleNative() : await signInWithGoogleNative();

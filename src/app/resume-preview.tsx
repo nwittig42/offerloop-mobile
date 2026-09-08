@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { track } from '@/lib/analytics';
 
 /**
  * Build-from-LinkedIn: preview then approve (the quality bar: a generated
@@ -67,6 +68,7 @@ export default function ResumePreviewScreen() {
     const ok = await finalizeResume(state.resume);
     setAdopting(false);
     if (ok) {
+      track('resume_built', { method: 'linkedin' });
       showToast('Resume saved. Auto-apply can use it now.');
       await queryClient.invalidateQueries({ queryKey: qk.me });
       await queryClient.invalidateQueries({ queryKey: ['applicationProfile'] });

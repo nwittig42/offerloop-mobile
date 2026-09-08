@@ -8,6 +8,7 @@ import Purchases, {
 } from 'react-native-purchases';
 
 import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
+import { track } from '@/lib/analytics';
 
 /**
  * RevenueCat plumbing (SPEC-iap-v2 section 6). The client only purchases and
@@ -185,6 +186,7 @@ function withTimeout<T>(p: Promise<T>, ms = 45000): Promise<T> {
 export async function purchasePackage(pkg: PurchasesPackage): Promise<PurchaseResult> {
   try {
     await withTimeout(Purchases.purchasePackage(pkg));
+    track('purchase_completed', { product: pkg.product.identifier, kind: 'subscription' });
     return { ok: true, cancelled: false };
   } catch (e: unknown) {
     const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);
@@ -195,6 +197,7 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<PurchaseRe
 export async function purchaseProduct(product: PurchasesStoreProduct): Promise<PurchaseResult> {
   try {
     await withTimeout(Purchases.purchaseStoreProduct(product));
+    track('purchase_completed', { product: product.identifier, kind: 'pack' });
     return { ok: true, cancelled: false };
   } catch (e: unknown) {
     const cancelled = Boolean((e as { userCancelled?: boolean })?.userCancelled);

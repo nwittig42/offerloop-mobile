@@ -19,6 +19,7 @@ import SocialAuthButtons, { useSocialAvailable } from '@/components/auth/SocialA
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, type Palette } from '@/theme/tokens';
+import { setPendingSignInMethod } from '@/lib/analytics';
 
 /**
  * In-app registration (App Review guideline 4: account creation may not punt
@@ -83,6 +84,7 @@ export default function CreateAccountScreen() {
     setBusy(true);
     setError(null);
     try {
+      setPendingSignInMethod('email_new');
       await createAccountWithPassword(email, password);
       // No navigation here: the auth gate sees the new session and routes
       // brand-new users into onboarding on its own.

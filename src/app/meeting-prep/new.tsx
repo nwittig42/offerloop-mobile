@@ -6,6 +6,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'r
 import { isInsufficientCredits } from '@/api/errors';
 import { previewMeetingPrep, type MeetingPrepPreview } from '@/api/endpoints/meetingPreps';
 import { useAIConsent } from '@/lib/aiConsent';
+import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
@@ -94,6 +95,7 @@ export default function NewMeetingPrepScreen() {
     setBusy(true);
     try {
       const id = await addMeetingPrep({ name, linkedinUrl: url });
+      track('meeting_prep_created', {});
       router.replace(`/meeting-prep/${id}`);
     } catch (e) {
       setBusy(false);

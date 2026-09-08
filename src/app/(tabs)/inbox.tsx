@@ -24,6 +24,7 @@ import SnakeBorder from '@/components/ui/SnakeBorder';
 import { InboxSkeleton } from '@/components/ui/Skeleton';
 import StateView from '@/components/ui/StateView';
 import { badgeRelationFor } from '@/lib/relation';
+import { track } from '@/lib/analytics';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts, type Palette } from '@/theme/tokens';
@@ -615,6 +616,7 @@ export default function InboxScreen() {
       retryDraft(item.id);
       return;
     }
+    if (item.status === 'replied') track('reply_opened', { source: item.source });
     router.push(`/outreach/${item.id}`);
   };
 

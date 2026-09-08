@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import PasswordField from '@/components/ui/PasswordField';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { setPendingSignInMethod } from '@/lib/analytics';
 
 /**
  * Sign-in, two paths sharing one email field:
@@ -75,6 +76,7 @@ export default function SignInScreen() {
     setDevBusy(true);
     setDevError(null);
     try {
+      setPendingSignInMethod('password');
       await signInWithPassword(devEmail, devPassword);
     } catch (e: any) {
       setDevError(e?.message || 'Dev sign-in failed.');
@@ -93,6 +95,7 @@ export default function SignInScreen() {
     if (resendIn > 0) return;
     setResendNote(null);
     try {
+      setPendingSignInMethod('magic_link');
       await sendSignInLink(email);
       setResendIn(30);
       setResendNote('Sent again — check your inbox and spam.');

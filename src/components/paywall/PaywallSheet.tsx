@@ -33,6 +33,7 @@ import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { track } from '@/lib/analytics';
 
 /**
  * The one purchase sheet, two modes (SPEC-iap-v2 section 3):
@@ -174,6 +175,11 @@ export default function PaywallSheet({
   const [data, setData] = useState<PaywallData | null>(null);
   const [showPacks, setShowPacks] = useState(isSubscriber || packsFirst);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    track('paywall_viewed', { context: context ?? 'unknown', plan: profile.plan, packs_first: packsFirst });
+    // Once per open; the sheet unmounts on close.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [processing, setProcessing] = useState(false);
   // Plan switching (Pro <-> Elite) renders ONLY for Apple-managed
   // subscriptions. A web (Stripe) subscriber must never see a path to a
