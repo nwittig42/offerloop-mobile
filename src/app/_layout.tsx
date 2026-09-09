@@ -30,6 +30,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useScreenshotShare } from '@/hooks/useScreenshotShare';
 import { loadAIConsent } from '@/lib/aiConsent';
 import { noteAppOpen } from '@/lib/appRating';
+import { installCrashCapture } from '@/lib/analytics';
 import { AppProvider, useApp } from '@/store/app';
 import { ThemeProvider, useColors, useTheme } from '@/theme/ThemeProvider';
 import { resolveSchool } from '@/theme/tokens';
@@ -56,6 +57,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+installCrashCapture();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({

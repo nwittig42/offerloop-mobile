@@ -87,3 +87,42 @@ export function track(event: string, properties: Record<string, unknown> = {}) {
     timestamp: new Date().toISOString(),
   });
 }
+
+/**
+ * JS crash capture (Rylan 2026-09-08: "saved, then it crashed" with nothing
+ * to read). Sentry needs a native module and a store build; this catches
+ * every uncaught JavaScript error over the air and files it in PostHog as
+ * `app_crash` with the message and the top of the stack, then lets the
+ * default handler run so the app still shows its error screen. Native
+ * crashes (memory, native modules) are not covered; those are Sentry's job.
+ * No user content is sent, only the error text and stack frames.
+ */
+type GlobalHandler = (error: unknown, isFatal?: boolean) => void;
+let installed = false;
+export function installCrashCapture() {
+  if (installed) return;
+  installed = true;
+  const utils = (globalThis as { ErrorUtils?: { getGlobalHandler: () => GlobalHandler; setGlobalHandler: (h: GlobalHandler) => void } }).ErrorUtils;
+  if (!utils) return;
+  const previous = utils.getGlobalHandler();
+  utils.setGlobalHandler((error, isFatal) => {
+    try {
+      const err = error as { message?: string; stack?: string; name?: string };
+      post({
+        event: 'app_crash',
+        distinct_id: distinctId || 'pre-auth',
+        properties: {
+          ...BASE_PROPS,
+          fatal: !!isFatal,
+          name: String(err?.name || 'Error').slice(0, 80),
+          message: String(err?.message || error).slice(0, 500),
+          stack: String(err?.stack || '').split('\n').slice(0, 12).join('\n').slice(0, 2000),
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      /* never let the reporter itself throw */
+    }
+    previous?.(error, isFatal);
+  });
+}
