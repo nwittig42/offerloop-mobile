@@ -2,10 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { pickResume, uploadResume } from '@/api/endpoints/resume';
+import { pickResume, renameResume, uploadResume } from '@/api/endpoints/resume';
 import { qk } from '@/api/queryKeys';
 import PdfView from '@/components/resume/PdfView';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
@@ -29,6 +29,27 @@ export default function ResumeViewScreen() {
   const { profile, showToast } = useApp();
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Tap the title to rename (Rylan 2026-09-08). The name is what recruiters
+  // see on the attachment, so it is worth a tap. Extension stays server-side.
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const openRename = () => {
+    const current = profile.resume?.name || '';
+    setDraftName(current.replace(/\.(pdf|docx?)$/i, ''));
+    setRenaming(true);
+  };
+  const saveRename = async () => {
+    const next = draftName.trim();
+    if (!next) return;
+    setRenaming(false);
+    try {
+      const finalName = await renameResume(next);
+      await queryClient.invalidateQueries({ queryKey: qk.me });
+      showToast(`Renamed to ${finalName}`);
+    } catch {
+      showToast('Could not rename the resume.');
+    }
+  };
 
   const url = profile.resume?.url;
 
@@ -63,9 +84,16 @@ export default function ResumeViewScreen() {
           alignItems: 'center',
           gap: 10,
         }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.heading, flex: 1 }} numberOfLines={1}>
-          {profile.resume?.name || 'Your resume'}
-        </Text>
+        <Pressable
+          onPress={url ? openRename : undefined}
+          accessibilityRole="button"
+          accessibilityLabel="Rename resume"
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.heading, flexShrink: 1 }} numberOfLines={1}>
+            {profile.resume?.name || 'Your resume'}
+          </Text>
+          {url ? <Ionicons name="pencil-outline" size={16} color={colors.inkTertiary} /> : null}
+        </Pressable>
         <Pressable
           onPress={() => setDoorsOpen(true)}
           accessibilityRole="button"
@@ -110,6 +138,47 @@ export default function ResumeViewScreen() {
           />
         </View>
       ) : null}
+
+      <Modal visible={renaming} transparent animationType="fade" onRequestClose={() => setRenaming(false)}>
+        <Pressable
+          onPress={() => setRenaming(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 24 }}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{ backgroundColor: colors.paper, borderRadius: 14, padding: 18, gap: 12 }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 16, color: colors.ink }}>Rename resume</Text>
+            <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
+              This is the file name recruiters see on your emails and applications.
+            </Text>
+            <TextInput
+              value={draftName}
+              onChangeText={setDraftName}
+              autoFocus
+              autoCapitalize="words"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={() => void saveRename()}
+              placeholder="Rylan Bohnett Resume"
+              placeholderTextColor={colors.inkTertiary}
+              style={{
+                height: 46,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: colors.hairline,
+                backgroundColor: colors.surface,
+                paddingHorizontal: 12,
+                fontFamily: fonts.sans,
+                fontSize: 15,
+                color: colors.ink,
+              }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              <Button label="Cancel" variant="outline" size="sm" onPress={() => setRenaming(false)} />
+              <Button label="Save" variant="brand" size="sm" onPress={() => void saveRename()} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={doorsOpen} transparent animationType="fade" onRequestClose={() => setDoorsOpen(false)}>
         <Pressable

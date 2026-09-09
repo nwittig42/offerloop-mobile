@@ -109,3 +109,14 @@ export async function uploadResume(file: PickedResume): Promise<ResumeUploadResu
 export async function deleteResume(): Promise<void> {
   await apiFetch('/api/resume', { method: 'DELETE', timeoutMs: 20_000 });
 }
+
+/** Rename the resume on file. The backend keeps the file's extension and
+ *  returns the final name; it is also the attachment name on outgoing email. */
+export async function renameResume(name: string): Promise<string> {
+  const res = await apiFetch<{ ok: boolean; name: string }>('/api/mobile/resume/name', {
+    method: 'PATCH',
+    body: { name },
+    timeoutMs: 15_000,
+  });
+  return res?.name || name;
+}
