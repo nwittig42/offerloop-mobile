@@ -75,9 +75,9 @@ export function TourProvider({ children }: { children: ReactNode }) {
       // on reads as an exchange instead of an unanswered question.
       const last = scoutThread.entries().at(-1);
       if (last?.from === 'user') scoutThread.append({ from: 'scout', text: TOUR_CLOSER });
-      // Always finish where they started, so the tour ends somewhere they can
-      // act rather than on whatever tab the last card happened to explain.
-      router.push('/(tabs)' as never);
+      // Finish on the Feed (Rylan 2026-09-08): the deck is where they can act,
+      // and it is where every later login lands too (tabs initialRouteName).
+      router.push('/(tabs)/feed' as never);
     },
     [router],
   );

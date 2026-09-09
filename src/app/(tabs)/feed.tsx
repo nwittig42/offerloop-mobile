@@ -38,7 +38,6 @@ import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import { pickResume, uploadResume } from '@/api/endpoints/resume';
 import { AUTO_APPLY_CREDITS } from '@/api/endpoints/scoutActions';
 import { ResumeDoors } from '@/components/resume/ResumeDoors';
-import { ActionCircle } from '@/components/ui/Button';
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -428,7 +427,6 @@ export default function FeedScreen() {
       {!(mode === 'jobs' && expanded) ? (
         <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)}>
           <FeedSwitcher mode={mode} onChange={setMode} />
-          <FeedSearchBar mode={mode} />
         </Animated.View>
       ) : null}
 
@@ -594,9 +592,10 @@ export default function FeedScreen() {
                     round): they now float ON the card's bottom edge with the
                     undo, where Rylan circled. The bar keeps what a swipe
                     cannot do: the add-on switch and the deck filter. */}
-                {/* Tighter bar (Rylan 2026-09-08): the search moved up under
-                    the switcher, so this row only holds the switch and the
-                    gear, and 36 points is enough for both. */}
+                {/* Search on top, the switch under it, no gear (Rylan
+                    2026-09-08): the search row opens the pop-up the gear
+                    used to, so the bar is two slim rows and nothing else. */}
+                <FeedSearchBar mode="jobs" />
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
                   <View style={{ flex: 1 }}>
                     <HiringManagerToggle
@@ -606,14 +605,6 @@ export default function FeedScreen() {
                       onActionTap={tapHiringManagerVerb}
                     />
                   </View>
-                  <ActionCircle
-                    icon="options-outline"
-                    size={36}
-                    onPress={() => router.push('/feed-filter?deck=jobs')}
-                    accessibilityLabel={
-                      jobFilter ? `Job feed filter: ${jobFilter}` : 'Filter the job feed'
-                    }
-                  />
                 </View>
 
                 {/* The active sentence used to be named here; the search bar

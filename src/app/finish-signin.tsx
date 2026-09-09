@@ -21,7 +21,7 @@ export default function FinishSignInScreen() {
 
   useEffect(() => {
     if (status === 'signedIn') {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/feed');
       return;
     }
     // Signed out and still here after a grace period: the link was expired

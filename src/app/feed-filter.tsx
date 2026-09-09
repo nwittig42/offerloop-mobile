@@ -251,6 +251,7 @@ export default function FeedFilterScreen() {
             value={draft}
             onChangeText={setDraft}
             maxLength={MAX_PROMPT}
+            autoFocus
             placeholder={hint || copy.placeholder}
             autoCapitalize="sentences"
             accessibilityLabel={copy.label}

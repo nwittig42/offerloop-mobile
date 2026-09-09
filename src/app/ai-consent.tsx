@@ -53,7 +53,7 @@ export default function AIConsentScreen() {
   // move on. Settings/prompt modes keep the screen open on purpose.
   useEffect(() => {
     if (!isPrompt && consentLoaded && consent !== null) {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/feed');
     }
   }, [isPrompt, consentLoaded, consent]);
 
@@ -64,7 +64,7 @@ export default function AIConsentScreen() {
     } else {
       // First-run gate: hand control back to the auth gate, which routes to
       // onboarding or the tabs now that a choice exists.
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/feed');
     }
   };
 

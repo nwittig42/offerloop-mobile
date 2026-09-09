@@ -67,7 +67,7 @@ export function OnboardingScaffold({
     completeOnboarding();
     // Explicit /(tabs): bare '/' is ambiguous with this group's index and loops
     // back into onboarding.
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/feed');
   };
 
   return (

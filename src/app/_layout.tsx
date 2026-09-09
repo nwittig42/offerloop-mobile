@@ -126,7 +126,7 @@ function useAuthGate() {
 
     // Signed in. Leave the auth stack first.
     if (inAuthGroup) {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/feed');
       return;
     }
 
@@ -159,7 +159,7 @@ function useAuthGate() {
       // to /(onboarding) for the remaining steps.
       router.replace('/(onboarding)/intake');
     } else if (onboardingDone && inOnboarding) {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/feed');
     }
   }, [status, onboardingDone, needsOnboarding, segments, router]);
 

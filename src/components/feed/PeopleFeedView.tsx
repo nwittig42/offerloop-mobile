@@ -12,10 +12,10 @@ import { appliedCompanyKeys } from '@/lib/appliedPeople';
 import GlassBar from '@/components/GlassBar';
 import DeckActions from '@/components/feed/DeckActions';
 import DraftSendChoice from '@/components/feed/DraftSendChoice';
+import FeedSearchBar from '@/components/feed/FeedSearchBar';
 import PersonDeck, { type PersonDeckHandle } from '@/components/feed/PersonDeck';
 import ProfileGapSurvey from '@/components/feed/ProfileGapSurvey';
 import ScoutProfileNudge from '@/components/feed/ScoutProfileNudge';
-import { ActionCircle } from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import EmailSketch from '@/components/feed/EmailSketch';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
@@ -838,8 +838,10 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               gap: 8,
             }}>
 
-          {/* 36 not 46 (Rylan 2026-09-08): the search lives under the
-              switcher now, so this row is only the choice and the gear. */}
+          {/* Search on top, the choice under it, no gear (Rylan 2026-09-08):
+              the search row opens the pop-up the gear used to (sentence,
+              recents, email template), so the bar is two slim rows. */}
+          <FeedSearchBar mode="people" />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
             {/* No on/off switch beside it, unlike the Jobs bar: writing to the
                 person is what a right swipe on this deck IS, not an add-on to
@@ -858,19 +860,6 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
                 }}
               />
             </View>
-            {/* The gear opened the email template directly for one release
-                (2026-08-16), on the reasoning that this deck never asks "who do
-                we go find". It asks now. So the gear opens the settings screen,
-                and the template is the first thing on it, one tap further than
-                before and next to the search it belongs with. */}
-            <ActionCircle
-              icon="options-outline"
-              size={36}
-              onPress={() => router.push('/feed-filter?deck=people')}
-              accessibilityLabel={
-                peopleFilter ? `People feed filter: ${peopleFilter}` : 'People feed settings'
-              }
-            />
           </View>
 
           {/* The active sentence used to be named here; the search bar under
