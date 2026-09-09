@@ -470,6 +470,17 @@ function ScoutTabInner() {
     }
   }, [reply]);
 
+  // The voice room is for asking, not reading (Rylan 2026-09-08: "I didn't
+  // even recognize the chat was happening behind that"). Once the answer
+  // lands, the room steps aside and the thread shows it; Scout keeps
+  // speaking, and the mic in the composer reopens the room.
+  useEffect(() => {
+    if (!reply || !voiceOpen) return;
+    stopRef.current?.();
+    setVoiceOpen(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reply]);
+
   // Leaving the tab silences Scout mid-sentence. Tabs stay mounted, so the
   // unmount cleanup alone never fired while switching tabs (Rylan
   // 2026-09-08: "it won't stop if I'm navigating around the app").
@@ -1721,6 +1732,10 @@ function ScoutTabInner() {
     // that this build's permission copy is honest about it.
     let audioUri: string | null = null;
     let audioSettled = false;
+    // One ask per listen. The recognizer can end twice (final result, then
+    // the session closing), and each end used to submit the transcript again
+    // (Rylan 2026-09-08: every spoken bubble showed up twice).
+    let submitted = false;
     stopRef.current = startListening({
       contextualStrings: speechVocab,
       onAudioFile: (u: string | null) => {
@@ -1738,17 +1753,18 @@ function ScoutTabInner() {
         stopRef.current = null;
         volume.value = 0;
         // Recognition ended (tap-stop, silence, or final result).
+        if (submitted) return;
+        submitted = true;
         setPhase((p) => {
           if (p !== 'listening') return p;
-          if (finalText.trim()) {
-            void submitAsk(finalText, {
-              byVoice: true,
-              getAudio: () => ({ uri: audioUri, settled: audioSettled }),
-            });
-            return 'thinking';
-          }
-          return 'idle';
+          return finalText.trim() ? 'thinking' : 'idle';
         });
+        if (finalText.trim()) {
+          void submitAsk(finalText, {
+            byVoice: true,
+            getAudio: () => ({ uri: audioUri, settled: audioSettled }),
+          });
+        }
       },
     });
     if (!stopRef.current) {

@@ -9,6 +9,7 @@ import {
   currentResume,
   finalizeResume,
   previewResumeFromLinkedin,
+  refineResume,
   RESUME_BUILDER_LIVE,
   sectionsFromCanonical,
   type CanonicalResume,
@@ -47,8 +48,12 @@ export default function ResumePreviewScreen() {
   // onLayout fires, and the sheet scrolls to the end so the box and its
   // button sit above the keyboard.
   const scrollRef = useRef<ScrollView>(null);
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode, prompt: promptParam } = useLocalSearchParams<{ mode?: string; prompt?: string }>();
   const editMode = mode === 'edit';
+  // Scout's advice, handed over by its "Apply this to my resume" chip. It runs
+  // through the same refine step as "Describe your changes", and the result
+  // waits for approval like any other draft (Rylan 2026-09-08).
+  const scoutPrompt = typeof promptParam === 'string' ? promptParam.trim() : '';
 
   // Full page now, so the keyboard-avoiding padding measures correctly; once
   // the keyboard is actually up, bring the refine box and its button into view.
@@ -71,10 +76,31 @@ export default function ResumePreviewScreen() {
       // Edit the resume on file (Rylan 2026-09-08). Uploaded resumes come
       // back converted to the builder's structured form; built ones come back
       // as saved. Refine + "Use this" regenerates the PDF and replaces it.
-      currentResume().then((resume) => {
+      currentResume().then(async (resume) => {
         if (!alive) return;
-        if (resume) setState({ phase: 'ready', resume });
-        else setState({ phase: 'error', message: 'No resume to edit yet. Add one first.' });
+        if (!resume) {
+          setState({ phase: 'error', message: 'No resume to edit yet. Add one first.' });
+          return;
+        }
+        if (scoutPrompt) {
+          try {
+            const r = await refineResume(scoutPrompt, resume);
+            if (!alive) return;
+            if (r.status === 'ok') {
+              setState({ phase: 'ready', resume: r.resume });
+              showToast('Scout applied its suggestions. Read it over before you keep it.');
+              return;
+            }
+            showToast(
+              r.status === 'limit'
+                ? 'Daily edit limit reached, showing your resume as is.'
+                : 'Could not apply the suggestions, showing your resume as is.',
+            );
+          } catch {
+            if (!alive) return;
+          }
+        }
+        setState({ phase: 'ready', resume });
       });
       return () => {
         alive = false;
@@ -147,7 +173,11 @@ export default function ResumePreviewScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator color={colors.navy} />
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
-              {editMode ? 'Loading your resume…' : 'Scout is building and polishing your resume…'}
+              {editMode && scoutPrompt
+                ? 'Scout is applying its suggestions to your resume…'
+                : editMode
+                  ? 'Loading your resume…'
+                  : 'Scout is building and polishing your resume…'}
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
               This can take up to a minute.

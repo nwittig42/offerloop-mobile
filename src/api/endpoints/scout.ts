@@ -63,7 +63,21 @@ export function mapScoutRoute(route?: string): string | null {
   if (['/agent', '/agent/setup', '/loops'].includes(r)) return '/loops';
   if (['/coffee-chat-prep', '/coffee-chat-library', '/meeting-prep'].includes(r)) return '/meeting-prep/new';
   if (['/pricing', '/credits', '/account-settings'].includes(r)) return '/credits';
+  // The website's resume page, in every spelling Scout uses for it. The
+  // mobile home is the edit screen; the chat translator below adds the
+  // advice as a prefill so "Take me there" actually does the work.
+  if (r === '/resume' || r.startsWith('/resume/') || r.startsWith('/resume-')) return '/resume-preview?mode=edit';
   return null;
+}
+
+/** Resume chips carry Scout's own advice into the edit screen, which runs it
+ *  through "Describe your changes" and shows the result for approval (Rylan
+ *  2026-09-08: "it says opening your Resume page and doesn't"). */
+export function withResumePrefill(href: string, advice: string): string {
+  if (!href.startsWith('/resume-preview')) return href;
+  const text = (advice || '').trim().slice(0, 1500);
+  if (!text) return href;
+  return `${href}&prompt=${encodeURIComponent(text)}`;
 }
 
 export type ScoutChatMeta = {
@@ -171,6 +185,14 @@ export async function sendScoutMessage(args: {
     if (href && !seen.has(href)) actions.push({ label: 'Take me there', href });
   }
 
+  // Resume chips get the advice prefilled and a label that says what they do.
+  const sayText: string = typeof r?.message === 'string' ? r.message : typeof r?.say === 'string' ? r.say : '';
+  for (const a of actions) {
+    if (a.href && a.href.startsWith('/resume-preview')) {
+      a.href = withResumePrefill(a.href, sayText);
+      a.label = 'Apply this to my resume';
+    }
+  }
   return {
     message: (r?.message as string) || "I didn't catch that — try asking again?",
     chatId: (r?.chat_id as string) || undefined,

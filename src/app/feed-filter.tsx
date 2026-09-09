@@ -312,80 +312,12 @@ export default function FeedFilterScreen() {
           />
         ) : null}
 
-        {/* Recents. The reason a filter is worth saving at all: last night's
-            search comes back in one tap instead of being retyped. Tapping one
-            applies it immediately, rather than filling the box and waiting for
-            a second tap on Save. */}
-        {recents.length ? (
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-              Your recent filters
-            </Text>
-            {recents.map((r) => {
-              const isActive = r === active;
-              return (
-                <Pressable key={r} onPress={() => (isActive ? router.back() : apply(r))}>
-                  <Card
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      borderColor: isActive ? colors.accent : colors.hairline,
-                      borderWidth: isActive ? 1.5 : 1,
-                    }}>
-                    <Ionicons
-                      name={isActive ? 'checkmark-circle' : 'time-outline'}
-                      size={18}
-                      color={isActive ? colors.accent : colors.inkTertiary}
-                    />
-                    <Text
-                      numberOfLines={2}
-                      style={{
-                        flex: 1,
-                        fontFamily: fonts.sans,
-                        fontSize: 14,
-                        color: colors.ink,
-                        lineHeight: 19,
-                      }}>
-                      {r}
-                    </Text>
-                  </Card>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
-              For example
-            </Text>
-            {copy.examples.map((e) => (
-              <Pressable key={e} onPress={() => setDraft(e)}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  {/* A magnifier, not a sparkle. Sparkles read as AI slop
-                      (Rylan), and these rows are searches you can run, which
-                      the magnifier actually says. */}
-                  <Ionicons name="search-outline" size={17} color={colors.inkTertiary} />
-                  <Text
-                    style={{
-                      flex: 1,
-                      fontFamily: fonts.sans,
-                      fontSize: 14,
-                      color: colors.inkSecondary,
-                      lineHeight: 19,
-                    }}>
-                    {e}
-                  </Text>
-                </Card>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
         {/* The other half of an outreach decision, and only on the deck that
-            makes one. The Jobs deck writes to a hiring manager too, but that is
-            an add-on it configures in its own bar; putting the template here as
-            well would give the same screen two owners. */}
+            makes one. Right under the applied shortcut (Rylan 2026-09-08),
+            since the gear that used to reach it is gone. The Jobs deck writes
+            to a hiring manager too, but that is an add-on it configures in
+            its own bar; putting the template here as well would give the
+            same screen two owners. */}
         {deck === 'people' ? (
           <Pressable
             onPress={() => router.push('/outreach-template')}
@@ -429,6 +361,81 @@ export default function FeedFilterScreen() {
             </Card>
           </Pressable>
         ) : null}
+        {/* Recents. The reason a filter is worth saving at all: last night's
+            search comes back in one tap instead of being retyped. Tapping one
+            applies it immediately, rather than filling the box and waiting for
+            a second tap on Save. */}
+        {recents.length ? (
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+              Your recent filters
+            </Text>
+            {recents.map((r) => {
+              const isActive = r === active;
+              return (
+                <Pressable key={r} onPress={() => (isActive ? router.back() : apply(r))}>
+                  <Card
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                      borderColor: isActive ? colors.accent : colors.hairline,
+                      borderWidth: isActive ? 1.5 : 1,
+                    }}>
+                    <Ionicons
+                      name={isActive ? 'checkmark-circle' : 'time-outline'}
+                      size={18}
+                      color={isActive ? colors.accent : colors.inkTertiary}
+                    />
+                    <Text
+                      numberOfLines={2}
+                      style={{
+                        flex: 1,
+                        fontFamily: fonts.sans,
+                        fontSize: 14,
+                        color: colors.ink,
+                        lineHeight: 19,
+                      }}>
+                      {r}
+                    </Text>
+                  </Card>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Always on, and tapping one RUNS it (Rylan 2026-09-08: "these
+            suggestions are going to be pretty important, keep them as searches
+            you can click"). They used to hide as soon as one recent existed. */}
+        <View style={{ gap: 8 }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.ink }}>
+            Try one of these
+          </Text>
+          {copy.examples
+            .filter((e) => !recents.includes(e))
+            .map((e) => (
+              <Pressable key={e} onPress={() => apply(e)} accessibilityRole="button">
+                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  {/* A magnifier, not a sparkle. Sparkles read as AI slop
+                      (Rylan), and these rows are searches you can run, which
+                      the magnifier actually says. */}
+                  <Ionicons name="search-outline" size={17} color={colors.inkTertiary} />
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontFamily: fonts.sans,
+                      fontSize: 14,
+                      color: colors.inkSecondary,
+                      lineHeight: 19,
+                    }}>
+                    {e}
+                  </Text>
+                </Card>
+              </Pressable>
+            ))}
+        </View>
+
       </ScrollView>
     </View>
   );

@@ -58,19 +58,67 @@ export function promptToJobQuery(prompt: string, parsed: ParsedPrompt | null): J
   else if (/\b(senior|staff|principal|lead)\b/.test(text)) seniority = 'senior';
   else if (/\b(director|vp|vice president|head of|executive)\b/.test(text)) seniority = 'executive';
 
-  // The role words are the useful part of `q`. Falling back to the whole
-  // sentence is deliberate: an unparsed prompt should still search, just less
-  // precisely, rather than quietly returning the unfiltered feed.
+  // The role words are the useful part of `q`. Falling back to the sentence
+  // is deliberate: an unparsed prompt should still search, just less
+  // precisely, rather than quietly returning the unfiltered feed. But the
+  // sentence gets cleaned first (Rylan 2026-09-08: "Entry level finance roles
+  // in New York" found nothing because "roles", "level" and "York" all had to
+  // appear in a job's search terms): the place comes out as its own filter,
+  // and filler words that never appear in a job title are dropped.
   const roles = firstOf(parsed?.roles);
   const industries = firstOf(parsed?.industries);
-  const q = roles || industries || prompt.trim();
+  const fallback = fallbackParse(prompt);
+  const q = roles || industries || fallback.q || prompt.trim();
 
   return {
     q,
     company: firstOf(parsed?.company) || undefined,
-    location: firstOf(parsed?.location) || undefined,
+    location: firstOf(parsed?.location) || fallback.location || undefined,
     type,
     seniority,
   };
+}
+
+const PLACE_SHORTHAND: Record<string, string> = {
+  la: 'los angeles',
+  nyc: 'new york',
+  ny: 'new york',
+  sf: 'san francisco',
+  dc: 'washington',
+  bay: 'san francisco',
+  chi: 'chicago',
+};
+
+/** Words a student puts in a search sentence that never appear in a job's
+ *  title: the ask itself ("roles", "jobs"), the level words that already
+ *  became `seniority` or `type`, and time ("this summer"). */
+const FILLER = new Set([
+  'role', 'roles', 'job', 'jobs', 'position', 'positions', 'opening', 'openings',
+  'opportunity', 'opportunities', 'entry', 'level', 'new', 'grad', 'graduate', 'junior',
+  'intern', 'interns', 'internship', 'internships', 'full', 'part', 'time', 'remote',
+  'this', 'summer', 'fall', 'spring', 'winter', 'hiring', 'looking', 'find', 'me', 'near',
+  'company', 'companies', 'firm', 'firms', 'startup', 'startups', 'at', 'in', 'for', 'the',
+  'a', 'an', 'and', 'or', 'of', 'to', 'with', 'on',
+]);
+
+/** "Entry level finance roles in New York" -> { q: "finance", location: "new york" }. */
+export function fallbackParse(prompt: string): { q: string; location?: string } {
+  let text = prompt.toLowerCase().replace(/[^a-z0-9\s,]/g, ' ');
+  let location: string | undefined;
+  // The place is whatever follows the LAST "in" or a trailing ", City".
+  const m = text.match(/\b(?:in|near|around)\s+([a-z][a-z\s.]{1,40})$/) || text.match(/,\s*([a-z][a-z\s.]{1,40})$/);
+  if (m) {
+    const raw = m[1].trim().replace(/\b(this|next)\s+(summer|fall|spring|winter)\b/g, '').trim();
+    if (raw && raw !== 'remote') {
+      location = PLACE_SHORTHAND[raw] || raw;
+      text = text.slice(0, m.index);
+    }
+  }
+  const q = text
+    .split(/[\s,]+/)
+    .filter((w) => w && !FILLER.has(w))
+    .join(' ')
+    .trim();
+  return { q, location };
 }
 
