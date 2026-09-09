@@ -33,16 +33,35 @@ export const RESUME_BUILDER_LIVE = true;
 const WEB_BASE =
   process.env.EXPO_PUBLIC_WEB_BASE_URL || 'https://final-offerloop.onrender.com';
 
+/**
+ * One entry as the website's resume contract actually ships it
+ * (backend/app/services/resume_renderer/contract.py): experience has
+ * company/role/start/end, education school/degree/graduation, projects
+ * name/tech/date, leadership organization/role/start/end. Older names
+ * (org, dates, title) are kept so a draft from any source still maps.
+ */
 type Entryish = {
+  company?: string;
   org?: string;
+  organization?: string;
   school?: string;
   name?: string;
   role?: string;
   degree?: string;
   title?: string;
+  location?: string;
+  start?: string;
+  end?: string;
   dates?: string;
+  date?: string;
+  graduation?: string;
+  gpa?: string;
+  tech?: string[];
   bullets?: string[];
 };
+
+/** Skills arrive grouped ({ category, items }); a flat string list still maps. */
+type SkillsGroupish = { category?: string; items?: string[] } | string;
 
 /** Nick's CanonicalResume, typed loosely on purpose: the preview maps
  *  whatever arrives, and finalize passes the object back untouched. */
@@ -52,8 +71,9 @@ export type CanonicalResume = {
   experience?: Entryish[];
   projects?: Entryish[];
   leadership?: Entryish[];
-  skills?: string[];
-  interests?: string[];
+  skills?: SkillsGroupish[];
+  /** A single sentence in the contract, not a list. */
+  interests?: string | string[];
 };
 
 export type ResumeBuildResult =
@@ -156,17 +176,49 @@ export async function finalizeResume(resume: CanonicalResume): Promise<boolean> 
   }
 }
 
-/** Shape CanonicalResume into the preview component's titled sections. */
+/**
+ * Shape CanonicalResume into the preview component's titled sections.
+ *
+ * Defensive on purpose (Rylan 2026-09-08, "it crashed again"): the edit sheet
+ * renders straight from whatever the website returns, and a value that is
+ * not a string reaching <Text> (or .join on a string) throws mid-render,
+ * which a release build turns into a hard crash. Every field is coerced
+ * here, so a shape surprise costs a blank line, never the app.
+ */
 export function sectionsFromCanonical(resume: CanonicalResume): ResumePreviewSection[] {
   const sections: ResumePreviewSection[] = [];
-  const toEntries = (items?: Entryish[]): ResumePreviewEntry[] =>
-    (items ?? [])
-      .map((it) => ({
-        heading: it.role ?? it.degree ?? it.title ?? it.name,
-        sub: it.org ?? it.school,
-        meta: it.dates,
-        bullets: it.bullets ?? [],
-      }))
+  const str = (v: unknown): string | undefined => {
+    if (v === null || v === undefined) return undefined;
+    if (typeof v === 'string') return v.trim() || undefined;
+    if (typeof v === 'number') return String(v);
+    return undefined;
+  };
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map(str).filter((x): x is string => !!x) : str(v) ? [str(v) as string] : [];
+  const span = (it: Entryish): string | undefined => {
+    const direct = str(it.dates) ?? str(it.date) ?? str(it.graduation);
+    if (direct) return direct;
+    const a = str(it.start);
+    const b = str(it.end);
+    if (a && b) return `${a} to ${b}`;
+    return a ?? b;
+  };
+  const toEntries = (items: unknown): ResumePreviewEntry[] =>
+    (Array.isArray(items) ? (items as Entryish[]) : [])
+      .filter((it) => it && typeof it === 'object')
+      .map((it) => {
+        const bullets = strList(it.bullets);
+        const tech = strList(it.tech);
+        if (tech.length) bullets.push(`Built with ${tech.join(', ')}`);
+        const gpa = str(it.gpa);
+        if (gpa) bullets.push(`GPA ${gpa}`);
+        return {
+          heading: str(it.role) ?? str(it.degree) ?? str(it.title) ?? str(it.name),
+          sub: str(it.company) ?? str(it.org) ?? str(it.organization) ?? str(it.school),
+          meta: span(it),
+          bullets,
+        };
+      })
       .filter((e) => e.heading || e.sub || e.bullets.length);
 
   const push = (title: string, entries: ResumePreviewEntry[]) => {
@@ -176,8 +228,20 @@ export function sectionsFromCanonical(resume: CanonicalResume): ResumePreviewSec
   push('Education', toEntries(resume.education));
   push('Projects', toEntries(resume.projects));
   push('Leadership', toEntries(resume.leadership));
-  push('Skills', resume.skills?.length ? [{ bullets: [resume.skills.join(' · ')] }] : []);
-  push('Interests', resume.interests?.length ? [{ bullets: [resume.interests.join(' · ')] }] : []);
+
+  const skillLines = (Array.isArray(resume.skills) ? resume.skills : [])
+    .map((g) => {
+      if (typeof g === 'string') return str(g);
+      if (!g || typeof g !== 'object') return undefined;
+      const items = strList(g.items).join(', ');
+      const category = str(g.category);
+      return items ? (category ? `${category}: ${items}` : items) : undefined;
+    })
+    .filter((x): x is string => !!x);
+  push('Skills', skillLines.length ? [{ bullets: skillLines }] : []);
+
+  const interests = strList(resume.interests).join(' · ');
+  push('Interests', interests ? [{ bullets: [interests] }] : []);
   return sections;
 }
 
