@@ -150,7 +150,6 @@ export default function ResumePreviewScreen() {
             style={{ flex: 1 }}
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
             showsVerticalScrollIndicator={false}>
             {/* Honest expectations (Rylan 2026-08-10): this is a solid floor,
                 not a polished ceiling, and users should hear that from us. */}
