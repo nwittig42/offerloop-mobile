@@ -256,7 +256,11 @@ function ThemedShell() {
         <Stack.Screen name="scout" options={{ presentation: 'modal' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="resume-preview" options={{ presentation: 'modal' }} />
+        {/* A page, not a sheet (Rylan 2026-09-08, "Apply changes" hidden under
+            the keyboard on both channels): iOS modal sheets sit offset from
+            the window, so KeyboardAvoidingView under-pads inside them. The
+            text builder below went full-page for the same reason. */}
+        <Stack.Screen name="resume-preview" options={{ presentation: 'card' }} />
         <Stack.Screen name="resume-view" options={{ presentation: 'modal' }} />
         {/* A page, not a modal (2026-08-13): the resume builder is a multi-step
             form with its own back arrow, reached mid-signup from intake, and a

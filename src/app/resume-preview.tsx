@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -49,6 +49,15 @@ export default function ResumePreviewScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const editMode = mode === 'edit';
+
+  // Full page now, so the keyboard-avoiding padding measures correctly; once
+  // the keyboard is actually up, bring the refine box and its button into view.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!RESUME_BUILDER_LIVE) {
@@ -110,7 +119,7 @@ export default function ResumePreviewScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View
         style={{
-          paddingTop: 18,
+          paddingTop: insets.top + 8,
           paddingHorizontal: 20,
           paddingBottom: 12,
           backgroundColor: colors.paper,
@@ -118,14 +127,14 @@ export default function ResumePreviewScreen() {
           borderBottomColor: colors.hairline,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 10,
+          gap: 12,
         }}>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={{ padding: 4 }}>
+          <Ionicons name="chevron-back" size={24} color={colors.ink} />
+        </Pressable>
         <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.heading, flex: 1 }}>
           {editMode ? 'Edit your resume' : 'Your resume'}
         </Text>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" style={{ padding: 6 }}>
-          <Ionicons name="close" size={22} color={colors.ink} />
-        </Pressable>
       </View>
 
       {/* The refine box sits at the bottom and the keyboard used to cover it
