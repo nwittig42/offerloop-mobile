@@ -245,9 +245,16 @@ export default function ResumeFromTextScreen() {
     if (ok) {
       track('resume_built', { method: 'described' });
       showToast('Resume saved. Auto-apply can use it now.');
-      await queryClient.invalidateQueries({ queryKey: qk.me });
-      await queryClient.invalidateQueries({ queryKey: ['applicationProfile'] });
+      // Close FIRST, refresh after the transition. Refetching /me here
+      // re-rendered the viewer underneath while this sheet was dismissing,
+      // and two screen changes in one frame is the react-native-screens
+      // crash we hit in onboarding (Rylan 2026-09-08: "saved, then it
+      // crashed").
       router.back();
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: qk.me });
+        void queryClient.invalidateQueries({ queryKey: ['applicationProfile'] });
+      }, 400);
     } else {
       showToast('Could not save the resume. Try again.');
     }
