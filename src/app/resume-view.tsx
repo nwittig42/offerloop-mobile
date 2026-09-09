@@ -53,6 +53,17 @@ export default function ResumeViewScreen() {
 
   const url = profile.resume?.url;
 
+  // This viewer is a sheet; the builder screens are full pages. A page pushed
+  // from inside a sheet lands on the stack UNDER the sheet (Rylan 2026-09-08:
+  // "the edit page appears behind the preview"), so close the sheet first and
+  // open the page once its dismiss animation is done. Sequential, never in
+  // the same frame (the react-native-screens crash we hit elsewhere).
+  const leaveTo = (href: Parameters<typeof router.push>[0]) => {
+    setDoorsOpen(false);
+    router.back();
+    setTimeout(() => router.push(href), 350);
+  };
+
   const onUpload = async () => {
     setDoorsOpen(false);
     try {
@@ -134,7 +145,7 @@ export default function ResumeViewScreen() {
             fullWidth
             icon="create-outline"
             disabled={busy}
-            onPress={() => router.push({ pathname: '/resume-preview', params: { mode: 'edit' } } as never)}
+            onPress={() => leaveTo({ pathname: '/resume-preview', params: { mode: 'edit' } } as never)}
           />
         </View>
       ) : null}
@@ -197,14 +208,8 @@ export default function ResumeViewScreen() {
               hasResume={profile.hasResume}
               hasLinkedin={!!profile.linkedinUrl?.trim()}
               onUpload={() => void onUpload()}
-              onBuildFromLinkedin={() => {
-                setDoorsOpen(false);
-                router.push('/resume-preview');
-              }}
-              onDescribe={() => {
-                setDoorsOpen(false);
-                router.push('/resume-from-text');
-              }}
+              onBuildFromLinkedin={() => leaveTo('/resume-preview')}
+              onDescribe={() => leaveTo('/resume-from-text')}
               onNotNow={() => setDoorsOpen(false)}
             />
           </Pressable>
