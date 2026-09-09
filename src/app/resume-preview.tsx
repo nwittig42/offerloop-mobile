@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  currentResume,
   finalizeResume,
   previewResumeFromLinkedin,
   RESUME_BUILDER_LIVE,
@@ -41,6 +42,8 @@ export default function ResumePreviewScreen() {
     | { phase: 'error'; message: string }
   >({ phase: 'loading' });
   const [adopting, setAdopting] = useState(false);
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const editMode = mode === 'edit';
 
   useEffect(() => {
     if (!RESUME_BUILDER_LIVE) {
@@ -50,6 +53,19 @@ export default function ResumePreviewScreen() {
       return;
     }
     let alive = true;
+    if (editMode) {
+      // Edit the resume on file (Rylan 2026-09-08). Uploaded resumes come
+      // back converted to the builder's structured form; built ones come back
+      // as saved. Refine + "Use this" regenerates the PDF and replaces it.
+      currentResume().then((resume) => {
+        if (!alive) return;
+        if (resume) setState({ phase: 'ready', resume });
+        else setState({ phase: 'error', message: 'No resume to edit yet. Add one first.' });
+      });
+      return () => {
+        alive = false;
+      };
+    }
     previewResumeFromLinkedin().then((r) => {
       if (!alive) return;
       if (r.status === 'ok') setState({ phase: 'ready', resume: r.resume });
@@ -93,7 +109,7 @@ export default function ResumePreviewScreen() {
           gap: 10,
         }}>
         <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.heading, flex: 1 }}>
-          Your resume
+          {editMode ? 'Edit your resume' : 'Your resume'}
         </Text>
         <Pressable onPress={() => router.back()} accessibilityRole="button" style={{ padding: 6 }}>
           <Ionicons name="close" size={22} color={colors.ink} />
@@ -105,7 +121,7 @@ export default function ResumePreviewScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator color={colors.navy} />
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
-              Scout is building and polishing your resume…
+              {editMode ? 'Loading your resume…' : 'Scout is building and polishing your resume…'}
             </Text>
             <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkTertiary }}>
               This can take up to a minute.

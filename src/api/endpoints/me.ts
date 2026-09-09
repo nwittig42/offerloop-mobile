@@ -20,7 +20,7 @@ type MeResponse = {
   creditsPerSwipe: number;
   gmailConnected: boolean;
   gmailAddress: string;
-  resume: { name: string; url?: string } | null;
+  resume: { name: string; url?: string; thumbUrl?: string } | null;
   linkedinUrl: string;
   phone: string;
   preferredLocations: string[];
@@ -75,8 +75,8 @@ export async function fetchMe(): Promise<Profile> {
     // and a completion ring crediting a resume they never uploaded).
     hasResume: !!me.resume,
     resume: me.resume
-      ? { name: me.resume.name, updatedLabel: 'On file', url: me.resume.url }
-      : { name: 'No resume yet', updatedLabel: 'Add one in the app', url: undefined },
+      ? { name: me.resume.name, updatedLabel: 'On file', url: me.resume.url, thumbUrl: me.resume.thumbUrl }
+      : { name: 'No resume yet', updatedLabel: 'Add one in the app', url: undefined, thumbUrl: undefined },
     linkedinUrl: me.linkedinUrl || '',
     phone: me.phone || '',
     preferredLocations: me.preferredLocations || [],

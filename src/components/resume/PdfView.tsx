@@ -15,12 +15,16 @@ import { WebView } from 'react-native-webview';
  */
 export default function PdfView({
   base64,
+  uri: uriProp,
   backgroundColor,
 }: {
-  base64: string;
+  /** PDF bytes, for the builder preview. */
+  base64?: string;
+  /** Or a URL, for the resume on file (its token-secured storage link). */
+  uri?: string;
   backgroundColor: string;
 }) {
-  const uri = `data:application/pdf;base64,${base64}`;
+  const uri = uriProp || `data:application/pdf;base64,${base64 || ''}`;
 
   if (Platform.OS === 'web') {
     return (

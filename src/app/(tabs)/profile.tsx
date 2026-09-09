@@ -77,41 +77,65 @@ const splitList = (s: string) =>
 function ResumeDrop({
   hasResume,
   resumeName,
+  thumbUrl,
   busy,
   onPress,
+  onOpen,
 }: {
   hasResume: boolean;
   /** The attached file's name, so the card says WHICH resume rides along
    *  (Rylan 2026-08-19: "I want to be able to see which resume I'm working
    *  with"). */
   resumeName?: string;
+  /** Page-one preview, rendered once server-side; the card shows the real
+   *  document instead of a generic icon (Rylan 2026-09-08). */
+  thumbUrl?: string;
   busy: boolean;
+  /** Replace / Add: opens the three doors. */
   onPress: () => void;
+  /** Tap the card body with a resume on file: open the full viewer. */
+  onOpen: () => void;
 }) {
   const colors = useColors();
   return (
-    <Pressable onPress={onPress} disabled={busy} accessibilityRole="button">
+    <Pressable onPress={hasResume ? onOpen : onPress} disabled={busy} accessibilityRole="button">
       <Card
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: busy ? 0.6 : 1 }}>
-        <View
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: hasResume ? colors.positive + '18' : colors.accent + '14',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-          {busy ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : (
-            <Ionicons
-              name={hasResume ? 'document-text' : 'cloud-upload-outline'}
-              size={18}
-              color={hasResume ? colors.positive : colors.accent}
-            />
-          )}
-        </View>
+        {thumbUrl && !busy ? (
+          <Image
+            source={{ uri: thumbUrl }}
+            resizeMode="cover"
+            style={{
+              width: 44,
+              height: 56,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              backgroundColor: colors.paper,
+            }}
+            accessibilityLabel="Resume preview"
+          />
+        ) : (
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: hasResume ? colors.positive + '18' : colors.accent + '14',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            {busy ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Ionicons
+                name={hasResume ? 'document-text' : 'cloud-upload-outline'}
+                size={18}
+                color={hasResume ? colors.positive : colors.accent}
+              />
+            )}
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink }}>
             {hasResume ? 'Resume attached' : 'Add your resume'}
@@ -122,16 +146,23 @@ function ResumeDrop({
             {busy
               ? 'Uploading and reading it…'
               : hasResume
-                ? resumeName || 'Replace it, or build a fresh one'
+                ? resumeName || 'Tap to view, or replace it'
                 : 'Upload one, or we build it with you'}
           </Text>
         </View>
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
-          {/* "Add", matching the row title: the action opens the three doors
-              (upload / LinkedIn / describe), and half its audience has no
-              file to upload. */}
-          {hasResume ? 'Replace' : 'Add'}
-        </Text>
+        <Pressable
+          onPress={onPress}
+          disabled={busy}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={hasResume ? 'Replace resume' : 'Add resume'}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
+            {/* "Add", matching the row title: the action opens the three doors
+                (upload / LinkedIn / describe), and half its audience has no
+                file to upload. */}
+            {hasResume ? 'Replace' : 'Add'}
+          </Text>
+        </Pressable>
       </Card>
     </Pressable>
   );
@@ -684,8 +715,10 @@ export default function ProfileScreen() {
           <ResumeDrop
             hasResume={profile.hasResume}
             resumeName={profile.resume?.name}
+            thumbUrl={profile.resume?.thumbUrl}
             busy={resumeBusy}
             onPress={() => setResumeDoorsOpen(true)}
+            onOpen={() => router.push('/resume-view' as never)}
           />
 
           <Modal

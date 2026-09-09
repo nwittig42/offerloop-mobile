@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { qk } from '@/api/queryKeys';
@@ -112,6 +112,13 @@ export default function AttachmentsScreen() {
             }}>
             {busy ? (
               <ActivityIndicator size="small" color={colors.accent} />
+            ) : hasResume && profile.resume?.thumbUrl ? (
+              <Image
+                source={{ uri: profile.resume.thumbUrl }}
+                resizeMode="cover"
+                style={{ width: '100%', height: '100%', borderRadius: 10 }}
+                accessibilityLabel="Resume preview"
+              />
             ) : (
               <Ionicons
                 name={hasResume ? 'document-text' : 'document-text-outline'}

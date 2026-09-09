@@ -445,7 +445,13 @@ export const MOCK_PROFILE = {
   gmailConnected: false,
   gmailAddress: '',
   hasResume: false,
-  resume: { name: '', updatedLabel: '', url: '' as string | undefined },
+  resume: {
+    name: '',
+    updatedLabel: '',
+    url: '' as string | undefined,
+    // Page-one preview image (token URL); absent for DOCX uploads.
+    thumbUrl: undefined as string | undefined,
+  },
   linkedinUrl: '',
   phone: '',
   preferredLocations: [] as string[],
