@@ -44,7 +44,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { identify, setAnalyticsUser, takePendingSignInMethod, track } from '@/lib/analytics';
 import { safeStringify } from '@/lib/safeJson';
 import { normCompanyName, sameCompany } from '@/lib/company';
-import { markTourPending } from '@/lib/tourFlag';
+import { markTourPending, setTourUser } from '@/lib/tourFlag';
 import {
   hasNotificationPermission,
   registerForPushNotificationsAsync,
@@ -379,6 +379,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Falls back to the fixture until the first fetch resolves (or offline mocks).
   const { status: authStatus, user } = useAuth();
   const uid = user?.uid;
+  // Tour flags are per account (see lib/tourFlag); tell it who is signed in.
+  setTourUser(uid);
   const queryClient = useQueryClient();
 
   // Swipe settings live UP HERE, above the feed query, because they now carry

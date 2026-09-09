@@ -44,11 +44,11 @@ export default function WelcomeScreen() {
           flexGrow: 1,
           paddingTop: insets.top + 32,
           paddingHorizontal: 24,
-          paddingBottom: insets.bottom + 16,
+          paddingBottom: 16,
         }}
         showsVerticalScrollIndicator={false}>
         <View style={{ flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
-          <View style={{ alignItems: 'center', paddingTop: 128 }}>
+          <View style={{ alignItems: 'center', paddingTop: 96 }}>
             {/* The home-screen app icon with its baked white ground unmultiplied
                 out (assets/images/offerloop-icon-float.png, generated from
                 icon.png): the mark and its soft drop shadow survive as real
@@ -96,33 +96,45 @@ export default function WelcomeScreen() {
             </Text>
           </View>
 
-          <View style={{ flexGrow: 1, minHeight: 32 }} />
-
-          <View style={{ gap: 16 }}>
-            <PrimaryCta label="Get started" onPress={() => router.push('/(auth)/create-account')} />
-
-            <Pressable
-              onPress={() => router.push('/(auth)/sign-in')}
-              accessibilityRole="button"
-              accessibilityLabel="Sign in to an existing account"
-              style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <Text
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 14.5,
-                  color: colors.inkSecondary,
-                  textAlign: 'center',
-                }}>
-                Already have an account?{' '}
-                <Text style={{ fontFamily: fonts.sansSemibold, color: colors.marketing }}>
-                  Sign in
-                </Text>
-              </Text>
-            </Pressable>
-          </View>
         </View>
       </ScrollView>
 
+      {/* Pinned footer, outside the scroll (Rylan 2026-09-08: "Get started"
+          looked missing on first open). It used to sit at the bottom of the
+          scrolling column, which on smaller phones put it below the fold. A
+          fixed footer is on screen on every phone, no scrolling required. */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 560,
+          alignSelf: 'center',
+          paddingHorizontal: 24,
+          paddingTop: 12,
+          paddingBottom: insets.bottom + 16,
+          gap: 16,
+          backgroundColor: screenBg,
+        }}>
+        <PrimaryCta label="Get started" onPress={() => router.push('/(auth)/create-account')} />
+
+        <Pressable
+          onPress={() => router.push('/(auth)/sign-in')}
+          accessibilityRole="button"
+          accessibilityLabel="Sign in to an existing account"
+          style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Text
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 14.5,
+              color: colors.inkSecondary,
+              textAlign: 'center',
+            }}>
+            Already have an account?{' '}
+            <Text style={{ fontFamily: fonts.sansSemibold, color: colors.marketing }}>
+              Sign in
+            </Text>
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

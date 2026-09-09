@@ -25,6 +25,7 @@ import SwipeDemoHint from '@/components/onboarding/SwipeDemoHint';
 import { shouldShowReferralPromptOnWin } from '@/lib/referralPrompt';
 import { track } from '@/lib/analytics';
 import { sendJobFeedback } from '@/api/endpoints/feed';
+import FeedSearchBar from '@/components/feed/FeedSearchBar';
 import FeedSwitcher, { type FeedMode } from '@/components/feed/FeedSwitcher';
 import DeckActions from '@/components/feed/DeckActions';
 import EmailSketch from '@/components/feed/EmailSketch';
@@ -427,6 +428,7 @@ export default function FeedScreen() {
       {!(mode === 'jobs' && expanded) ? (
         <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)}>
           <FeedSwitcher mode={mode} onChange={setMode} />
+          <FeedSearchBar mode={mode} />
         </Animated.View>
       ) : null}
 
@@ -592,7 +594,10 @@ export default function FeedScreen() {
                     round): they now float ON the card's bottom edge with the
                     undo, where Rylan circled. The bar keeps what a swipe
                     cannot do: the add-on switch and the deck filter. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {/* Tighter bar (Rylan 2026-09-08): the search moved up under
+                    the switcher, so this row only holds the switch and the
+                    gear, and 36 points is enough for both. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
                   <View style={{ flex: 1 }}>
                     <HiringManagerToggle
                       on={swipeSettings.emailHiringManager}
@@ -603,7 +608,7 @@ export default function FeedScreen() {
                   </View>
                   <ActionCircle
                     icon="options-outline"
-                    size={46}
+                    size={36}
                     onPress={() => router.push('/feed-filter?deck=jobs')}
                     accessibilityLabel={
                       jobFilter ? `Job feed filter: ${jobFilter}` : 'Filter the job feed'
@@ -611,38 +616,8 @@ export default function FeedScreen() {
                   />
                 </View>
 
-                {/* The active filter, named. A deck that quietly stopped being
-                    the general feed is the one thing here a user could not
-                    work out from looking at it, and the fix has to be one tap
-                    from the confusion, not buried back in the settings screen.
-                    It sits in the bar rather than above the deck because
-                    nothing goes between the switcher and the card. */}
-                {jobFilter ? (
-                  <Pressable
-                    onPress={() => router.push('/feed-filter?deck=jobs')}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit this job search"
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="funnel" size={13} color={colors.inkTertiary} />
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        flex: 1,
-                        fontFamily: fonts.sans,
-                        fontSize: 12.5,
-                        color: colors.inkSecondary,
-                      }}>
-                      {jobFilter}
-                    </Text>
-                    <Pressable
-                      onPress={clearJobFilter}
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear the job feed filter"
-                      hitSlop={10}>
-                      <Ionicons name="close-circle" size={17} color={colors.inkTertiary} />
-                    </Pressable>
-                  </Pressable>
-                ) : null}
+                {/* The active sentence used to be named here; the search bar
+                    under the switcher shows and clears it now (2026-09-08). */}
 
               </GlassBar>
               {/* Draft-versus-send no longer exists as a second row here at

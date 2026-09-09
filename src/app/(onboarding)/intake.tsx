@@ -577,9 +577,9 @@ export default function Intake() {
             minHeight: 34,
             marginTop: 8,
           }}>
-          <Ionicons name="help-circle-outline" size={16} color={colors.marketing} />
+          <Ionicons name="play-circle-outline" size={16} color={colors.marketing} />
           <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.marketing }}>
-            How do I find my LinkedIn URL?
+            Watch how to find your LinkedIn link
           </Text>
         </Pressable>
 

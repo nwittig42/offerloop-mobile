@@ -67,7 +67,7 @@ import ScoutOrb, { type OrbState } from '@/components/scout/ScoutOrb';
 import ChatComposer from '@/components/scout/ChatComposer';
 import TapHand from '@/components/tour/TapHand';
 import { useTour } from '@/components/tour/TourProvider';
-import { isTourPending, markTourStarted } from '@/lib/tourFlag';
+import { isTourPending, markTourOffered, markTourStarted } from '@/lib/tourFlag';
 import ChatHistoryPanel from '@/components/scout/ChatHistoryPanel';
 import ChatMessage from '@/components/scout/ChatMessage';
 import VoiceMode from '@/components/scout/VoiceMode';
@@ -391,6 +391,9 @@ function ScoutTabInner() {
         tourLaunched.current = false;
         setTourArmed(true);
         setTyped(TOUR_OPENER);
+        // Offered once, ever, per account (Rylan 2026-09-08: it came back on
+        // every login). Replay from Settings re-arms it.
+        void markTourOffered();
         track('tour_offered', {});
       })
       .catch(() => {});

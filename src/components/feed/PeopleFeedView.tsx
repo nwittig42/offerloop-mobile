@@ -1,11 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { qk } from '@/api/queryKeys';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { listAppliedJobs } from '@/api/endpoints/autoApply';
@@ -839,7 +838,9 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
               gap: 8,
             }}>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 46 }}>
+          {/* 36 not 46 (Rylan 2026-09-08): the search lives under the
+              switcher now, so this row is only the choice and the gear. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
             {/* No on/off switch beside it, unlike the Jobs bar: writing to the
                 person is what a right swipe on this deck IS, not an add-on to
                 applying. The only open question is whether you read it first. */}
@@ -864,7 +865,7 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
                 before and next to the search it belongs with. */}
             <ActionCircle
               icon="options-outline"
-              size={46}
+              size={36}
               onPress={() => router.push('/feed-filter?deck=people')}
               accessibilityLabel={
                 peopleFilter ? `People feed filter: ${peopleFilter}` : 'People feed settings'
@@ -872,42 +873,8 @@ export default function PeopleFeedView({ active = true }: { active?: boolean }) 
             />
           </View>
 
-          {/* Same job as the Jobs bar's filter row: name the search this deck
-              came from, and put the way out of it one tap from the confusion. */}
-          {peopleFilter ? (
-            /* The whole row opens the prompt editor now (Rylan 2026-08-18
-               round 3): the sentence IS the search, so tapping it should
-               reopen it for a rewrite, not just sit there. */
-            <Pressable
-              onPress={() => router.push('/feed-filter?deck=people')}
-              accessibilityRole="button"
-              accessibilityLabel="Edit this people search"
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="funnel" size={13} color={colors.inkTertiary} />
-              <Text
-                numberOfLines={1}
-                style={{
-                  flex: 1,
-                  fontFamily: fonts.sans,
-                  fontSize: 12.5,
-                  color: colors.inkSecondary,
-                }}>
-                {peopleFilter}
-              </Text>
-              <Ionicons name="create-outline" size={15} color={colors.inkTertiary} />
-              <Pressable
-                onPress={() => {
-                  updateSwipeSettings({ peopleFilter: null });
-                  showToast('Back to the people we ranked for you.');
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear the people feed filter"
-                hitSlop={10}>
-                <Ionicons name="close-circle" size={17} color={colors.inkTertiary} />
-              </Pressable>
-            </Pressable>
-          ) : null}
-        
+          {/* The active sentence used to be named here; the search bar under
+              the switcher shows and clears it now (2026-09-08). */}
           </GlassBar>
           <View style={{ marginTop: 14, marginBottom: 8 }}>
             <DeckActions

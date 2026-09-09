@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
+import LinkedInSteps from '@/components/onboarding/LinkedInSteps';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
@@ -97,6 +98,9 @@ export default function LinkedInUrlHelp({ onClose }: { onClose: () => void }) {
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 22, gap: 20 }}>
+          {/* The walkthrough first (Rylan 2026-09-08): watching it beats
+              reading it. The written routes stay below for laptop users. */}
+          <LinkedInSteps />
           <Text style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.inkSecondary }}>
             Your LinkedIn URL is your profile&apos;s web address. It looks like this:
           </Text>
