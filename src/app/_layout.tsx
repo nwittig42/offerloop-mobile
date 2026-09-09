@@ -17,7 +17,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Platform, Text, TextInput, View } from 'react-native';
+import type { Component } from 'react';
+import { ActivityIndicator, Keyboard, Platform, Text, TextInput, View, findNodeHandle, type GestureResponderEvent } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { configurePurchases, logInPurchases, logOutPurchases } from '@/api/purchases';
@@ -166,6 +167,23 @@ function useAuthGate() {
   return status;
 }
 
+/**
+ * Tap anywhere that is not the focused text box and the keyboard goes away
+ * (Rylan 2026-09-08: "that would save a lot of issues with the placement of
+ * things"). Sits on the root view in the capture phase so every screen gets
+ * it for free. It never claims the touch (returns false), so the button you
+ * tapped still fires; the keyboard just drops first.
+ */
+function dismissKeyboardOnOutsideTap(e: GestureResponderEvent): boolean {
+  if (Platform.OS === 'web') return false;
+  const focused = TextInput.State.currentlyFocusedInput();
+  if (!focused) return false;
+  // findNodeHandle wants a component; the focused input is one at runtime.
+  const tag = findNodeHandle(focused as unknown as Component);
+  if (tag !== null && String(e.nativeEvent.target) !== String(tag)) Keyboard.dismiss();
+  return false;
+}
+
 /** Inside ThemeProvider so the status bar and screen background follow the setting. */
 function ThemedShell() {
   const colors = useColors();
@@ -236,7 +254,9 @@ function ThemedShell() {
     // Themed ground under everything. GestureHandlerRootView has no
     // background, so any region a screen does not paint itself fell through to
     // white: invisible in light mode, a white band above the header in dark.
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View
+      style={{ flex: 1, backgroundColor: colors.surface }}
+      onStartShouldSetResponderCapture={dismissKeyboardOnOutsideTap}>
       <TourProvider>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack

@@ -61,7 +61,7 @@ export default function FeedSearchBar({ mode }: { mode: FeedMode }) {
           fontSize: 13,
           color: active ? colors.ink : colors.inkTertiary,
         }}>
-        {active || (mode === 'jobs' ? 'Search jobs, like "product internships in SF"' : 'Search people, like "IB analysts at Goldman"')}
+        {active || (mode === 'jobs' ? 'Ranked for you. Tap to search jobs' : 'Ranked for you. Tap to search people')}
       </Text>
       {active ? (
         <Pressable

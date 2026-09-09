@@ -41,6 +41,10 @@ export function Input({
             backgroundColor: colors.paper,
             paddingHorizontal: 12,
             paddingVertical: multiline ? 10 : 0,
+            // iOS draws a multiline caret off the placeholder's line until
+            // the first character lands unless the line height is explicit
+            // (Rylan 2026-09-08, the search pop-up).
+            lineHeight: multiline ? 20 : undefined,
             fontSize: 14,
             fontFamily: fonts.sans,
             color: colors.ink,

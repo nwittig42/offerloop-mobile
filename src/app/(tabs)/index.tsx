@@ -470,8 +470,13 @@ function ScoutTabInner() {
     }
   }, [reply]);
 
-  // Leaving the tab silences Scout mid-sentence.
+  // Leaving the tab silences Scout mid-sentence. Tabs stay mounted, so the
+  // unmount cleanup alone never fired while switching tabs (Rylan
+  // 2026-09-08: "it won't stop if I'm navigating around the app").
   useEffect(() => () => stopSpeaking(), []);
+  useEffect(() => {
+    if (!isFocused) stopSpeaking();
+  }, [isFocused]);
 
   // Rotate the suggestion chips while the tab idles.
   useEffect(() => {
