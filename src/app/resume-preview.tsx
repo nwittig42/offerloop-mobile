@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -42,6 +42,11 @@ export default function ResumePreviewScreen() {
     | { phase: 'error'; message: string }
   >({ phase: 'loading' });
   const [adopting, setAdopting] = useState(false);
+  // The whole sheet scrolls (Rylan 2026-09-08: keyboard padding alone still
+  // left "Apply changes" out of reach). When the refine box opens it grows,
+  // onLayout fires, and the sheet scrolls to the end so the box and its
+  // button sit above the keyboard.
+  const scrollRef = useRef<ScrollView>(null);
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const editMode = mode === 'edit';
 
@@ -133,7 +138,13 @@ export default function ResumePreviewScreen() {
             </Text>
           </View>
         ) : state.phase === 'ready' ? (
-          <View style={{ flex: 1, gap: 12 }}>
+          <ScrollView
+            ref={scrollRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+            showsVerticalScrollIndicator={false}>
             {/* Honest expectations (Rylan 2026-08-10): this is a solid floor,
                 not a polished ceiling, and users should hear that from us. */}
             <View
@@ -150,21 +161,30 @@ export default function ResumePreviewScreen() {
                 bullets with real numbers only you know, so plan to sharpen this over time.
               </Text>
             </View>
-            <ResumePreview
-              fileName="Offerloop_Resume.pdf"
-              sections={sectionsFromCanonical(state.resume)}
-              onUse={adopt}
-              busy={adopting}
-              onSecondary={() => router.back()}
-              secondaryLabel="Not yet"
-            />
-            <ResumeRefine
-              resume={state.resume}
-              onRefined={(next) => setState({ phase: 'ready', resume: next })}
-              onLimit={() => showToast('Daily edit limit reached. It resets tomorrow.')}
-              onError={(m) => showToast(m)}
-            />
-          </View>
+            {/* Bounded height so the preview keeps its own scroll while the
+                sheet around it scrolls too. */}
+            <View style={{ height: 440 }}>
+              <ResumePreview
+                fileName="Offerloop_Resume.pdf"
+                sections={sectionsFromCanonical(state.resume)}
+                onUse={adopt}
+                busy={adopting}
+                onSecondary={() => router.back()}
+                secondaryLabel="Not yet"
+              />
+            </View>
+            <View
+              onLayout={() => {
+                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+              }}>
+              <ResumeRefine
+                resume={state.resume}
+                onRefined={(next) => setState({ phase: 'ready', resume: next })}
+                onLimit={() => showToast('Daily edit limit reached. It resets tomorrow.')}
+                onError={(m) => showToast(m)}
+              />
+            </View>
+          </ScrollView>
         ) : state.phase === 'thin' ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 12 }}>
             <Ionicons name="document-outline" size={34} color={colors.inkTertiary} />
