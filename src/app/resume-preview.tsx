@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -116,7 +116,12 @@ export default function ResumePreviewScreen() {
         </Pressable>
       </View>
 
-      <View style={{ flex: 1, padding: 20, paddingBottom: insets.bottom + 16 }}>
+      {/* The refine box sits at the bottom and the keyboard used to cover it
+          on iPhone, so "Apply changes" was unreachable (Rylan 2026-09-08).
+          Padding mode shrinks the preview above it instead. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, padding: 20, paddingBottom: insets.bottom + 16 }}>
         {state.phase === 'loading' ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator color={colors.navy} />
@@ -189,7 +194,7 @@ export default function ResumePreviewScreen() {
             <Button label="Close" variant="outline" onPress={() => router.back()} />
           </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

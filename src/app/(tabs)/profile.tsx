@@ -146,21 +146,22 @@ function ResumeDrop({
             {busy
               ? 'Uploading and reading it…'
               : hasResume
-                ? resumeName || 'Tap to view, or replace it'
+                ? resumeName || 'Tap to view'
                 : 'Upload one, or we build it with you'}
           </Text>
         </View>
         <Pressable
-          onPress={onPress}
+          onPress={hasResume ? onOpen : onPress}
           disabled={busy}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={hasResume ? 'Replace resume' : 'Add resume'}>
+          accessibilityLabel={hasResume ? 'View resume' : 'Add resume'}>
           <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13, color: colors.accent }}>
-            {/* "Add", matching the row title: the action opens the three doors
-                (upload / LinkedIn / describe), and half its audience has no
-                file to upload. */}
-            {hasResume ? 'Replace' : 'Add'}
+            {/* The word says what the tap does (Rylan 2026-09-08): with a
+                resume on file the whole card opens the viewer, and Replace
+                lives there. "Add" opens the three doors (upload / LinkedIn /
+                describe), since half the audience has no file to upload. */}
+            {hasResume ? 'View' : 'Add'}
           </Text>
         </Pressable>
       </Card>
