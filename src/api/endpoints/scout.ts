@@ -25,9 +25,20 @@ export type ScoutUserInfo = {
   max_credits?: number;
 };
 
+/** One concrete edit Scout proposed for the resume (backend's
+ *  tailor_resume_to_job / improve_resume_for_target tools). */
+export type ScoutEdit = { id: string; section: string; current: string; suggested: string };
+
 /** A Scout action already translated to a real mobile destination — either a
- *  screen to open (href) or a message to send back into the chat. */
-export type ScoutAction = { label: string; href?: string; chatMessage?: string };
+ *  screen to open (href) or a message to send back into the chat. Resume
+ *  actions may carry the structured edits Scout proposed, so the edit
+ *  screen can offer approve/skip instead of one blanket rewrite. */
+export type ScoutAction = {
+  label: string;
+  href?: string;
+  chatMessage?: string;
+  edits?: ScoutEdit[];
+};
 
 export type ScoutReply = {
   message: string;
@@ -78,6 +89,15 @@ export function withResumePrefill(href: string, advice: string): string {
   const text = (advice || '').trim().slice(0, 1500);
   if (!text) return href;
   return `${href}&prompt=${encodeURIComponent(text)}`;
+}
+
+/** Structured edits ride the deep link as JSON, so the edit screen can offer
+ *  approve/skip per line instead of one blanket rewrite. A handful of short
+ *  edits stays well inside any practical URL length, but capped anyway. */
+export function withResumeEdits(href: string, edits: ScoutEdit[]): string {
+  if (!href.startsWith('/resume-preview') || !edits.length) return href;
+  const payload = JSON.stringify(edits).slice(0, 4000);
+  return `${href}&edits=${encodeURIComponent(payload)}`;
 }
 
 export type ScoutChatMeta = {
@@ -169,7 +189,19 @@ export async function sendScoutMessage(args: {
     const href = mapScoutRoute(b?.route);
     if (href && !seen.has(href)) {
       seen.add(href);
-      actions.push({ label, href });
+      // Structured edits (the resume tools' prefill) ride along here; the
+      // resume-chip block below prefers these over the flattened prompt.
+      const rawEdits = Array.isArray(b?.prefill?.edits) ? b.prefill.edits : [];
+      const edits: ScoutEdit[] = rawEdits
+        .filter((e: any) => e && typeof e === 'object')
+        .map((e: any, i: number) => ({
+          id: typeof e.id === 'string' && e.id ? e.id : `e${i}`,
+          section: typeof e.section === 'string' ? e.section : '',
+          current: typeof e.current === 'string' ? e.current : '',
+          suggested: typeof e.suggested === 'string' ? e.suggested : '',
+        }))
+        .filter((e: ScoutEdit) => e.suggested);
+      actions.push(edits.length ? { label, href, edits } : { label, href });
     }
   };
   for (const b of Array.isArray(r?.ctas) ? r.ctas : []) addChip(b);
@@ -185,12 +217,19 @@ export async function sendScoutMessage(args: {
     if (href && !seen.has(href)) actions.push({ label: 'Take me there', href });
   }
 
-  // Resume chips get the advice prefilled and a label that says what they do.
+  // Resume chips: structured edits win (the tool already computed exactly
+  // what to change, so the edit screen offers approve/skip per line);
+  // otherwise fall back to the answer's own prose run through refine as one
+  // blanket rewrite, same as before (Rylan 2026-09-08 / 2026-09-09).
   const sayText: string = typeof r?.message === 'string' ? r.message : typeof r?.say === 'string' ? r.say : '';
   for (const a of actions) {
     if (a.href && a.href.startsWith('/resume-preview')) {
-      a.href = withResumePrefill(a.href, sayText);
-      a.label = 'Apply this to my resume';
+      if (a.edits?.length) {
+        a.label = "Review Scout's resume edits";
+      } else {
+        a.href = withResumePrefill(a.href, sayText);
+        a.label = 'Apply this to my resume';
+      }
     }
   }
   return {

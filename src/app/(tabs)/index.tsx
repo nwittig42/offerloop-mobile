@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOut, LinearTransition, useSharedValue } from 'react-native-reanimated';
 
 import { apiFetch } from '@/api/client';
-import { mapScoutRoute, sendScoutMessage, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
+import { mapScoutRoute, sendScoutMessage, withResumeEdits, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
 import {
   ackFor,
   applyScope,
@@ -2508,7 +2508,8 @@ function ScoutTabInner() {
                     } else if (a.href === '#paywall') {
                       presentPaywall({ context: 'scout' });
                     } else if (a.href) {
-                      router.push(a.href as never);
+                      const href = a.edits?.length ? withResumeEdits(a.href, a.edits) : a.href;
+                      router.push(href as never);
                     }
                   }}
                   style={{

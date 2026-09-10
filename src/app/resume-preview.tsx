@@ -17,6 +17,7 @@ import {
 import { qk } from '@/api/queryKeys';
 import { ResumePreview } from '@/components/resume/ResumePreview';
 import { ResumeRefine } from '@/components/resume/ResumeRefine';
+import { ScoutEditsReview, type ScoutEdit } from '@/components/resume/ScoutEditsReview';
 import { Button } from '@/components/ui/Button';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
@@ -48,12 +49,38 @@ export default function ResumePreviewScreen() {
   // onLayout fires, and the sheet scrolls to the end so the box and its
   // button sit above the keyboard.
   const scrollRef = useRef<ScrollView>(null);
-  const { mode, prompt: promptParam } = useLocalSearchParams<{ mode?: string; prompt?: string }>();
+  const { mode, prompt: promptParam, edits: editsParam } = useLocalSearchParams<{
+    mode?: string;
+    prompt?: string;
+    edits?: string;
+  }>();
   const editMode = mode === 'edit';
   // Scout's advice, handed over by its "Apply this to my resume" chip. It runs
   // through the same refine step as "Describe your changes", and the result
   // waits for approval like any other draft (Rylan 2026-09-08).
   const scoutPrompt = typeof promptParam === 'string' ? promptParam.trim() : '';
+  // Scout's own structured edits (Rylan 2026-09-09: "approve or disapprove
+  // things for the resume"), handed over by its "Review Scout's resume
+  // edits" chip. Parsed once; a bad or missing payload just means no card.
+  const [scoutEdits, setScoutEdits] = useState<ScoutEdit[] | null>(() => {
+    if (typeof editsParam !== 'string' || !editsParam) return null;
+    try {
+      const parsed = JSON.parse(editsParam);
+      if (!Array.isArray(parsed)) return null;
+      const cleaned = parsed
+        .filter((e) => e && typeof e === 'object' && typeof e.suggested === 'string' && e.suggested.trim())
+        .map((e, i) => ({
+          id: typeof e.id === 'string' && e.id ? e.id : `e${i}`,
+          section: typeof e.section === 'string' ? e.section : '',
+          current: typeof e.current === 'string' ? e.current : '',
+          suggested: e.suggested.trim(),
+        }));
+      return cleaned.length ? cleaned : null;
+    } catch {
+      return null;
+    }
+  });
+  const [applyingEdits, setApplyingEdits] = useState(false);
 
   // Full page now, so the keyboard-avoiding padding measures correctly; once
   // the keyboard is actually up, bring the refine box and its button into view.
@@ -82,7 +109,7 @@ export default function ResumePreviewScreen() {
           setState({ phase: 'error', message: 'No resume to edit yet. Add one first.' });
           return;
         }
-        if (scoutPrompt) {
+        if (scoutPrompt && !scoutEdits) {
           try {
             const r = await refineResume(scoutPrompt, resume);
             if (!alive) return;
@@ -117,6 +144,30 @@ export default function ResumePreviewScreen() {
       alive = false;
     };
   }, [router]);
+
+  const applyScoutEdits = async (approved: ScoutEdit[]) => {
+    if (state.phase !== 'ready' || !approved.length) return;
+    setApplyingEdits(true);
+    const instruction = approved
+      .map((e) => (e.current ? `Change "${e.current}" to "${e.suggested}".` : `Add: "${e.suggested}".`))
+      .join(' ');
+    try {
+      const r = await refineResume(instruction, state.resume);
+      if (r.status === 'ok') {
+        setState({ phase: 'ready', resume: r.resume });
+        setScoutEdits(null);
+        showToast(
+          approved.length === 1
+            ? 'Applied. Read it over before you keep it.'
+            : `Applied ${approved.length} edits. Read it over before you keep it.`,
+        );
+      } else {
+        showToast(r.status === 'limit' ? 'Daily edit limit reached.' : 'Could not apply those edits.');
+      }
+    } finally {
+      setApplyingEdits(false);
+    }
+  };
 
   const adopt = async () => {
     if (state.phase !== 'ready' || adopting) return;
@@ -173,7 +224,7 @@ export default function ResumePreviewScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator color={colors.navy} />
             <Text style={{ fontFamily: fonts.sansMedium, fontSize: 14, color: colors.inkSecondary }}>
-              {editMode && scoutPrompt
+              {editMode && scoutPrompt && !scoutEdits
                 ? 'Scout is applying its suggestions to your resume…'
                 : editMode
                   ? 'Loading your resume…'
@@ -190,6 +241,14 @@ export default function ResumePreviewScreen() {
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
+            {scoutEdits ? (
+              <ScoutEditsReview
+                edits={scoutEdits}
+                busy={applyingEdits}
+                onApply={(approved) => void applyScoutEdits(approved)}
+                onDismiss={() => setScoutEdits(null)}
+              />
+            ) : null}
             {/* Honest expectations (Rylan 2026-08-10): this is a solid floor,
                 not a polished ceiling, and users should hear that from us. */}
             <View
