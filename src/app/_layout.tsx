@@ -101,7 +101,7 @@ export default function RootLayout() {
  *  onboarding, and the app based on sign-in + consent + onboarding status. */
 function useAuthGate() {
   const { status } = useAuth();
-  const { onboardingDone, needsOnboarding } = useApp();
+  const { onboardingDone, needsOnboarding, profile, confirmOnboardingDone } = useApp();
   const segments = useSegments();
   const router = useRouter();
 
@@ -161,8 +161,21 @@ function useAuthGate() {
       router.replace('/(onboarding)/intake');
     } else if (onboardingDone && inOnboarding) {
       router.replace('/(tabs)/feed');
+    } else if (onboardingDone === false && !inOnboarding && profile.hasServerProfile) {
+      // This render is ALREADY treating the account as established (we did
+      // not take the branch above) and it is genuinely not just mid-intake
+      // (that screen IS '(onboarding)', excluded by !inOnboarding) — so a
+      // real profile here means onboarding is actually done, somewhere,
+      // sometime, not necessarily on this device. Make that durable so the
+      // NEXT cold launch never has to re-win the /me race (Rylan
+      // 2026-09-11: "a user who has created an account gets plopped back
+      // into onboarding when they sign back in" — a fresh device, a
+      // reinstall, or lost AsyncStorage left this flag unset forever for
+      // an account that never ran the app's own completeOnboarding(), e.g.
+      // one onboarded on the website).
+      confirmOnboardingDone();
     }
-  }, [status, onboardingDone, needsOnboarding, segments, router]);
+  }, [status, onboardingDone, needsOnboarding, segments, router, profile.hasServerProfile, confirmOnboardingDone]);
 
   return status;
 }

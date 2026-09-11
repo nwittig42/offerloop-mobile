@@ -355,6 +355,11 @@ type AppStore = {
   needsOnboarding: boolean;
   completeOnboarding: () => void;
   resetOnboarding: () => void;
+  /** Backfills the local done-flag for an account the gate is ALREADY
+   *  treating as established (real profile, not on an onboarding screen),
+   *  without arming the first-run tour the way completeOnboarding() does.
+   *  Called by the auth gate only, never from onboarding's own screens. */
+  confirmOnboardingDone: () => void;
   /** Save LinkedIn URL + run enrichment, then refetch the now-populated profile. */
   enrichLinkedin: (url: string) => Promise<EnrichResult>;
   addLoop: (brief: string, people?: LoopPeople, autoSend?: boolean) => void;
@@ -807,6 +812,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const resetOnboarding = useCallback(() => {
     setOnboardingDone(false);
     if (uid) AsyncStorage.removeItem(onboardingStorageKey(uid)).catch(() => {});
+  }, [uid]);
+
+  // Backfills the local flag for an account the gate is ALREADY treating as
+  // established, so the NEXT cold launch never has to re-win the /me race
+  // (Rylan 2026-09-11: "a user who has created an account gets plopped back
+  // into onboarding when they sign back in" — a fresh device, a reinstall,
+  // or any AsyncStorage loss leaves this unset forever, since nothing else
+  // ever writes it for an account that onboarded somewhere other than THIS
+  // app flow, e.g. the website).
+  //
+  // Deliberately NOT completeOnboarding(): that also arms the first-run
+  // tour, which must never appear out of nowhere for an existing user. The
+  // auth gate is the only caller, and only once it has already decided
+  // NOT to force onboarding for this render (see _layout.tsx) — never from
+  // a screen inside onboarding itself, so a user who has only done the
+  // first intake step (which alone can make hasServerProfile true) is
+  // never marked done before they actually finish.
+  const confirmOnboardingDone = useCallback(() => {
+    setOnboardingDone(true);
+    if (uid) AsyncStorage.setItem(onboardingStorageKey(uid), '1').catch(() => {});
   }, [uid]);
 
   // Should the auth gate force this user into onboarding? Only a genuinely-new
@@ -2002,6 +2027,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       needsOnboarding,
       completeOnboarding,
       resetOnboarding,
+      confirmOnboardingDone,
       enrichLinkedin: enrichLinkedinProfile,
       addLoop,
       toggleLoop,
@@ -2067,6 +2093,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       needsOnboarding,
       completeOnboarding,
       resetOnboarding,
+      confirmOnboardingDone,
       enrichLinkedinProfile,
       addLoop,
       toggleLoop,
