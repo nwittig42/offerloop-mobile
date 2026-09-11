@@ -1224,7 +1224,16 @@ function ScoutTabInner() {
         }
         if (!done && seqU === requestSeq.current) {
           track('scout_understand', { leg: 'local', ms: Date.now() - t0, corrected: false });
-          void submitAsk(clean, { ...meta, localOnly: true });
+          // viaClassifier: true is the actual fix (Rylan 2026-09-10: every
+          // general voice question — nothing that parses into a draft or
+          // find-people intent — showed up as two identical bubbles). This
+          // call re-enters submitAsk with the SAME words already on the
+          // thread from the very first append; without this flag the top
+          // of submitAsk had no way to know that and appended them again.
+          // localOnly alone already keeps it from re-entering this same
+          // race a second time (the gate above requires !meta?.localOnly),
+          // so adding viaClassifier here changes nothing but the append.
+          void submitAsk(clean, { ...meta, localOnly: true, viaClassifier: true });
         }
         return;
       }
