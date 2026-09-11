@@ -319,6 +319,12 @@ function ScoutTabInner() {
   const askByVoice = useRef(false);
   const lastDraftRef = useRef<DraftIntent | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
+  // Set by closeVoice, read once by onEnd (Rylan 2026-09-10: "click the X
+  // ... it inputs the thing into the chat again"). Tapping X stopped the
+  // recognizer through the exact path a natural "done talking" stop uses,
+  // so onEnd submitted the partial utterance anyway — the X never actually
+  // cancelled anything, it only hid the screen.
+  const voiceCancelledRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const volume = useSharedValue(0);
@@ -1791,6 +1797,12 @@ function ScoutTabInner() {
       onEnd: () => {
         stopRef.current = null;
         volume.value = 0;
+        // Cancelled via X: stand down, never submit what was heard so far.
+        if (voiceCancelledRef.current) {
+          voiceCancelledRef.current = false;
+          setPhase((p) => (p === 'listening' ? 'idle' : p));
+          return;
+        }
         // Recognition ended (tap-stop, silence, or final result).
         if (submitted) return;
         submitted = true;
@@ -1870,11 +1882,32 @@ function ScoutTabInner() {
   }, [beginListening, firstAction, showToast, voiceReady]);
 
   const closeVoice = useCallback(() => {
+    // A real cancel now, in both timings X can be tapped in:
+    //  - still listening: the flag tells onEnd to stand down instead of
+    //    submitting whatever was heard so far, the same as a natural stop.
+    //  - already thinking (recognizer done, the classify/answer race
+    //    running): bumping requestSeq makes every "seq !== requestSeq"
+    //    guard already in that race (and in submitAsk's own askScoutBrain
+    //    call) drop its result instead of appending one late.
+    voiceCancelledRef.current = true;
+    requestSeq.current += 1;
     stopRef.current?.();
     stopSpeaking();
     setSpeaking(false);
+    setPhase('idle');
     setVoiceOpen(false);
   }, []);
+
+  // The voice room doesn't make people sit through the whole "thinking"
+  // stretch (Rylan 2026-09-10: "make it so this view is only there for 3
+  // seconds, then it automatically goes into the chat interface"). Unlike
+  // closeVoice this is not a cancel — the ask keeps running, and the
+  // thread's own "thinking" row picks up from here.
+  useEffect(() => {
+    if (!voiceOpen || phase !== 'thinking') return;
+    const t = setTimeout(() => setVoiceOpen(false), 3000);
+    return () => clearTimeout(t);
+  }, [voiceOpen, phase]);
 
   return (
     <View style={{ flex: 1, backgroundColor: room.bg }}>
