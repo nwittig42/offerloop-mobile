@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOut, LinearTransition, useSharedValue } from 'react-native-reanimated';
 
 import { apiFetch } from '@/api/client';
-import { mapScoutRoute, sendScoutMessage, withResumeEdits, type ScoutAction, type ScoutTurn } from '@/api/endpoints/scout';
+import { mapScoutRoute, sendScoutMessage, withResumeEdits, type ScoutAction, type ScoutEdit, type ScoutTurn } from '@/api/endpoints/scout';
 import {
   ackFor,
   applyScope,
@@ -1623,7 +1623,29 @@ function ScoutTabInner() {
               actions.push({ label: `View ${n} in your Network`, href: '/(tabs)/network' });
             } else if (a.type === 'navigate') {
               const href = mapScoutRoute(String(a.params?.route || ''));
-              if (href) actions.push({ label: String(a.params?.label || '') || 'Take me there', href });
+              if (href) {
+                // Resume tools attach their structured edits under
+                // params.prefill.edits (2026-09-10: this mapping read only
+                // route/label, so the edits the backend already computed
+                // for "tailor my resume to X" turns never reached the chip
+                // — Scout just answered in prose with nothing to tap).
+                const prefill = (a.params as { prefill?: { edits?: unknown } } | undefined)?.prefill;
+                const rawEdits = Array.isArray(prefill?.edits) ? (prefill!.edits as unknown[]) : [];
+                const edits: ScoutEdit[] = rawEdits
+                  .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+                  .map((e, i) => ({
+                    id: typeof e.id === 'string' && e.id ? e.id : `e${i}`,
+                    section: typeof e.section === 'string' ? e.section : '',
+                    current: typeof e.current === 'string' ? e.current : '',
+                    suggested: typeof e.suggested === 'string' ? e.suggested.trim() : '',
+                  }))
+                  .filter((e) => e.suggested);
+                if (edits.length && href.startsWith('/resume-preview')) {
+                  actions.push({ label: "Review Scout's resume edits", href: withResumeEdits(href, edits) });
+                } else {
+                  actions.push({ label: String(a.params?.label || '') || 'Take me there', href });
+                }
+              }
             } else if (a.type === 'meeting_prep' && a.jobRef?.id) {
               actions.push({ label: 'Watch the prep build', href: `/meeting-prep/${a.jobRef.id}` });
             } else if (a.type === 'draft_outreach' && a.results?.items?.length) {

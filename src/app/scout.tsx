@@ -17,6 +17,7 @@ import {
   getScoutChat,
   listScoutChats,
   sendScoutMessage,
+  withResumeEdits,
   type ScoutAction,
   type ScoutChatMeta,
   type ScoutTurn,
@@ -347,8 +348,9 @@ export default function ScoutScreen() {
                           return;
                         }
                         if (!a.href) return;
+                        const href = a.edits?.length ? withResumeEdits(a.href, a.edits) : a.href;
                         router.back();
-                        router.push(a.href as never);
+                        router.push(href as never);
                       }}
                       style={{
                         flexDirection: 'row',
