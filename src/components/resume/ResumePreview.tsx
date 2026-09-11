@@ -1,4 +1,5 @@
-import { Image, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from '@/components/ui/Button';
 import { useColors } from '@/theme/ThemeProvider';
@@ -42,6 +43,8 @@ export function ResumePreview({
   onSecondary,
   secondaryLabel = 'Edit in profile',
   busy = false,
+  onViewPdf,
+  pdfLoading = false,
 }: {
   /** Rendered page image of the resume, when one exists. */
   thumbnail?: ImageSourcePropType;
@@ -54,19 +57,50 @@ export function ResumePreview({
   onSecondary?: () => void;
   secondaryLabel?: string;
   busy?: boolean;
+  /** Renders the actual PDF, the way it will look on the page (Rylan
+   *  2026-09-10: the section list alone didn't answer "what does this
+   *  actually look like"). Omit to hide the button entirely. */
+  onViewPdf?: () => void;
+  pdfLoading?: boolean;
 }) {
   const colors = useColors();
 
   return (
     <View style={{ flex: 1, gap: 14 }}>
-      <View style={{ gap: 4 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 24, color: colors.heading }}>
-          Here is your resume
-        </Text>
-        <Text
-          style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
-          Read it over. It only goes on applications after you approve it.
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ fontFamily: fonts.display, fontSize: 24, color: colors.heading }}>
+            Here is your resume
+          </Text>
+          <Text
+            style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkSecondary, lineHeight: 19 }}>
+            Read it over. It only goes on applications after you approve it.
+          </Text>
+        </View>
+        {onViewPdf ? (
+          <Pressable
+            onPress={onViewPdf}
+            disabled={pdfLoading}
+            accessibilityRole="button"
+            accessibilityLabel="View as a PDF"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+              paddingVertical: 7,
+              paddingHorizontal: 11,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              backgroundColor: colors.paper,
+              marginTop: 2,
+            }}>
+            <Ionicons name="document-text-outline" size={14} color={colors.accent} />
+            <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: colors.accent }}>
+              {pdfLoading ? 'Loading…' : 'View PDF'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView

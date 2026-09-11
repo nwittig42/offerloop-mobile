@@ -15,6 +15,7 @@ import { appliedCompanyKeys, buildAppliedPeoplePrompt } from '@/lib/appliedPeopl
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { JOB_SEARCH_EXAMPLES, PEOPLE_SEARCH_EXAMPLES } from '@/lib/feedSearchExamples';
 import { withRecentFilter } from '@/types';
 
 /**
@@ -61,13 +62,7 @@ const DECKS: Record<
     label: 'Describe the roles you want',
     placeholder: 'Internships in product management in San Francisco',
     note: 'We search every role we hold for the ones that match. Free, and it takes a second.',
-    examples: [
-      'Entry level finance roles in New York',
-      'Software engineering internships, remote',
-      'Product management new grad roles',
-      'Marketing internships in LA this summer',
-      'Data analyst roles at fintech companies',
-    ],
+    examples: JOB_SEARCH_EXAMPLES,
     savedToast: 'Feed updated. These are your roles now.',
     clearedToast: 'Back to your default feed.',
   },
@@ -76,13 +71,7 @@ const DECKS: Record<
     label: 'Describe who you want to reach',
     placeholder: 'Investment banking analysts at Goldman Sachs in New York',
     note: `We find ${PEOPLE_SEARCH_BATCH} people who match. Finding them is free. Swiping right is what costs credits, same as always.`,
-    examples: [
-      'Consultants at McKinsey who went to USC',
-      'Product managers at fintech startups in SF',
-      'Recruiters hiring software engineering interns',
-      'IB analysts at Goldman Sachs in New York',
-      'Engineers at Google who went to my school',
-    ],
+    examples: PEOPLE_SEARCH_EXAMPLES,
     savedToast: 'Finding people who match. Give it a moment.',
     clearedToast: 'Back to the people we ranked for you.',
   },

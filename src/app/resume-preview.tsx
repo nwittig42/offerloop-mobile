@@ -2,11 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   currentResume,
+  downloadResumePdfBase64,
   finalizeResume,
   previewResumeFromLinkedin,
   refineResume,
@@ -15,6 +16,7 @@ import {
   type CanonicalResume,
 } from '@/api/endpoints/resumeBuilder';
 import { qk } from '@/api/queryKeys';
+import PdfView from '@/components/resume/PdfView';
 import { ResumePreview } from '@/components/resume/ResumePreview';
 import { ResumeRefine } from '@/components/resume/ResumeRefine';
 import { ScoutEditsReview, type ScoutEdit } from '@/components/resume/ScoutEditsReview';
@@ -81,6 +83,30 @@ export default function ResumePreviewScreen() {
     }
   });
   const [applyingEdits, setApplyingEdits] = useState(false);
+  // "View PDF" (Rylan 2026-09-10): renders the actual document, not just the
+  // section list, so "what does this look like" has a real answer before
+  // saving. Pure render on the server, no storage write, no charge — same
+  // call the build screen already uses to show the draft.
+  const [pdf, setPdf] = useState<{ open: boolean; loading: boolean; base64: string | null }>({
+    open: false,
+    loading: false,
+    base64: null,
+  });
+  const viewPdf = async () => {
+    if (state.phase !== 'ready') return;
+    if (pdf.base64) {
+      setPdf((p) => ({ ...p, open: true }));
+      return;
+    }
+    setPdf((p) => ({ ...p, loading: true }));
+    const b64 = await downloadResumePdfBase64(state.resume);
+    if (!b64) {
+      setPdf({ open: false, loading: false, base64: null });
+      showToast('Could not load the PDF. Try again.');
+      return;
+    }
+    setPdf({ open: true, loading: false, base64: b64 });
+  };
 
   // Full page now, so the keyboard-avoiding padding measures correctly; once
   // the keyboard is actually up, bring the refine box and its button into view.
@@ -275,6 +301,8 @@ export default function ResumePreviewScreen() {
                 busy={adopting}
                 onSecondary={() => router.back()}
                 secondaryLabel="Not yet"
+                onViewPdf={() => void viewPdf()}
+                pdfLoading={pdf.loading}
               />
             </View>
             <View
@@ -319,6 +347,38 @@ export default function ResumePreviewScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={pdf.open}
+        animationType="slide"
+        onRequestClose={() => setPdf((p) => ({ ...p, open: false }))}>
+        <View style={{ flex: 1, backgroundColor: colors.surface }}>
+          <View
+            style={{
+              paddingTop: insets.top + 8,
+              paddingHorizontal: 20,
+              paddingBottom: 12,
+              backgroundColor: colors.paper,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.hairline,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+            }}>
+            <Text style={{ flex: 1, fontFamily: fonts.display, fontSize: 22, color: colors.heading }}>
+              Your resume
+            </Text>
+            <Pressable
+              onPress={() => setPdf((p) => ({ ...p, open: false }))}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+          {pdf.base64 ? <PdfView base64={pdf.base64} backgroundColor={colors.surface} /> : null}
+        </View>
+      </Modal>
     </View>
   );
 }

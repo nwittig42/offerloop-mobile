@@ -310,6 +310,12 @@ function ScoutTabInner() {
   // echo chat_id back every turn or the backend starts a fresh chat each
   // time — server memory, clarify resolution, and titling all hang off it.
   const requestSeq = useRef(0);
+  // Guards submitAsk against firing twice for the identical ask (Rylan
+  // 2026-09-10, screenshot: the same typed message landed as two separate
+  // bubbles before Scout replied). Whatever double-fires it upstream — the
+  // send button and a keyboard return both registering, a fast double tap —
+  // the same text arriving again within a beat is one ask, not two.
+  const lastSubmitRef = useRef<{ text: string; at: number } | null>(null);
   const askByVoice = useRef(false);
   const lastDraftRef = useRef<DraftIntent | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
@@ -830,8 +836,14 @@ function ScoutTabInner() {
       askByVoice.current = !!meta?.byVoice;
       // Transcript: record what the user actually asked. Classifier
       // re-entries re-speak the SAME ask in canonical form — the human's
-      // words are already on the thread, so skip the echo.
+      // words are already on the thread, so skip the echo. The dedupe guard
+      // lives in the same branch: only a genuine new ask reaches the thread.
       if (!meta?.viaClassifier) {
+        const now = Date.now();
+        if (lastSubmitRef.current && lastSubmitRef.current.text === clean && now - lastSubmitRef.current.at < 1500) {
+          return;
+        }
+        lastSubmitRef.current = { text: clean, at: now };
         scoutThread.append({ from: 'user', text: clean });
         setThreadSize(scoutThread.size());
       }
