@@ -27,7 +27,7 @@ import { fonts } from '@/theme/tokens';
 const TAB_BAR_SPACE = 58;
 
 export default function TourOverlay() {
-  const { active, index, total, next, end } = useTour();
+  const { active, index, total, next, back, end } = useTour();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { notificationsEnabled, setNotificationsEnabled } = useApp();
@@ -111,6 +111,18 @@ export default function TourOverlay() {
         </Text>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 }}>
+          {/* Rylan 2026-09-11: "you should be able to go back in steps."
+              Nothing on the first card — there is no earlier one to show. */}
+          {index > 0 ? (
+            <Pressable
+              onPress={back}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Previous"
+              style={{ padding: 4, marginLeft: -4 }}>
+              <Ionicons name="chevron-back" size={20} color={colors.inkSecondary} />
+            </Pressable>
+          ) : null}
           {/* Dots, not "3 of 7": the count is reassurance, not information. */}
           <View style={{ flexDirection: 'row', gap: 5, flex: 1 }}>
             {TOUR_STEPS.map((s, i) => (

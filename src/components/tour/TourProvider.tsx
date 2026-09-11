@@ -21,6 +21,8 @@ type TourValue = {
   total: number;
   start: () => void;
   next: () => void;
+  /** No-op on the first card (there is nothing before it to show). */
+  back: () => void;
   end: (reason: 'done' | 'skip') => void;
 };
 
@@ -91,9 +93,19 @@ export function TourProvider({ children }: { children: ReactNode }) {
     go(i);
   }, [go, end]);
 
+  // Rylan 2026-09-11: "you should be able to go back in steps." Mirrors
+  // next(): go() already navigates to whatever route the target step
+  // wants (or stays put if it has none), so revisiting an earlier card
+  // also revisits the tab it lives on.
+  const back = useCallback(() => {
+    const i = indexRef.current - 1;
+    if (i < 0) return;
+    go(i);
+  }, [go]);
+
   const value = useMemo<TourValue>(
-    () => ({ active, index, total: TOUR_STEPS.length, start, next, end }),
-    [active, index, start, next, end],
+    () => ({ active, index, total: TOUR_STEPS.length, start, next, back, end }),
+    [active, index, start, next, back, end],
   );
 
   return <TourContext.Provider value={value}>{children}</TourContext.Provider>;
@@ -110,6 +122,7 @@ export function useTour(): TourValue {
       total: TOUR_STEPS.length,
       start: () => {},
       next: () => {},
+      back: () => {},
       end: () => {},
     };
   }
