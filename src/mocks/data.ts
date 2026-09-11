@@ -431,6 +431,11 @@ export const MOCK_PROFILE = {
   // This is the loading / server-unreachable fallback (shown behind the honest
   // "Sample data" chip), so identity fields are EMPTY rather than fake names.
   hasServerProfile: false,
+  // The server's own "onboarding actually finished" fact (Rylan 2026-09-11),
+  // distinct from hasServerProfile above: that one can be true from just the
+  // first onboarding step, this one is only ever true after
+  // markOnboardingComplete() ran. Defaults false for the same reason.
+  onboardingComplete: false,
   name: '',
   photoUrl: '',
   school: '',

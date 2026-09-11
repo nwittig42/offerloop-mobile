@@ -33,6 +33,7 @@ import {
   type AppliedJob,
 } from '@/api/endpoints/autoApply';
 import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
+import { markOnboardingComplete } from '@/api/endpoints/preferences';
 import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
 import { runSwipe, type DraftJobProgress } from '@/api/endpoints/swipe';
 import { isInsufficientCredits } from '@/api/errors';
@@ -807,6 +808,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // app never gets a tour appearing out of nowhere; the Scout tab reads this
     // on mount and offers the walkthrough.
     void markTourPending();
+    // The one explicit server-side "onboarding actually finished" fact
+    // (Rylan 2026-09-11). Fire-and-forget: a failed write here just means
+    // this account keeps relying on the hasServerProfile heuristic a
+    // little longer, never a new bug — see confirmOnboardingDone below.
+    void markOnboardingComplete().catch(() => {});
   }, [uid]);
 
   const resetOnboarding = useCallback(() => {

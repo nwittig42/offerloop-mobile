@@ -161,21 +161,36 @@ function useAuthGate() {
       router.replace('/(onboarding)/intake');
     } else if (onboardingDone && inOnboarding) {
       router.replace('/(tabs)/feed');
-    } else if (onboardingDone === false && !inOnboarding && profile.hasServerProfile) {
+    } else if (
+      onboardingDone === false &&
+      !inOnboarding &&
+      (profile.onboardingComplete || profile.hasServerProfile)
+    ) {
       // This render is ALREADY treating the account as established (we did
       // not take the branch above) and it is genuinely not just mid-intake
-      // (that screen IS '(onboarding)', excluded by !inOnboarding) — so a
-      // real profile here means onboarding is actually done, somewhere,
-      // sometime, not necessarily on this device. Make that durable so the
-      // NEXT cold launch never has to re-win the /me race (Rylan
+      // (that screen IS '(onboarding)', excluded by !inOnboarding). Two
+      // ways in: onboardingComplete is the server's own explicit "this
+      // account finished onboarding" fact (only ever set by this app's own
+      // completeOnboarding()); hasServerProfile is the older heuristic
+      // (real profile data), which is what covers an account onboarded
+      // somewhere other than this app, e.g. the website, since nothing
+      // there ever sets onboardingComplete. Either way, make it durable so
+      // the NEXT cold launch never has to re-win the /me race (Rylan
       // 2026-09-11: "a user who has created an account gets plopped back
       // into onboarding when they sign back in" — a fresh device, a
-      // reinstall, or lost AsyncStorage left this flag unset forever for
-      // an account that never ran the app's own completeOnboarding(), e.g.
-      // one onboarded on the website).
+      // reinstall, or lost AsyncStorage left this flag unset forever).
       confirmOnboardingDone();
     }
-  }, [status, onboardingDone, needsOnboarding, segments, router, profile.hasServerProfile, confirmOnboardingDone]);
+  }, [
+    status,
+    onboardingDone,
+    needsOnboarding,
+    segments,
+    router,
+    profile.onboardingComplete,
+    profile.hasServerProfile,
+    confirmOnboardingDone,
+  ]);
 
   return status;
 }

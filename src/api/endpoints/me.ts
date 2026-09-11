@@ -30,6 +30,7 @@ type MeResponse = {
   about: string;
   resumeExperiences: ResumeExperience[];
   linkedinHighlights: string[];
+  onboardingComplete: boolean;
 };
 
 /**
@@ -58,6 +59,7 @@ export async function fetchMe(): Promise<Profile> {
   return {
     ...MOCK_PROFILE,
     hasServerProfile,
+    onboardingComplete: !!me.onboardingComplete,
     name: me.name,
     photoUrl: me.photoUrl || '',
     school: me.school || MOCK_PROFILE.school,

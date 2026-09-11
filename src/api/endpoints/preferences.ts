@@ -1,6 +1,24 @@
 import { apiFetch } from '@/api/client';
 import { USE_MOCKS } from '@/api/config';
 
+/**
+ * The one explicit "this account finished onboarding" fact the server
+ * keeps (Rylan 2026-09-11). Called exactly once, from completeOnboarding(),
+ * the moment the app's own onboarding flow actually finishes. Everything
+ * else /me exposes is real profile data that can go true from just the
+ * first onboarding step, so it is a fine heuristic for "looks established"
+ * and a bad proof that onboarding is actually done. Fire-and-forget: a
+ * failed write here just means the device keeps re-deriving the heuristic
+ * a little longer, never a new bug.
+ */
+export async function markOnboardingComplete(): Promise<void> {
+  if (USE_MOCKS) return;
+  await apiFetch('/api/mobile/preferences', {
+    method: 'POST',
+    body: { onboardingComplete: true },
+  });
+}
+
 /** Permanently delete the account + all data (Apple 5.1.1(v) requirement). The
  *  caller signs the user out afterward. Throws on failure so the UI can surface it. */
 export async function deleteAccount(): Promise<void> {
