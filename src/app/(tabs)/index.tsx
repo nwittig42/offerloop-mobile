@@ -20,6 +20,7 @@ import Animated, { FadeInDown, FadeOut, LinearTransition, useSharedValue } from 
 
 import { apiFetch } from '@/api/client';
 import { mapScoutRoute, sendScoutMessage, withResumeEdits, type ScoutAction, type ScoutEdit, type ScoutTurn } from '@/api/endpoints/scout';
+import { ScoutEditsChip } from '@/components/resume/ScoutEditsChip';
 import {
   ackFor,
   applyScope,
@@ -1641,7 +1642,11 @@ function ScoutTabInner() {
                   }))
                   .filter((e) => e.suggested);
                 if (edits.length && href.startsWith('/resume-preview')) {
-                  actions.push({ label: "Review Scout's resume edits", href: withResumeEdits(href, edits) });
+                  // href stays bare here; every render site encodes edits
+                  // into it at press time via withResumeEdits (matches the
+                  // sendScoutMessage path below, so the "N suggested edits"
+                  // card detection (a.edits?.length) works for both).
+                  actions.push({ label: "Review Scout's resume edits", href, edits });
                 } else {
                   actions.push({ label: String(a.params?.label || '') || 'Take me there', href });
                 }
@@ -2514,39 +2519,57 @@ function ScoutTabInner() {
               is left here are its chips, sitting under the last thing it
               said the way a chat app puts quick replies under a message. */}
           {phase === 'idle' && reply && !didYouMean && reply.actions.length ? (
-            <Animated.View
-              entering={FadeInDown.duration(240)}
-              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {reply.actions.map((a) => (
-                <Pressable
-                  key={a.label}
-                  onPress={() => {
-                    setReply(null);
-                    // chat_message chips run in the conversation (e.g.
-                    // company intel → "Find people at X"); route chips
-                    // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
-                    if (a.chatMessage) {
-                      void submitAsk(a.chatMessage, { source: 'chip' });
-                    } else if (a.href === '#paywall') {
-                      presentPaywall({ context: 'scout' });
-                    } else if (a.href) {
-                      const href = a.edits?.length ? withResumeEdits(a.href, a.edits) : a.href;
-                      router.push(href as never);
-                    }
-                  }}
-                  style={{
-                    borderRadius: 999,
-                    paddingVertical: 7,
-                    paddingHorizontal: 13,
-                    backgroundColor: room.tintStrong,
-                    borderWidth: 1,
-                    borderColor: room.tintLine,
-                  }}>
-                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.ink }}>
-                    {a.label}
-                  </Text>
-                </Pressable>
-              ))}
+            <Animated.View entering={FadeInDown.duration(240)} style={{ gap: 8 }}>
+              {/* Resume edits get their own card, not a small pill (Rylan
+                  2026-09-10): a glance at the count here, the actual
+                  before/after and approve/skip live on the screen it opens. */}
+              {reply.actions
+                .filter((a) => a.edits?.length)
+                .map((a) => (
+                  <ScoutEditsChip
+                    key={a.href}
+                    count={a.edits!.length}
+                    onPress={() => {
+                      setReply(null);
+                      router.push(withResumeEdits(a.href!, a.edits!) as never);
+                    }}
+                  />
+                ))}
+              {reply.actions.filter((a) => !a.edits?.length).length ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {reply.actions
+                    .filter((a) => !a.edits?.length)
+                    .map((a) => (
+                      <Pressable
+                        key={a.label}
+                        onPress={() => {
+                          setReply(null);
+                          // chat_message chips run in the conversation (e.g.
+                          // company intel → "Find people at X"); route chips
+                          // navigate. Per SCOUT_BACKEND_HANDOFF.md §7.
+                          if (a.chatMessage) {
+                            void submitAsk(a.chatMessage, { source: 'chip' });
+                          } else if (a.href === '#paywall') {
+                            presentPaywall({ context: 'scout' });
+                          } else if (a.href) {
+                            router.push(a.href as never);
+                          }
+                        }}
+                        style={{
+                          borderRadius: 999,
+                          paddingVertical: 7,
+                          paddingHorizontal: 13,
+                          backgroundColor: room.tintStrong,
+                          borderWidth: 1,
+                          borderColor: room.tintLine,
+                        }}>
+                        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.ink }}>
+                          {a.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                </View>
+              ) : null}
             </Animated.View>
           ) : null}
 

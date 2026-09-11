@@ -80,7 +80,7 @@ export function ScoutEditsReview({
               color={on ? colors.positive : colors.inkTertiary}
               style={{ marginTop: 1 }}
             />
-            <View style={{ flex: 1, gap: 4 }}>
+            <View style={{ flex: 1, gap: 6 }}>
               {e.section ? (
                 <Text
                   style={{
@@ -93,14 +93,39 @@ export function ScoutEditsReview({
                   {e.section}
                 </Text>
               ) : null}
+              {/* A real diff (Rylan 2026-09-10): the old line tinted red and
+                  struck through, the new line tinted green, stacked. */}
               {e.current ? (
-                <Text style={{ fontFamily: fonts.sans, fontSize: 13, color: colors.inkTertiary, textDecorationLine: 'line-through' }}>
-                  {e.current}
-                </Text>
+                <View
+                  style={{
+                    backgroundColor: colors.negative + '14',
+                    borderRadius: 6,
+                    paddingVertical: 5,
+                    paddingHorizontal: 8,
+                  }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sans,
+                      fontSize: 12.5,
+                      color: colors.negative,
+                      textDecorationLine: 'line-through',
+                      lineHeight: 18,
+                    }}>
+                    {e.current}
+                  </Text>
+                </View>
               ) : null}
-              <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
-                {e.suggested}
-              </Text>
+              <View
+                style={{
+                  backgroundColor: colors.positive + '16',
+                  borderRadius: 6,
+                  paddingVertical: 5,
+                  paddingHorizontal: 8,
+                }}>
+                <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.ink, lineHeight: 19 }}>
+                  {e.suggested}
+                </Text>
+              </View>
             </View>
           </Pressable>
         );

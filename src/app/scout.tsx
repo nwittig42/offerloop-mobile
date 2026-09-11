@@ -22,6 +22,7 @@ import {
   type ScoutChatMeta,
   type ScoutTurn,
 } from '@/api/endpoints/scout';
+import { ScoutEditsChip } from '@/components/resume/ScoutEditsChip';
 import Input from '@/components/ui/Input';
 import { AIConsentRequiredError } from '@/lib/aiConsent';
 import { scoutThread } from '@/lib/scoutThread';
@@ -334,41 +335,62 @@ export default function ScoutScreen() {
                 </View>
               </View>
               {msg.actions?.length ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginLeft: 34 }}>
-                  {msg.actions.map((a) => (
-                    <Pressable
-                      key={a.href ?? `m:${a.chatMessage ?? a.label}`}
-                      onPress={() => {
-                        // chat_message chips run in the conversation (e.g.
-                        // "Find people at X"); route chips close the sheet
-                        // and navigate. a.href is optional — never push
-                        // undefined (pre-fix these chips were dead buttons).
-                        if (a.chatMessage) {
-                          void send(a.chatMessage);
-                          return;
-                        }
-                        if (!a.href) return;
-                        const href = a.edits?.length ? withResumeEdits(a.href, a.edits) : a.href;
-                        router.back();
-                        router.push(href as never);
-                      }}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                        paddingVertical: 8,
-                        paddingHorizontal: 12,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: colors.accent + '55',
-                        backgroundColor: colors.accent + '0F',
-                      }}>
-                      <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
-                        {a.label}
-                      </Text>
-                      <Ionicons name="arrow-forward" size={13} color={colors.accent} />
-                    </Pressable>
-                  ))}
+                <View style={{ gap: 8, marginLeft: 34 }}>
+                  {/* Resume edits get their own card, matching the tab
+                      (Rylan 2026-09-10): a glance at the count, tap opens the
+                      full before/after screen to approve or skip. */}
+                  {msg.actions
+                    .filter((a) => a.edits?.length)
+                    .map((a) => (
+                      <ScoutEditsChip
+                        key={a.href}
+                        count={a.edits!.length}
+                        onPress={() => {
+                          router.back();
+                          router.push(withResumeEdits(a.href!, a.edits!) as never);
+                        }}
+                      />
+                    ))}
+                  {msg.actions.filter((a) => !a.edits?.length).length ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {msg.actions
+                        .filter((a) => !a.edits?.length)
+                        .map((a) => (
+                          <Pressable
+                            key={a.href ?? `m:${a.chatMessage ?? a.label}`}
+                            onPress={() => {
+                              // chat_message chips run in the conversation
+                              // (e.g. "Find people at X"); route chips close
+                              // the sheet and navigate. a.href is optional —
+                              // never push undefined (pre-fix these chips
+                              // were dead buttons).
+                              if (a.chatMessage) {
+                                void send(a.chatMessage);
+                                return;
+                              }
+                              if (!a.href) return;
+                              router.back();
+                              router.push(a.href as never);
+                            }}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 6,
+                              paddingVertical: 8,
+                              paddingHorizontal: 12,
+                              borderRadius: 999,
+                              borderWidth: 1,
+                              borderColor: colors.accent + '55',
+                              backgroundColor: colors.accent + '0F',
+                            }}>
+                            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.accent }}>
+                              {a.label}
+                            </Text>
+                            <Ionicons name="arrow-forward" size={13} color={colors.accent} />
+                          </Pressable>
+                        ))}
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
             </View>
