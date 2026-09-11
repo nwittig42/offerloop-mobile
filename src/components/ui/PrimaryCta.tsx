@@ -1,6 +1,5 @@
 import { ActivityIndicator, Pressable, Text } from 'react-native';
 
-import { useColors } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
 
 /**
@@ -12,7 +11,18 @@ import { fonts } from '@/theme/tokens';
  * have exactly one thing to do, so the button is bigger (52 / 17px) and black
  * rather than brand navy. Sharing it here keeps Welcome and intake identical;
  * they were built separately and drifted on the first pass.
+ *
+ * Fixed black/white, NOT colors.ink / colors.paper (Rylan 2026-09-11, "washed
+ * out in dark mode"): those two tokens are text/surface colors that swap
+ * brightness in dark mode (ink turns near-white, paper turns dark navy), so
+ * borrowing them for a button fill silently inverted this into a pale pill
+ * with dark text instead of the bold black CTA it is everywhere else. This
+ * button is a brand mark, not a themed surface — it stays identical in both
+ * appearances on purpose.
  */
+const CTA_BG = '#111318';
+const CTA_FG = '#FFFFFF';
+
 export default function PrimaryCta({
   label,
   onPress,
@@ -24,7 +34,6 @@ export default function PrimaryCta({
   disabled?: boolean;
   busy?: boolean;
 }) {
-  const colors = useColors();
   const off = disabled || busy;
   return (
     <Pressable
@@ -43,15 +52,15 @@ export default function PrimaryCta({
         gap: 8,
         minHeight: 52,
         width: '100%',
-        backgroundColor: colors.ink,
+        backgroundColor: CTA_BG,
         borderRadius: 8,
         paddingVertical: 16,
         opacity: off ? 0.45 : 1,
       }}>
       {busy ? (
-        <ActivityIndicator size="small" color={colors.paper} />
+        <ActivityIndicator size="small" color={CTA_FG} />
       ) : (
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: colors.paper }}>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: CTA_FG }}>
           {label}
         </Text>
       )}
