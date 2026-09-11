@@ -74,6 +74,11 @@ const FINANCE_FIRMS = [
   'Wells Fargo', 'Barclays', 'UBS', 'Deutsche Bank', 'RBC', 'Jefferies',
   'Evercore', 'Lazard', 'Centerview', 'Moelis', 'PJT Partners', 'Houlihan Lokey',
   'Rothschild', 'Guggenheim', 'Perella Weinberg', 'Qatalyst',
+  // Middle market (Rylan 2026-09-11, feedback: not enough MM IB surfacing).
+  // Same speech-recognition purpose as the rest of this list: so a spoken
+  // "Piper Sandler" or "Harris Williams" is heard correctly, not mangled.
+  'William Blair', 'Piper Sandler', 'Baird', 'Harris Williams', 'Raymond James',
+  'Stifel', 'Lincoln International',
   'Blackstone', 'KKR', 'Apollo', 'Carlyle', 'TPG', 'Warburg Pincus',
   'Citadel', 'Point72', 'Millennium', 'Two Sigma', 'Jane Street', 'DE Shaw',
   'Bridgewater', 'Vista Equity', 'Silver Lake', 'General Atlantic', 'BlackRock',
@@ -102,7 +107,15 @@ export const KNOWN_FIRMS = [...FINANCE_FIRMS, ...CONSULTING_FIRMS, ...TECH_FIRMS
  *  complete, answerable asks. */
 const INDUSTRY_FIRM_MAP: { phrases: string[]; firms: string[] }[] = [
   { phrases: ['investment banking', 'investment banks', 'investment bank', 'ib', 'banking'],
-    firms: ['Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore', 'Moelis'] },
+    // Bulge bracket first, then middle market (Rylan 2026-09-11: the
+    // rescue card was showing five bulge-bracket-only names for every
+    // "investment banking" ask, so a middle-market-focused student never
+    // saw a firm they were actually after).
+    firms: [
+      'Goldman Sachs', 'JPMorgan', 'Morgan Stanley', 'Evercore', 'Moelis',
+      'William Blair', 'Piper Sandler', 'Baird', 'Harris Williams',
+      'Raymond James', 'Stifel', 'Lincoln International',
+    ] },
   { phrases: ['finance', 'financial services'],
     firms: ['Goldman Sachs', 'JPMorgan', 'BlackRock', 'Morgan Stanley'] },
   { phrases: ['private equity', 'pe'], firms: ['Blackstone', 'KKR', 'Apollo', 'Carlyle'] },
