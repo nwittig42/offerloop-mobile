@@ -3,7 +3,9 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 
+import { qk } from '@/api/queryKeys';
 import { pickResume, uploadResume, type PickedResume, type ResumeParsed } from '@/api/endpoints/resume';
 import { RESUME_BUILDER_LIVE } from '@/api/endpoints/resumeBuilder';
 import PrimaryCta from '@/components/ui/PrimaryCta';
@@ -168,7 +170,10 @@ export default function Intake() {
   const [pendingContinue, setPendingContinue] = useState(false);
   const [resumeName, setResumeName] = useState('');
   const [resumeError, setResumeError] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<ResumeParsed | null>(null);
+  // Always null now that upload runs in the background (see submitStep0): the
+  // parse result lands after this screen has already navigated away, and
+  // nothing else in the app reads it, so there is no setter for it any more.
+  const [parsed] = useState<ResumeParsed | null>(null);
   // Build-from-LinkedIn, the door Rylan found missing on 2026-09-01: the
   // builder already exists behind Profile and the Feed, onboarding just never
   // offered it. It needs the URL saved and the profile enriched first, so this
@@ -177,12 +182,13 @@ export default function Intake() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [pendingBuild, setPendingBuild] = useState(false);
 
-  const [track, setTrack] = useState<string | null>(null);
+  const [track] = useState<string | null>(null);
   // The builder finalizes onto the account and invalidates /me, so a resume
   // created there shows up here as profile.resume. No signal to thread back.
-  const { profile, updateProfile } = useApp();
+  const { profile, updateProfile, showToast } = useApp();
   const { consent } = useAIConsent();
   const builtResume = Boolean(profile.resume);
+  const queryClient = useQueryClient();
 
 
   // Where to open. Two ways in, because routing between the two onboarding
@@ -285,14 +291,22 @@ export default function Intake() {
     setWorking(true);
     try {
       if (picked) {
+        // Server-side parsing (text extraction + an LLM pass) can take up to
+        // 60s, so it no longer blocks Continue: it runs in the background like
+        // enrichLinkedin below. /me is the source of truth once it lands (see
+        // attachments.tsx, resume-view.tsx), so there is no local result to
+        // reconcile after this screen unmounts via router.replace below.
         setResumeState('parsing');
-        const res = await uploadResume(picked);
-        const data = res?.data ?? null;
-        setParsed(data);
-        setResumeState('done');
-        const guess = guessTrack(data);
-        if (guess && !track) setTrack(guess);
-        trackEvent('intake_resume_parsed', { got_fields: Boolean(parsedSummary(data)) });
+        void uploadResume(picked)
+          .then((res) => {
+            trackEvent('intake_resume_parsed', {
+              got_fields: Boolean(parsedSummary(res?.data ?? null)),
+            });
+            return queryClient.invalidateQueries({ queryKey: qk.me });
+          })
+          .catch(() => {
+            showToast("Couldn't finish parsing your resume. Retry it from Files in Profile.");
+          });
       }
       /**
        * SAVE the URL, then enrich with it. These used to be one call, and that
