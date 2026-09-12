@@ -28,7 +28,6 @@ import { TourProvider } from '@/components/tour/TourProvider';
 import TourOverlay from '@/components/tour/TourOverlay';
 import Toast from '@/components/Toast';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { useScreenshotShare } from '@/hooks/useScreenshotShare';
 import { loadAIConsent } from '@/lib/aiConsent';
 import { noteAppOpen } from '@/lib/appRating';
 import { installCrashCapture } from '@/lib/analytics';
@@ -231,7 +230,6 @@ function ThemedShell() {
   const { profile, bootPending } = useApp();
   const { user } = useAuth();
   const status = useAuthGate();
-  useScreenshotShare();
   usePushNotifications();
 
   // RevenueCat: configure once, then keep app_user_id == Firebase uid so
