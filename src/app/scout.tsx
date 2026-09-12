@@ -29,7 +29,7 @@ import { scoutThread } from '@/lib/scoutThread';
 import { useAIConsent } from '@/lib/aiConsent';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * Scout, the AI assistant, as a summonable sheet. The conversation is the
@@ -289,12 +289,14 @@ export default function ScoutScreen() {
               style={{
                 alignSelf: 'flex-end',
                 maxWidth: '85%',
-                backgroundColor: colors.ink,
+                // Fixed black, not colors.ink (Rylan 2026-09-11: the
+                // same dark-mode wash-out as "Get started").
+                backgroundColor: BRAND_CTA_BG,
                 borderRadius: 10,
                 padding: 12,
               }}>
               <Text
-                style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.paper }}>
+                style={{ fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: BRAND_CTA_FG }}>
                 {msg.text}
               </Text>
             </View>
@@ -460,11 +462,11 @@ export default function ScoutScreen() {
               width: 38,
               height: 38,
               borderRadius: 19,
-              backgroundColor: colors.ink,
+              backgroundColor: BRAND_CTA_BG,
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <Ionicons name="arrow-up" size={17} color={colors.paper} />
+            <Ionicons name="arrow-up" size={17} color={BRAND_CTA_FG} />
           </Pressable>
         </View>
       </View>

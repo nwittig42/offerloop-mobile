@@ -33,7 +33,7 @@ import Card from '@/components/ui/Card';
 import { sameCompany } from '@/lib/company';
 import { useApp } from '@/store/app';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * Network: your progress up top, then people, applications and meetings.
@@ -1152,10 +1152,12 @@ export default function NetworkScreen() {
                 gap: 8,
                 height: 46,
                 borderRadius: 10,
-                backgroundColor: colors.ink,
+                // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+                // dark-mode wash-out as "Get started").
+                backgroundColor: BRAND_CTA_BG,
               }}>
-              <Ionicons name="add" size={18} color={colors.paper} />
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+              <Ionicons name="add" size={18} color={BRAND_CTA_FG} />
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: BRAND_CTA_FG }}>
                 Prep for a meeting
               </Text>
             </Pressable>

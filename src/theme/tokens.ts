@@ -188,3 +188,21 @@ export function applyAccent(
   const primary = dark ? school.darkPrimary : school.primary;
   return { ...base, navy: primary, navyDeep: primary, accent: primary, marketing: primary };
 }
+
+/**
+ * The solid black CTA pill (Welcome's "Get started", every Continue through
+ * intake, "Connect Gmail", "Build my resume from this LinkedIn"): a brand
+ * mark, not a themed surface, so it stays identical in light and dark mode.
+ *
+ * NEVER build one from colors.ink / colors.paper. Those are TEXT and
+ * SURFACE tokens — they swap brightness in dark mode (ink turns near-white,
+ * paper turns dark navy), which is correct for text on a card and wrong for
+ * a button whose whole identity is "black pill, white label." Doing that
+ * silently inverted four buttons across Welcome and onboarding into pale,
+ * barely-visible pills in dark mode (Rylan 2026-09-11 — three people hit
+ * this on their very first open, and it recurred a second and third time in
+ * onboarding after the first fix, because each button had its own inline
+ * colors.ink/colors.paper instead of reading these two constants).
+ */
+export const BRAND_CTA_BG = '#111318';
+export const BRAND_CTA_FG = '#FFFFFF';

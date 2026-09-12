@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, Text } from 'react-native';
 
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * The full-width ink-black call to action that carries the signed-out flow:
@@ -20,9 +20,6 @@ import { fonts } from '@/theme/tokens';
  * button is a brand mark, not a themed surface — it stays identical in both
  * appearances on purpose.
  */
-const CTA_BG = '#111318';
-const CTA_FG = '#FFFFFF';
-
 export default function PrimaryCta({
   label,
   onPress,
@@ -52,15 +49,15 @@ export default function PrimaryCta({
         gap: 8,
         minHeight: 52,
         width: '100%',
-        backgroundColor: CTA_BG,
+        backgroundColor: BRAND_CTA_BG,
         borderRadius: 8,
         paddingVertical: 16,
         opacity: off ? 0.45 : 1,
       }}>
       {busy ? (
-        <ActivityIndicator size="small" color={CTA_FG} />
+        <ActivityIndicator size="small" color={BRAND_CTA_FG} />
       ) : (
-        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: CTA_FG }}>
+        <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 17, color: BRAND_CTA_FG }}>
           {label}
         </Text>
       )}

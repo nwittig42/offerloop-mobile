@@ -21,7 +21,7 @@ import { track } from '@/lib/analytics';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL, stepNumber } from '@/lib/onboardingFlow';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 import type { Candidate, Job } from '@/types';
 
 /** This screen's slice of the shared flow (see lib/onboardingFlow). */
@@ -264,10 +264,13 @@ export default function Onboarding() {
                   paddingVertical: 10,
                   paddingHorizontal: 16,
                   borderRadius: 999,
-                  backgroundColor: colors.ink,
+                  // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+                  // dark-mode wash-out as "Get started" — ink/paper flip
+                  // brightness in dark mode, a brand-black pill must not).
+                  backgroundColor: BRAND_CTA_BG,
                 }}>
                 <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
-                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: colors.paper }}>
+                <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14.5, color: BRAND_CTA_FG }}>
                   {peopleReady ? "That's the swipe" : 'Applied'}
                 </Text>
               </Animated.View>
@@ -375,8 +378,10 @@ export default function Onboarding() {
                   gap: 10,
                   minHeight: 58,
                   borderRadius: 10,
-                  backgroundColor: colors.ink,
-                  shadowColor: colors.ink,
+                  // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+                  // dark-mode wash-out as "Get started").
+                  backgroundColor: BRAND_CTA_BG,
+                  shadowColor: BRAND_CTA_BG,
                   shadowOffset: { width: 0, height: 6 },
                   shadowOpacity: 0.22,
                   shadowRadius: 14,
@@ -384,14 +389,14 @@ export default function Onboarding() {
                   opacity: gmailConnecting ? 0.7 : 1,
                 }}>
                 {gmailConnecting ? (
-                  <ActivityIndicator size="small" color={colors.paper} />
+                  <ActivityIndicator size="small" color={BRAND_CTA_FG} />
                 ) : personalGmailSignIn ? (
-                  <Ionicons name="school" size={22} color={colors.paper} />
+                  <Ionicons name="school" size={22} color={BRAND_CTA_FG} />
                 ) : (
                   <GmailLogo size={24} />
                 )}
                 <Text
-                  style={{ fontFamily: fonts.sansSemibold, fontSize: 17.5, color: colors.paper }}>
+                  style={{ fontFamily: fonts.sansSemibold, fontSize: 17.5, color: BRAND_CTA_FG }}>
                   {gmailConnecting ? 'Opening Google...' : primaryLabel}
                 </Text>
               </Pressable>

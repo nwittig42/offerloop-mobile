@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 
 import { useApp } from '@/store/app';
-import { fonts, shadows } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts, shadows } from '@/theme/tokens';
 import { useColors } from '@/theme/ThemeProvider';
 
 /**
@@ -38,7 +38,10 @@ export function Toast() {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 14,
-            backgroundColor: colors.ink,
+            // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+            // dark-mode wash-out as "Get started" — every toast in the app
+            // was reading as a pale, near-invisible pill in dark mode).
+            backgroundColor: BRAND_CTA_BG,
             borderRadius: 22,
             paddingHorizontal: 18,
             paddingVertical: 11,
@@ -46,7 +49,7 @@ export function Toast() {
           },
           shadows.lg,
         ]}>
-        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: colors.paper }}>
+        <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13, color: BRAND_CTA_FG }}>
           {toast.message}
         </Text>
         {toast.showInboxAction ? (

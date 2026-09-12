@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-nativ
 
 import { refineResume, type CanonicalResume } from '@/api/endpoints/resumeBuilder';
 import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * "Describe your changes": the edit loop for a generated resume (Rylan
@@ -124,15 +124,17 @@ export function ResumeRefine({
             gap: 7,
             paddingVertical: 11,
             borderRadius: 8,
-            backgroundColor: colors.ink,
+            // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+            // dark-mode wash-out as "Get started").
+            backgroundColor: BRAND_CTA_BG,
             opacity: busy || !text.trim() ? 0.6 : 1,
           }}>
           {busy ? (
-            <ActivityIndicator size="small" color={colors.paper} />
+            <ActivityIndicator size="small" color={BRAND_CTA_FG} />
           ) : (
-            <Ionicons name="checkmark-circle-outline" size={15} color={colors.paper} />
+            <Ionicons name="checkmark-circle-outline" size={15} color={BRAND_CTA_FG} />
           )}
-          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+          <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: BRAND_CTA_FG }}>
             {busy ? 'Applying…' : 'Apply changes'}
           </Text>
         </Pressable>

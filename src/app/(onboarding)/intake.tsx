@@ -18,7 +18,7 @@ import { saveTargetTrack } from '@/api/endpoints/preferences';
 import { enrichLinkedin } from '@/api/endpoints/profile';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * The first two onboarding steps: add your resume, then see the feed it builds.
@@ -543,15 +543,17 @@ export default function Intake() {
                 marginTop: 12,
                 paddingVertical: 12,
                 borderRadius: 12,
-                backgroundColor: colors.ink,
+                // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+                // dark-mode wash-out as "Get started").
+                backgroundColor: BRAND_CTA_BG,
                 opacity: building ? 0.7 : 1,
               }}>
               {building ? (
-                <ActivityIndicator size="small" color={colors.paper} />
+                <ActivityIndicator size="small" color={BRAND_CTA_FG} />
               ) : (
-                <Ionicons name="sparkles-outline" size={18} color={colors.paper} />
+                <Ionicons name="sparkles-outline" size={18} color={BRAND_CTA_FG} />
               )}
-              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: colors.paper }}>
+              <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 14, color: BRAND_CTA_FG }}>
                 {building ? 'Reading your LinkedIn, about half a minute' : 'Build my resume from this LinkedIn'}
               </Text>
             </Pressable>

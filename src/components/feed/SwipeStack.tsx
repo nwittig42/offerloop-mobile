@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Card from '@/components/ui/Card';
 import { useColors, useTheme } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * The item-agnostic swipe stack: gestures, physics, stamps, and the peeking
@@ -208,7 +208,10 @@ function WinToast({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: colors.ink + 'B8',
+            // Fixed black, not colors.ink (Rylan 2026-09-11: this became a
+            // pale translucent pill behind already-hardcoded white text/icon
+            // in dark mode, unreadable).
+            backgroundColor: BRAND_CTA_BG + 'B8',
             paddingHorizontal: 14,
             paddingVertical: 8,
             borderRadius: 999,

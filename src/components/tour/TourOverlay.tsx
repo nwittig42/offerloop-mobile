@@ -7,7 +7,7 @@ import { useTour } from '@/components/tour/TourProvider';
 import { TOUR_STEPS } from '@/components/tour/tourSteps';
 import { useApp } from '@/store/app';
 import { useColors } from '@/theme/ThemeProvider';
-import { fonts } from '@/theme/tokens';
+import { BRAND_CTA_BG, BRAND_CTA_FG, fonts } from '@/theme/tokens';
 
 /**
  * The tour card: one screen-dimming layer and one card near the bottom.
@@ -141,7 +141,9 @@ export default function TourOverlay() {
             onPress={onPrimary}
             accessibilityRole="button"
             style={{
-              backgroundColor: colors.ink,
+              // Fixed black, not colors.ink (Rylan 2026-09-11: the same
+              // dark-mode wash-out as "Get started").
+              backgroundColor: BRAND_CTA_BG,
               borderRadius: 12,
               paddingVertical: 11,
               paddingHorizontal: 18,
