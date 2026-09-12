@@ -32,6 +32,7 @@ import {
   startAutoApply,
   type AppliedJob,
 } from '@/api/endpoints/autoApply';
+import { getFlags, type FeatureFlags } from '@/api/endpoints/flags';
 import { createMeetingPrep, fetchMeetingPreps } from '@/api/endpoints/meetingPreps';
 import { markOnboardingComplete } from '@/api/endpoints/preferences';
 import { enrichLinkedin, type EnrichResult } from '@/api/endpoints/profile';
@@ -206,9 +207,14 @@ const PERSISTED_QUERIES: { name: string; key: readonly unknown[] }[] = [
   { name: 'loops', key: qk.loops },
   { name: 'meetingPreps', key: qk.meetingPreps },
   { name: 'notifications', key: qk.notifications },
+  { name: 'flags', key: qk.flags },
 ];
 const cacheStorageKey = (uid: string, name: string) =>
   `offerloop.cache.${uid}.${name}.${PERSIST_CACHE_VERSION}`;
+// Stable reference so `flagsQuery.data ?? EMPTY_FLAGS` doesn't hand out a new
+// object every render before the first fetch resolves (that would make
+// isFlagEnabled's useCallback dep churn, and re-render every consumer).
+const EMPTY_FLAGS: FeatureFlags = {};
 // First-run onboarding completion, stored per-user (separate from the query
 // cache above — it's a single flag, not a restorable blob). Bump the version to
 // re-show the flow to everyone after a redesign.
@@ -367,6 +373,12 @@ type AppStore = {
   toggleLoop: (id: string) => void;
   addMeetingPrep: (input: { name: string; linkedinUrl: string }) => Promise<string>;
   showToast: (message: string, showInboxAction?: boolean) => void;
+  /** Resolved remote feature flags (see api/endpoints/flags.ts). Prefer
+   *  isFlagEnabled over reading this directly. */
+  flags: FeatureFlags;
+  /** Fails closed: an unloaded or unknown flag is `fallback` (default false),
+   *  never a silent ON. */
+  isFlagEnabled: (key: string, fallback?: boolean) => boolean;
 };
 
 const AppContext = createContext<AppStore | null>(null);
@@ -464,6 +476,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refetchInterval: 60_000,
   });
   const profile: Profile = meQuery.data ?? MOCK_PROFILE;
+
+  // Remote feature flags (see api/endpoints/flags.ts). No refetchInterval —
+  // these gate risky-feature rollouts, not live data, so the launch-time fetch
+  // (plus the persisted-cache rehydrate above) is enough; a change takes
+  // effect on the user's next app open, which is the whole point: no update.
+  const flagsQuery = useQuery({
+    queryKey: qk.flags,
+    queryFn: getFlags,
+    enabled: authStatus === 'signedIn',
+  });
+  const flags: FeatureFlags = flagsQuery.data ?? EMPTY_FLAGS;
+  // Fails closed: a flag that hasn't loaded yet, or that the server has never
+  // heard of, is OFF unless the caller explicitly opts into a different
+  // fallback — a broken or slow flags fetch must never silently turn a risky
+  // feature ON.
+  const isFlagEnabled = useCallback(
+    (key: string, fallback = false) => flags[key] ?? fallback,
+    [flags],
+  );
 
   /** Optimistically patch the cached profile (used by mutations until each gets a real PATCH). */
   const patchProfile = useCallback(
@@ -2039,6 +2070,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLoop,
       addMeetingPrep,
       showToast,
+      flags,
+      isFlagEnabled,
     }),
     [
       jobs,
@@ -2105,6 +2138,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLoop,
       addMeetingPrep,
       showToast,
+      flags,
+      isFlagEnabled,
     ],
   );
 

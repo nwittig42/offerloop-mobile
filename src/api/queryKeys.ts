@@ -19,4 +19,5 @@ export const qk = {
   notifications: ['notifications'] as const,
   emailTemplate: ['emailTemplate'] as const,
   savedEmailTemplates: ['savedEmailTemplates'] as const,
+  flags: ['flags'] as const,
 };
