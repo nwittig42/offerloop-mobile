@@ -56,7 +56,7 @@ import {
 import { iapAvailable } from '@/api/purchases';
 import { presentPaywall } from '@/components/paywall/paywallBus';
 import { ApiError } from '@/api/errors';
-import { askScoutBrain, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, fetchVibeCompanies, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
+import { askScoutBrainWithProgress, askScoutFindContacts, classifyAsk, fetchCompanyJobCounts, fetchVibeCompanies, transcribeAsk, type AskClassification, type ContactPreview } from '@/api/endpoints/scoutAsk';
 import { AUTO_APPLY_TERMINAL, fetchAutoApplyStatus, type AutoApplyStatusDoc } from '@/api/endpoints/autoApply';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -278,6 +278,11 @@ function ScoutTabInner() {
   // back to later, from the empty state or the chats drawer.
   const [explainerOpen, setExplainerOpen] = useState(false);
   const [thinkWord, setThinkWord] = useState(THINK_WORDS[0]);
+  // Real per-tool status from the backend's progress poll (Rylan 2026-09-16),
+  // e.g. "Searching for contacts…" — takes over from the whimsical rotating
+  // word the moment the first real update lands, so "thinking" stops being a
+  // decoration and starts reflecting what Scout is actually doing.
+  const [liveLabel, setLiveLabel] = useState<string | null>(null);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [clarify, setClarify] = useState<{ question: string; baseAsk: string } | null>(null);
   const [didYouMean, setDidYouMean] = useState<{ intent: DraftIntent; suggestion: string } | null>(null);
@@ -300,6 +305,14 @@ function ScoutTabInner() {
     role: string;
     company: string;
     location: string | null;
+  } | null>(null);
+  // The brain already found/drafted these — a real, charged result, not a
+  // free preview (Rylan 2026-09-16: this used to collapse to a single "View
+  // N in your Network" chip with the actual people thrown away; the paid,
+  // consequential action had less UI than the free preview above it).
+  const [contactReceipt, setContactReceipt] = useState<{
+    kind: 'found' | 'drafted';
+    items: ContactPreview[];
   } | null>(null);
   const [receipt, setReceipt] = useState<{
     eligible: Job[];
@@ -362,6 +375,7 @@ function ScoutTabInner() {
     setApplyOne(null);
     setApplySome(null);
     setPeoplePicks(null);
+    setContactReceipt(null);
     setReceipt(null);
     setCtx(null);
     setTyped('');
@@ -954,6 +968,7 @@ function ScoutTabInner() {
       setApplyOne(null);
       setApplySome(null);
       setPeoplePicks(null);
+      setContactReceipt(null);
 
       // Clarify round-trip: a short answer ("Goldman Sachs") merges into the
       // held ask; a fresh full ask replaces it. One round max, then best effort.
@@ -1624,17 +1639,24 @@ function ScoutTabInner() {
       const seq = ++requestSeq.current;
       setReply(null);
       setPhase('thinking');
+      setLiveLabel(null);
+      setContactReceipt(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
         let say = '';
         let actions: ScoutAction[] = [];
         try {
-          const env = await askScoutBrain({
-            ask: clean,
-            askId: `ask-${Date.now()}`,
-            conversationId: scoutThread.chatId(),
-            source: meta?.byVoice ? 'voice' : 'typed',
-          });
+          const env = await askScoutBrainWithProgress(
+            {
+              ask: clean,
+              askId: `ask-${Date.now()}`,
+              conversationId: scoutThread.chatId(),
+              source: meta?.byVoice ? 'voice' : 'typed',
+            },
+            (label) => {
+              if (seq === requestSeq.current) setLiveLabel(label);
+            },
+          );
           if (seq !== requestSeq.current) return; // edited/superseded — drop it
           if (env.conversationId) scoutThread.setChatId(env.conversationId);
           say = env.say || "I didn't catch that — try asking again?";
@@ -1643,11 +1665,13 @@ function ScoutTabInner() {
               (a.type === 'find_contacts' || a.type === 'find_hiring_managers') &&
               a.results?.items?.length
             ) {
-              // Brain-executed searches CHARGED and saved to My Network (the
-              // say text lists the people) — the receipt chip goes to where
-              // they now live, never the free-preview card whose copy would
-              // mislabel a paid result.
+              // Brain-executed searches CHARGED and saved to My Network. Show
+              // who was actually found (Rylan 2026-09-16), not just a count —
+              // the chip below still points to where they now live.
               const n = a.results.items.length;
+              if (a.results.kind === 'contacts') {
+                setContactReceipt({ kind: 'found', items: a.results.items });
+              }
               actions.push({ label: `View ${n} in your Network`, href: '/(tabs)/network' });
             } else if (a.type === 'navigate') {
               const href = mapScoutRoute(String(a.params?.route || ''));
@@ -1682,6 +1706,9 @@ function ScoutTabInner() {
               actions.push({ label: 'Watch the prep build', href: `/meeting-prep/${a.jobRef.id}` });
             } else if (a.type === 'draft_outreach' && a.results?.items?.length) {
               const n = a.results.items.length;
+              if (a.results.kind === 'contacts') {
+                setContactReceipt({ kind: 'drafted', items: a.results.items });
+              }
               actions.push({ label: `Open Inbox — ${n} draft${n === 1 ? '' : 's'} ready`, href: '/(tabs)/inbox' });
             } else if (a.type === 'followup' && a.params?.contactName) {
               // Scout just said someone is going cold. Make the offer
@@ -2082,7 +2109,7 @@ function ScoutTabInner() {
               style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <ActivityIndicator size="small" color={room.live} />
               <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: room.ink2 }}>
-                {thinkWord}…
+                {liveLabel || `${thinkWord}…`}
               </Text>
               <Pressable onPress={editAsk} hitSlop={8}>
                 <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 12.5, color: room.accent }}>
@@ -2569,6 +2596,40 @@ function ScoutTabInner() {
             </Animated.View>
           ) : null}
 
+          {/* The brain already found or drafted these, for real, charged
+              credits (Rylan 2026-09-16) — show who, not just a count on a
+              chip. Same card look as the free peoplePicks preview above,
+              minus its draft CTA since this action already ran. */}
+          {phase === 'idle' && contactReceipt ? (
+            <Animated.View entering={FadeInDown.duration(220)} style={{ alignSelf: 'stretch', gap: 7 }}>
+              {contactReceipt.items.slice(0, 5).map((c, i) => (
+                <View
+                  key={`${c.name}-${c.company}-${i}`}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: room.lineSoft,
+                    backgroundColor: room.cardSoft,
+                    borderRadius: 13,
+                    paddingVertical: 10,
+                    paddingHorizontal: 13,
+                    gap: 2,
+                  }}>
+                  <Text style={{ fontFamily: fonts.sansSemibold, fontSize: 13.5, color: room.ink }} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: room.ink2 }} numberOfLines={1}>
+                    {c.title || 'Team member'} · {c.company}
+                  </Text>
+                </View>
+              ))}
+              <Text style={{ fontFamily: fonts.sans, fontSize: 11, color: room.ink3, textAlign: 'center' }}>
+                {contactReceipt.kind === 'drafted'
+                  ? 'drafted — nothing sends until you approve it'
+                  : 'saved to your Network'}
+              </Text>
+            </Animated.View>
+          ) : null}
+
           {/* Scout's reply text already lives in the transcript above; what
               is left here are its chips, sitting under the last thing it
               said the way a chat app puts quick replies under a message. */}
@@ -2833,6 +2894,7 @@ function ScoutTabInner() {
             setApplyOne(null);
             setApplySome(null);
             setPeoplePicks(null);
+            setContactReceipt(null);
             setReceipt(null);
             setPhase('idle');
             setThreadSize(entries.length);

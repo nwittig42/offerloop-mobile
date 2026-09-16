@@ -159,6 +159,55 @@ export async function askScoutBrain(args: {
   });
 }
 
+/** One in-flight action='ask' turn's live status (Rylan 2026-09-16): the
+ *  backend writes tool_start/tool_end labels to Firestore while /scout/ask's
+ *  single blocking call is still running (same instrumentation the web SSE
+ *  path already had), so the app can show what Scout is actually doing
+ *  instead of one static "thinking" bubble for the whole multi-step turn.
+ *  Never throws — a poll failure just means one missed update, not a broken
+ *  turn, since askScoutBrain's own result is what actually matters. */
+async function getScoutProgress(askId: string): Promise<{ status: 'idle' | 'running'; label: string }> {
+  try {
+    return await apiFetch<{ status: 'idle' | 'running'; label: string }>('/api/mobile/scout/progress', {
+      query: { askId },
+      timeoutMs: 5_000,
+    });
+  } catch {
+    return { status: 'idle', label: '' };
+  }
+}
+
+/** askScoutBrain, plus a ~1s poll loop against /scout/progress for the
+ *  duration of the call. onLabel fires with each new non-empty status label
+ *  as it arrives; the caller decides how to render it (a chat bubble's text,
+ *  a progress card's subtitle). Polling stops the moment askScoutBrain
+ *  settles, success or failure, so it never outlives the turn it describes. */
+export async function askScoutBrainWithProgress(
+  args: Parameters<typeof askScoutBrain>[0],
+  onLabel: (label: string) => void,
+): Promise<ScoutAskEnvelope> {
+  let stopped = false;
+  let lastLabel = '';
+  const poll = async () => {
+    while (!stopped) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (stopped) break;
+      const p = await getScoutProgress(args.askId);
+      if (p.status === 'running' && p.label && p.label !== lastLabel) {
+        lastLabel = p.label;
+        onLabel(p.label);
+      }
+    }
+  };
+  const pollPromise = poll();
+  try {
+    return await askScoutBrain(args);
+  } finally {
+    stopped = true;
+    await pollPromise.catch(() => {});
+  }
+}
+
 export async function askScoutFindContacts(args: {
   ask: string;
   askId: string;
