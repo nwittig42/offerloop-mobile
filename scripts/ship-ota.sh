@@ -98,8 +98,13 @@ s = open(p).read()
 m = re.search(r"OTA_VERSION = '[a-z]+ v(\d+)'", s)
 n = int(m.group(1)) + 1
 s = re.sub(r"OTA_VERSION = '[^']*'", f"OTA_VERSION = '{channel} v{n}'", s)
-safe = message.replace("'", "\\'")
-s = re.sub(r"OTA_NOTES = '[^']*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
+safe = message.replace("\\", "\\\\").replace("'", "\\'")
+# (?:[^'\\]|\\.)* treats an escaped quote (\') inside the OLD value as part of
+# the string, not its end - [^']* alone stops at the first \' it meets (the
+# backslash means nothing to a regex) and leaves everything after it as
+# untouched garbage appended to the new value. Bit staging OTA CI for days
+# (2026-09-16 through 2026-09-21) once a message ever contained an apostrophe.
+s = re.sub(r"OTA_NOTES = '(?:[^'\\]|\\.)*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
 open(p, 'w').write(s)
 print(f"stamp: {channel} v{n}")
 EOF
@@ -120,8 +125,8 @@ stamp, message = sys.argv[1], sys.argv[2]
 p = 'src/lib/buildInfo.ts'
 s = open(p).read()
 s = re.sub(r"OTA_VERSION = '[^']*'", f"OTA_VERSION = '{stamp}'", s)
-safe = message.replace("'", "\\'")
-s = re.sub(r"OTA_NOTES = '[^']*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
+safe = message.replace("\\", "\\\\").replace("'", "\\'")
+s = re.sub(r"OTA_NOTES = '(?:[^'\\]|\\.)*'", f"OTA_NOTES = '{safe}'", s, flags=re.S)
 open(p, 'w').write(s)
 EOF
 fi
