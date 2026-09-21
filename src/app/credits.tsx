@@ -27,6 +27,7 @@ import {
   PACK_CREDIT_AMOUNTS,
   purchasePackage,
   purchaseProduct,
+  redeemOfferCode,
   showManageSubscriptions,
 } from '@/api/purchases';
 import type { PurchasesPackage } from 'react-native-purchases';
@@ -138,6 +139,7 @@ export default function CreditsScreen() {
   const [planPkgs, setPlanPkgs] = useState<{ pro?: PurchasesPackage; elite?: PurchasesPackage }>({});
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
   // Apple-managed subscription: shows the native manage sheet row. Web
   // (Stripe) subscribers manage where they subscribed; no link from here.
   const [appleManaged, setAppleManaged] = useState(false);
@@ -246,6 +248,33 @@ export default function CreditsScreen() {
     },
     [buyingId, confirming, profile.credits, profile.plan, connection.usingSampleData, queryClient, showToast],
   );
+
+  /** Apple's own redemption sheet (Rylan 2026-09-21): the promise resolves
+   *  when the sheet is dismissed, not when a redeemed code actually finishes
+   *  granting an entitlement server-side, so this polls /me the same way a
+   *  purchase does rather than assuming success from the sheet closing. */
+  const redeemCode = useCallback(async () => {
+    if (redeeming || buyingId || confirming) return;
+    setRedeeming(true);
+    baseline.current = {
+      credits: profile.credits,
+      plan: profile.plan,
+      live: !connection.usingSampleData,
+    };
+    const opened = await redeemOfferCode();
+    if (!opened) {
+      setRedeeming(false);
+      showToast('Redeem needs Apple sign-in on this device. Try again in a moment.');
+      return;
+    }
+    setConfirming(true);
+    for (let i = 0; i < 8; i++) {
+      await new Promise((res) => setTimeout(res, 2000));
+      await queryClient.refetchQueries({ queryKey: qk.me });
+    }
+    setConfirming(false);
+    setRedeeming(false);
+  }, [redeeming, buyingId, confirming, profile.credits, profile.plan, connection.usingSampleData, queryClient, showToast]);
 
   useEffect(() => {
     if (!confirming) return;
@@ -571,11 +600,30 @@ export default function CreditsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <ActivityIndicator size="small" color={colors.accent} />
                 <Text style={{ fontFamily: fonts.sans, fontSize: 12.5, color: colors.inkSecondary }}>
-                  Confirming your purchase, credits land in a moment…
+                  {redeeming
+                    ? 'Confirming your code, credits land in a moment…'
+                    : 'Confirming your purchase, credits land in a moment…'}
                 </Text>
               </View>
             )}
           </View>
+        )}
+
+        {/* Redeem an offer code, Apple's own sheet (Rylan 2026-09-21) - open
+            to everyone, not just current subscribers, since a code can
+            switch a Free user to Pro/Elite. Grouped with the other quiet
+            utility links below rather than the buy tiles above; it isn't
+            a purchase. */}
+        {iapLive && (
+          <Pressable
+            disabled={redeeming || Boolean(buyingId) || confirming}
+            onPress={() => void redeemCode()}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, opacity: redeeming ? 0.6 : 1 }}>
+            <Text style={{ fontFamily: fonts.sansMedium, fontSize: 13.5, color: colors.inkSecondary }}>
+              Have a code? Redeem it
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.inkTertiary} />
+          </Pressable>
         )}
 
         {/* Apple-managed subscribers get Apple's native manage sheet (cancel,

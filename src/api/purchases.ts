@@ -242,3 +242,23 @@ export async function showManageSubscriptions(): Promise<boolean> {
     return false;
   }
 }
+
+/** Apple's own native offer-code redemption sheet (Rylan 2026-09-21). Not a
+ *  web link or a custom purchase UI; safe under 3.1.1 the same way
+ *  showManageSubscriptions is - Apple's own flow, just triggered in-app
+ *  instead of via a QR code to Settings.
+ *
+ *  Triggering it from here (rather than the QR/Settings path) means the
+ *  RevenueCat SDK already has this device's real Firebase uid identified
+ *  (see logInPurchases, called on every signed-in app open), so a
+ *  redemption here can never land as an orphaned anonymous purchase the
+ *  way one redeemed before ever opening the app can. */
+export async function redeemOfferCode(): Promise<boolean> {
+  if (!iapAvailable()) return false;
+  try {
+    await Purchases.presentCodeRedemptionSheet();
+    return true;
+  } catch {
+    return false;
+  }
+}
