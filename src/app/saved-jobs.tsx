@@ -26,8 +26,11 @@ export default function SavedJobsScreen() {
 
   const applySaved = (job: Job) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    unsaveJob(job.id);
-    autoApplyJob(job); // deduped in the store
+    // Deduped in the store, which also removes the job from Saved once the
+    // apply actually succeeds. Don't unsaveJob here: a failed attempt (no
+    // credits, incomplete profile) must leave the card in Saved to retry,
+    // not lose it silently.
+    void autoApplyJob(job);
   };
 
   return (

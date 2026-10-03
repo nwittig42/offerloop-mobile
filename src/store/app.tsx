@@ -328,8 +328,15 @@ type AppStore = {
   endPersonPending: (id: string) => void;
   /** Remember a job as the swiped card for its company (per-company Roles deck). */
   rememberSwipedCard: (job: Job) => void;
-  /** Deduped auto-apply for any job — blocks a second application to the same one. */
-  autoApplyJob: (job: Job) => void;
+  /**
+   * Deduped auto-apply for any job — blocks a second application to the same
+   * one. Resolves true once the job is in a terminal state (applied, or was
+   * already applied) and has been removed from every deck/list; false if the
+   * attempt failed for a reason the user might fix and retry, so a caller
+   * that optimistically removed its own local copy of the card should put it
+   * back.
+   */
+  autoApplyJob: (job: Job) => Promise<boolean>;
   undoLastPass: () => void;
   restorePassedJob: (id: string) => void;
   saveJob: (id: string) => void;
@@ -1752,50 +1759,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // backend should ALSO dedupe for cross-device safety — client guard only.)
   const applyingRef = useRef<Set<string>>(new Set());
   const appliedIdsRef = useRef<Set<string>>(new Set());
+  // Removes a resolved job from every deck/list it could be sitting in.
+  // `jobs` is the main Feed deck, `savedJobs` is the Saved list; a job can be
+  // in either (or both, briefly) depending on which surface applied it.
+  const retireAppliedJob = useCallback((id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setSavedJobs((prev) => prev.filter((j) => j.id !== id));
+  }, []);
+
+  // Returns true when the job is in a terminal state (applied, or already
+  // was) and safe to drop from any list permanently; false when the attempt
+  // failed for a reason the user might fix and retry (missing profile, no
+  // credits, a transient error), so callers that optimistically pulled the
+  // card out of their own local list (the company Roles deck) should put it
+  // back rather than losing it silently.
   const autoApplyJob = useCallback(
-    (job: Job): void => {
+    async (job: Job): Promise<boolean> => {
       // Same AI consent gate as beginDraft: auto-apply builds materials from
       // the user's profile via the AI providers.
       if (!hasAIConsent()) {
         promptAIConsent();
-        return;
+        return false;
       }
       const id = job.id;
       const cache = queryClient.getQueryData<AppliedJob[]>(['appliedJobs']);
       if (applyingRef.current.has(id) || appliedIdsRef.current.has(id) || alreadyApplied(cache, id)) {
         showToast('You already applied to this role');
-        return;
+        // Already-applied jobs have no business still being the top card: the
+        // deck's own removal (passJob/saveJob) runs on the OTHER two swipe
+        // directions, but a right swipe never used to touch `jobs` at all, so
+        // a job that got applied once (then re-appeared some other way, e.g.
+        // undo or a refetch) would re-show forever, immune to a repeat apply
+        // swipe and escapable only via pass.
+        retireAppliedJob(id);
+        return true;
       }
       if (!job.autoApplyEligible) {
         showToast(`${job.title} can't be auto-applied yet`);
-        return;
+        return false;
       }
       applyingRef.current.add(id);
       recordSwipedCard(job);
       showToast(`Auto-applying to ${job.title}`, true);
-      startAutoApply(id)
-        .then((r) => {
-          if (r.ok) {
-            appliedIdsRef.current.add(id);
-            queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
-          } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
-            showToast('Set up your application profile to auto-apply');
-          } else if (r.code === 'INSUFFICIENT_CREDITS') {
-            if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
-            else showToast('Not enough credits to auto-apply');
-          } else if (r.code === 'INELIGIBLE') {
-            // The server couldn't detect a supported application system for this
-            // role. Say so honestly instead of showing the optimistic
-            // "Auto-applying…" toast and then silently doing nothing.
-            showToast(`${job.title} can't be auto-applied — apply on the company site`);
-          } else {
-            showToast('Could not auto-apply, try again');
-          }
-        })
-        .catch(() => showToast('Could not auto-apply, try again'))
-        .finally(() => applyingRef.current.delete(id));
+      try {
+        const r = await startAutoApply(id);
+        if (r.ok) {
+          appliedIdsRef.current.add(id);
+          queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
+          // Mirror passJob/saveJob: a successful apply must retire the card
+          // from every deck/list too, or it just snaps back as the top card
+          // (or sits in Saved) looking un-applied.
+          retireAppliedJob(id);
+          return true;
+        }
+        if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+          showToast('Set up your application profile to auto-apply');
+        } else if (r.code === 'INSUFFICIENT_CREDITS') {
+          if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
+          else showToast('Not enough credits to auto-apply');
+        } else if (r.code === 'INELIGIBLE') {
+          // The server couldn't detect a supported application system for this
+          // role. Say so honestly instead of showing the optimistic
+          // "Auto-applying…" toast and then silently doing nothing.
+          showToast(`${job.title} can't be auto-applied — apply on the company site`);
+        } else {
+          showToast('Could not auto-apply, try again');
+        }
+        return false;
+      } catch {
+        showToast('Could not auto-apply, try again');
+        return false;
+      } finally {
+        applyingRef.current.delete(id);
+      }
     },
-    [queryClient, showToast, recordSwipedCard],
+    [queryClient, showToast, recordSwipedCard, retireAppliedJob],
   );
 
   const draftAnotherContact = useCallback(
