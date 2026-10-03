@@ -792,9 +792,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const seen = new Set(prev.map((j) => j.id));
           return [...prev, ...page.jobs.filter((j) => !seen.has(j.id))];
         });
+        // A small/overlapping backend page can hand back a job the user just
+        // applied to (it left `jobs` the instant it was swiped, so it's no
+        // longer in `seen` and looks "new" again). Without excluding applied
+        // ids here too, that card gets re-appended and pops back into the
+        // deck within a swipe or two, looking exactly like the flash bug the
+        // immediate-removal fix solved, just caused by paging instead of timing.
+        const appliedCache = queryClient.getQueryData<AppliedJob[]>(['appliedJobs']);
         setJobs((prev) => {
           const seen = new Set(prev.map((j) => j.id));
-          const add = page.jobs.filter((j) => !seen.has(j.id) && !passedIds.has(j.id));
+          const add = page.jobs.filter(
+            (j) =>
+              !seen.has(j.id) &&
+              !passedIds.has(j.id) &&
+              !appliedIdsRef.current.has(j.id) &&
+              !alreadyApplied(appliedCache, j.id),
+          );
           return [...prev, ...rankJobsByLocation(add, meQuery.data?.preferredLocations ?? [])];
         });
       }
@@ -803,7 +816,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [feedCursor, passedIds, meQuery.data?.preferredLocations, jobFilter]);
+  }, [feedCursor, passedIds, meQuery.data?.preferredLocations, jobFilter, queryClient]);
 
   // Prefetch the next page BEFORE the deck runs out, so paging is invisible: the
   // user should never watch a spinner mid-swipe. 15 cards of runway at a page
