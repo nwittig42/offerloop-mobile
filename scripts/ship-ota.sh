@@ -32,7 +32,7 @@ fi
 # staging eas.json swap (commit 79ecd82) is gone: the staging TestFlight build
 # of 2026-08-13 was cut from this file. Update the constant below whenever a
 # new TestFlight build ships for that channel.
-PROD_RUNTIME="d7251e02a9b17f61d675a38c4e88a881d21aa0dc"     # build 22, 1.2.0 asset-fix, 2026-09-01
+PROD_RUNTIME="9ecbe0f44af2d8ea4b90dda39cd867c8369910e3"     # build 26, 1.2.1, 2026-09-12 (live on the App Store, confirmed via itunes.apple.com/lookup?id=6789441106)
 STAGING_RUNTIME="290bcca391ad478c0722d5498b60803ad12cb844"  # staging TF build 14, 2026-09-16
 
 if [[ "$CHANNEL" == "production" ]]; then
