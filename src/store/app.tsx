@@ -332,8 +332,9 @@ type AppStore = {
    * Deduped auto-apply for any job — blocks a second application to the same
    * one. Removes the job from every deck/list immediately (optimistic, same
    * contract as passJob/saveJob/draftJob); the apply itself runs in the
-   * background and a failure surfaces as a toast, it never un-removes the
-   * card.
+   * background. A recoverable failure (no credits, incomplete profile, a
+   * transient error) surfaces as a toast and quietly rejoins the END of the
+   * Feed deck, not the top, so it doesn't instantly reappear.
    */
   autoApplyJob: (job: Job) => void;
   undoLastPass: () => void;
@@ -1766,6 +1767,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSavedJobs((prev) => prev.filter((j) => j.id !== id));
   }, []);
 
+  // A recoverable apply failure (no credits, incomplete profile, a transient
+  // error) shouldn't lose the job, but putting it straight back at the top
+  // reads as the same bug the immediate-removal fix solved, the card would
+  // instantly reappear looking like nothing happened. Tack it onto the END
+  // of the Feed deck instead: it comes back around later in the session once
+  // whatever blocked it has had a chance to get fixed, without the jarring
+  // instant reappearance.
+  const requeueFailedApply = useCallback((job: Job) => {
+    setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
+  }, []);
+
   const autoApplyJob = useCallback(
     (job: Job): void => {
       // Same AI consent gate as beginDraft: auto-apply builds materials from
@@ -1802,24 +1814,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (r.ok) {
             appliedIdsRef.current.add(id);
             queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
-          } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+            return;
+          }
+          if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
             showToast('Set up your application profile to auto-apply');
+            requeueFailedApply(job);
           } else if (r.code === 'INSUFFICIENT_CREDITS') {
             if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
             else showToast('Not enough credits to auto-apply');
+            requeueFailedApply(job);
           } else if (r.code === 'INELIGIBLE') {
             // The server couldn't detect a supported application system for this
             // role. Say so honestly instead of showing the optimistic
-            // "Auto-applying…" toast and then silently doing nothing.
+            // "Auto-applying…" toast and then silently doing nothing. Not
+            // requeued: retrying gets the same answer every time.
             showToast(`${job.title} can't be auto-applied — apply on the company site`);
           } else {
             showToast('Could not auto-apply, try again');
+            requeueFailedApply(job);
           }
         })
-        .catch(() => showToast('Could not auto-apply, try again'))
+        .catch(() => {
+          showToast('Could not auto-apply, try again');
+          requeueFailedApply(job);
+        })
         .finally(() => applyingRef.current.delete(id));
     },
-    [queryClient, showToast, recordSwipedCard, retireAppliedJob],
+    [queryClient, showToast, recordSwipedCard, retireAppliedJob, requeueFailedApply],
   );
 
   const draftAnotherContact = useCallback(
