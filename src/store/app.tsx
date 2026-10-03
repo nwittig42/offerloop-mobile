@@ -330,13 +330,12 @@ type AppStore = {
   rememberSwipedCard: (job: Job) => void;
   /**
    * Deduped auto-apply for any job — blocks a second application to the same
-   * one. Resolves true once the job is in a terminal state (applied, or was
-   * already applied) and has been removed from every deck/list; false if the
-   * attempt failed for a reason the user might fix and retry, so a caller
-   * that optimistically removed its own local copy of the card should put it
-   * back.
+   * one. Removes the job from every deck/list immediately (optimistic, same
+   * contract as passJob/saveJob/draftJob); the apply itself runs in the
+   * background and a failure surfaces as a toast, it never un-removes the
+   * card.
    */
-  autoApplyJob: (job: Job) => Promise<boolean>;
+  autoApplyJob: (job: Job) => void;
   undoLastPass: () => void;
   restorePassedJob: (id: string) => void;
   saveJob: (id: string) => void;
@@ -1767,71 +1766,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSavedJobs((prev) => prev.filter((j) => j.id !== id));
   }, []);
 
-  // Returns true when the job is in a terminal state (applied, or already
-  // was) and safe to drop from any list permanently; false when the attempt
-  // failed for a reason the user might fix and retry (missing profile, no
-  // credits, a transient error), so callers that optimistically pulled the
-  // card out of their own local list (the company Roles deck) should put it
-  // back rather than losing it silently.
   const autoApplyJob = useCallback(
-    async (job: Job): Promise<boolean> => {
+    (job: Job): void => {
       // Same AI consent gate as beginDraft: auto-apply builds materials from
       // the user's profile via the AI providers.
       if (!hasAIConsent()) {
         promptAIConsent();
-        return false;
+        return;
       }
       const id = job.id;
       const cache = queryClient.getQueryData<AppliedJob[]>(['appliedJobs']);
       if (applyingRef.current.has(id) || appliedIdsRef.current.has(id) || alreadyApplied(cache, id)) {
         showToast('You already applied to this role');
-        // Already-applied jobs have no business still being the top card: the
-        // deck's own removal (passJob/saveJob) runs on the OTHER two swipe
-        // directions, but a right swipe never used to touch `jobs` at all, so
-        // a job that got applied once (then re-appeared some other way, e.g.
-        // undo or a refetch) would re-show forever, immune to a repeat apply
-        // swipe and escapable only via pass.
         retireAppliedJob(id);
-        return true;
+        return;
       }
       if (!job.autoApplyEligible) {
         showToast(`${job.title} can't be auto-applied yet`);
-        return false;
+        return;
       }
+      // Optimistic and immediate, exactly like passJob/saveJob/draftJob: the
+      // swipe stack resets the card's position the instant its fly-out
+      // animation finishes and THEN calls back here (see SwipeStack.finish),
+      // so the card must already be out of `jobs` by this point or it snaps
+      // back into view and "flashes" while the network call is in flight.
+      // The apply itself stays a fire-and-forget background job; a failure
+      // surfaces as a toast, same as a failed draft shows up in Inbox rather
+      // than un-vanishing the swiped card.
+      retireAppliedJob(id);
       applyingRef.current.add(id);
       recordSwipedCard(job);
       showToast(`Auto-applying to ${job.title}`, true);
-      try {
-        const r = await startAutoApply(id);
-        if (r.ok) {
-          appliedIdsRef.current.add(id);
-          queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
-          // Mirror passJob/saveJob: a successful apply must retire the card
-          // from every deck/list too, or it just snaps back as the top card
-          // (or sits in Saved) looking un-applied.
-          retireAppliedJob(id);
-          return true;
-        }
-        if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
-          showToast('Set up your application profile to auto-apply');
-        } else if (r.code === 'INSUFFICIENT_CREDITS') {
-          if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
-          else showToast('Not enough credits to auto-apply');
-        } else if (r.code === 'INELIGIBLE') {
-          // The server couldn't detect a supported application system for this
-          // role. Say so honestly instead of showing the optimistic
-          // "Auto-applying…" toast and then silently doing nothing.
-          showToast(`${job.title} can't be auto-applied — apply on the company site`);
-        } else {
-          showToast('Could not auto-apply, try again');
-        }
-        return false;
-      } catch {
-        showToast('Could not auto-apply, try again');
-        return false;
-      } finally {
-        applyingRef.current.delete(id);
-      }
+      startAutoApply(id)
+        .then((r) => {
+          if (r.ok) {
+            appliedIdsRef.current.add(id);
+            queryClient.invalidateQueries({ queryKey: ['appliedJobs'] });
+          } else if (r.code === 'PROFILE_REQUIRED' || r.code === 'WORK_AUTH_REQUIRED') {
+            showToast('Set up your application profile to auto-apply');
+          } else if (r.code === 'INSUFFICIENT_CREDITS') {
+            if (iapAvailable()) presentPaywall({ context: 'auto-apply' });
+            else showToast('Not enough credits to auto-apply');
+          } else if (r.code === 'INELIGIBLE') {
+            // The server couldn't detect a supported application system for this
+            // role. Say so honestly instead of showing the optimistic
+            // "Auto-applying…" toast and then silently doing nothing.
+            showToast(`${job.title} can't be auto-applied — apply on the company site`);
+          } else {
+            showToast('Could not auto-apply, try again');
+          }
+        })
+        .catch(() => showToast('Could not auto-apply, try again'))
+        .finally(() => applyingRef.current.delete(id));
     },
     [queryClient, showToast, recordSwipedCard, retireAppliedJob],
   );

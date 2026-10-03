@@ -166,15 +166,12 @@ export default function CompanyScreen() {
       return;
     }
     // Right = auto-apply this role (the Roles tab is the "apply here" surface;
-    // networking lives in Reached out / Find a contact). Animate it off the
-    // deck immediately for swipe continuity, but put it back if the apply
-    // didn't actually land (no credits, incomplete profile, transient error)
-    // so a recoverable failure doesn't just erase the card.
+    // networking lives in Reached out / Find a contact). Remove it from the
+    // deck immediately (same optimistic contract as autoApplyJob itself); a
+    // failed apply surfaces as a toast, not a resurrected card.
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRoleDeck((d) => d.filter((j) => j.id !== job.id));
-    void applyToRole(job).then((resolved) => {
-      if (!resolved) setRoleDeck((d) => (d.some((j) => j.id === job.id) ? d : [job, ...d]));
-    });
+    applyToRole(job);
   };
   // The exact card the user swiped here (falls back to a current feed role at
   // this company), shown at the top of Overview as the "why you're here" anchor.
