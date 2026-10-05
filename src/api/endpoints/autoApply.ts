@@ -229,6 +229,11 @@ export const AUTO_APPLY_TERMINAL: AutoApplyStatus[] = [
 
 // ── Applied-jobs list (the "Applied" tab) ─────────────────────────────────
 
+/** `confirmation_url` / `confirmation_text`: the employer's site said it got the
+ *  application. `unconfirmed`: the form went through with no error but the
+ *  site never said so. */
+export type SubmitEvidence = 'confirmation_url' | 'confirmation_text' | 'unconfirmed';
+
 export type AppliedJob = {
   auto_apply_id: string;
   job_id: string;
@@ -241,6 +246,12 @@ export type AppliedJob = {
   /** Why it didn't go through, in plain language. Returned by the list
    *  endpoint; shown on the tile so "Apply on the site" isn't unexplained. */
   failure_reason?: string;
+  /** What the employer's site showed after we clicked Submit. Absent on
+   *  applications sent before the backend started recording it. */
+  submit_evidence?: SubmitEvidence;
+  /** The address that went on the application: where the employer's own
+   *  confirmation and any reply will land. */
+  applicant_email?: string;
   dry_run?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -326,16 +337,37 @@ export function alreadyApplied(applied: AppliedJob[] | undefined, jobId: string)
 export function appliedStatusMeta(
   s: AutoApplyStatus,
   stage?: string,
-  opts?: { canOpenSite?: boolean },
+  opts?: { canOpenSite?: boolean; evidence?: SubmitEvidence; company?: string },
 ): {
   label: string;
   // 'apply' = "Apply on the site" — a distinct light-purple tone so it doesn't
   // read the same as the amber "Needs your input"; they're different asks.
   tone: 'positive' | 'waiting' | 'negative' | 'neutral' | 'apply';
+  /** One line under the tile saying what the student is waiting on. */
+  detail?: string;
 } {
   switch (s) {
-    case 'submitted':
+    case 'submitted': {
+      // "Applied" used to cover two different facts. Split them by what the
+      // employer's site actually showed us, and only claim receipt when it did.
+      const who = opts?.company || 'The company';
+      if (opts?.evidence === 'unconfirmed') {
+        return {
+          label: 'Sent',
+          tone: 'waiting',
+          detail: `Waiting for ${who} to confirm they received it.`,
+        };
+      }
+      if (opts?.evidence === 'confirmation_url' || opts?.evidence === 'confirmation_text') {
+        return {
+          label: 'Received',
+          tone: 'positive',
+          detail: `${who} received it. Waiting on their response.`,
+        };
+      }
+      // Sent before evidence was recorded: we can't say which, so say neither.
       return { label: 'Applied', tone: 'positive' };
+    }
     case 'needs_verification':
       return { label: 'Waiting on an email code', tone: 'waiting' };
     case 'needs_attention':
