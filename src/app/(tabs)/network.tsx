@@ -1069,7 +1069,11 @@ export default function NetworkScreen() {
                 ) : null}
 
                 {doneList.map((j) => {
-                  const meta = appliedStatusMeta(j.status, j.stage, { canOpenSite: !!j.apply_url });
+                  const meta = appliedStatusMeta(j.status, j.stage, {
+                    canOpenSite: !!j.apply_url,
+                    evidence: j.submit_evidence,
+                    company: j.company,
+                  });
                   const when = appliedRelativeTime(j);
                   const toneColor =
                     meta.tone === 'positive'
@@ -1112,6 +1116,19 @@ export default function NetworkScreen() {
                                 marginTop: 2,
                               }}>
                               {j.failure_reason}
+                            </Text>
+                          ) : null}
+                          {meta.detail ? (
+                            <Text
+                              numberOfLines={2}
+                              style={{
+                                fontFamily: fonts.sans,
+                                fontSize: 11.5,
+                                color: colors.inkTertiary,
+                                lineHeight: 16,
+                                marginTop: 2,
+                              }}>
+                              {meta.detail}
                             </Text>
                           ) : null}
                         </View>

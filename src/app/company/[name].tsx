@@ -482,7 +482,11 @@ export default function CompanyScreen() {
         {tab === 'applied' ? (
           <>
             {applied.map((j) => {
-              const meta = appliedStatusMeta(j.status, j.stage, { canOpenSite: !!j.apply_url });
+              const meta = appliedStatusMeta(j.status, j.stage, {
+                canOpenSite: !!j.apply_url,
+                evidence: j.submit_evidence,
+                company: j.company,
+              });
               const when = appliedRelativeTime(j);
               const toneColor =
                 meta.tone === 'positive'
@@ -532,6 +536,11 @@ export default function CompanyScreen() {
                         </Text>
                       ) : null}
                     </View>
+                    {meta.detail ? (
+                      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: colors.inkTertiary, lineHeight: 17 }}>
+                        {meta.detail}
+                      </Text>
+                    ) : null}
                   </Card>
                 </Pressable>
               );
